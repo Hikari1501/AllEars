@@ -1,0 +1,6 @@
+{
+  "name": "All Ears",
+  "description": "Interactive English listening comprehension platform with video and audio playback, embedded formative assessments, live synchronized classroom, and vocabulary tooltips.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
