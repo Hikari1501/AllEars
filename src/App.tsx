@@ -15,6 +15,8 @@ import { ReportsView } from './components/ReportsView';
 import { JoinModal } from './components/JoinModal';
 import { TeacherLoginModal } from './components/TeacherLoginModal';
 import { TeacherManagementModal } from './components/TeacherManagementModal';
+import { ImportLessonModal } from './components/ImportLessonModal';
+import { ExportLessonModal } from './components/ExportLessonModal';
 import heroImage from './assets/images/allears_hero_listening_1793672977345.jpg';
 import {
   Play,
@@ -34,6 +36,9 @@ import {
   Globe,
   EyeOff,
   Trash2,
+  Download,
+  FileUp,
+  CheckCircle2,
 } from 'lucide-react';
 
 const extractYouTubeId = (url?: string): string | null => {
@@ -115,6 +120,36 @@ export default function App() {
   const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
   const [isTeacherLoginOpen, setIsTeacherLoginOpen] = useState(false);
   const [isTeacherManagementOpen, setIsTeacherManagementOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [exportingLesson, setExportingLesson] = useState<Lesson | null>(null);
+  const [importNotification, setImportNotification] = useState<string | null>(null);
+
+  // Handle lesson dataset import
+  const handleImportLesson = (imported: Lesson, practiceImmediately: boolean) => {
+    setLessons((prev) => {
+      const idx = prev.findIndex((l) => l.id === imported.id);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = imported;
+        return copy;
+      }
+      return [imported, ...prev];
+    });
+
+    // Also persist to server if server is online
+    fetch('/api/lessons', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(imported),
+    }).catch(() => {});
+
+    setImportNotification(`Successfully imported "${imported.title}" to your lessons!`);
+    setTimeout(() => setImportNotification(null), 4500);
+
+    if (practiceImmediately) {
+      setActiveHomeworkLesson(imported);
+    }
+  };
 
   // Filters
   const [levelFilter, setLevelFilter] = useState<string>('all');
@@ -338,6 +373,7 @@ export default function App() {
         onOpenTeacherManagement={() => setIsTeacherManagementOpen(true)}
         onSignOut={handleSignOut}
         onOpenJoinModal={() => setIsJoinModalOpen(true)}
+        onOpenImportModal={() => setIsImportModalOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -494,6 +530,22 @@ export default function App() {
         {/* 7. Lessons Catalog View (Default Homepage) */}
         {currentTab === 'lessons' && !activeHomeworkLesson && !activeLiveTeacher && !activeLiveStudent && !editingLesson && (
           <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-8">
+            {/* Import Notification Banner */}
+            {importNotification && (
+              <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl text-xs font-semibold flex items-center justify-between shadow-xs animate-in fade-in">
+                <div className="flex items-center gap-2.5">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                  <span>{importNotification}</span>
+                </div>
+                <button
+                  onClick={() => setImportNotification(null)}
+                  className="text-emerald-700 hover:text-emerald-900 font-bold cursor-pointer"
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
+
             {/* Hero Banner Section */}
             <div className="relative rounded-3xl overflow-hidden bg-slate-950 text-white border border-slate-800 shadow-xl">
               <div className="grid grid-cols-1 lg:grid-cols-12 items-stretch">
@@ -555,7 +607,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Controls Bar: Search & CEFR Level Filter Tabs */}
+            {/* Controls Bar: Search, CEFR Level Filter Tabs & Import Button */}
             <div className="flex items-center justify-between flex-wrap gap-4 pt-2">
               <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl overflow-x-auto max-w-full">
                 {['all', 'A2', 'B1', 'B2', 'C1'].map((lvl) => (
@@ -573,15 +625,27 @@ export default function App() {
                 ))}
               </div>
 
-              <div className="relative w-full sm:w-72">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search listening lessons..."
-                  className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-amber-500 shadow-2xs"
-                />
+              <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setIsImportModalOpen(true)}
+                  className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-700 hover:text-slate-950 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl shadow-2xs transition-colors cursor-pointer shrink-0"
+                  title="Import a lesson dataset package for self-study"
+                >
+                  <FileUp className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Import Lesson</span>
+                </button>
+
+                <div className="relative w-full sm:w-64">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search listening lessons..."
+                    className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-amber-500 shadow-2xs"
+                  />
+                </div>
               </div>
             </div>
 
@@ -696,6 +760,15 @@ export default function App() {
                             >
                               Edit
                             </button>
+
+                            <button
+                              onClick={() => setExportingLesson(lesson)}
+                              className="py-2 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs flex items-center gap-1 transition-colors cursor-pointer"
+                              title="Export dataset to send to students"
+                            >
+                              <Download className="w-3.5 h-3.5 text-slate-600" />
+                              <span>Export</span>
+                            </button>
                           </div>
 
                           {/* Teacher controls: Publish / Unpublish and Delete */}
@@ -745,6 +818,15 @@ export default function App() {
                           >
                             Report
                           </button>
+
+                          <button
+                            onClick={() => setExportingLesson(lesson)}
+                            className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-colors flex items-center gap-1 cursor-pointer"
+                            title="Export this lesson dataset"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Export</span>
+                          </button>
                         </div>
                       )}
                     </div>
@@ -777,6 +859,22 @@ export default function App() {
       {isTeacherManagementOpen && (
         <TeacherManagementModal
           onClose={() => setIsTeacherManagementOpen(false)}
+        />
+      )}
+
+      {/* Import Lesson Modal */}
+      <ImportLessonModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onImport={handleImportLesson}
+        existingLessonIds={lessons.map((l) => l.id)}
+      />
+
+      {/* Export Lesson Modal */}
+      {exportingLesson && (
+        <ExportLessonModal
+          lesson={exportingLesson}
+          onClose={() => setExportingLesson(null)}
         />
       )}
     </div>

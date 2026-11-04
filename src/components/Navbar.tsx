@@ -1,6 +1,6 @@
 import React from 'react';
 import { UserAccount } from '../types';
-import { Headphones, Radio, Shield, LogIn, LogOut, User } from 'lucide-react';
+import { Headphones, Radio, Shield, LogIn, LogOut, User, FileUp } from 'lucide-react';
 
 interface NavbarProps {
   currentTab: 'lessons' | 'live' | 'create' | 'reports';
@@ -10,6 +10,7 @@ interface NavbarProps {
   onOpenTeacherManagement: () => void;
   onSignOut: () => void;
   onOpenJoinModal: () => void;
+  onOpenImportModal: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -20,6 +21,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenTeacherManagement,
   onSignOut,
   onOpenJoinModal,
+  onOpenImportModal,
 }) => {
   const isTeacher = currentUser.role === 'teacher';
 
@@ -89,7 +91,16 @@ export const Navbar: React.FC<NavbarProps> = ({
         </nav>
 
         {/* Zone 3: Primary Action & Authentication / Role Control */}
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-2.5 shrink-0">
+          <button
+            onClick={onOpenImportModal}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-slate-950 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            title="Import a lesson dataset for self-study"
+          >
+            <FileUp className="w-3.5 h-3.5 text-amber-700" />
+            <span>Import Lesson</span>
+          </button>
+
           <button
             onClick={onOpenJoinModal}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-amber-950 bg-amber-400 hover:bg-amber-300 rounded-xl transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-xs"

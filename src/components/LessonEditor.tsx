@@ -32,6 +32,7 @@ import {
   Lock,
   Image as ImageIcon,
   Edit3,
+  Download,
 } from 'lucide-react';
 
 interface LessonEditorProps {
@@ -541,6 +542,59 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
     onSave(saved);
   };
 
+  const handleExportCurrentDataset = () => {
+    if (!title.trim()) {
+      alert('Please enter a lesson title before exporting.');
+      return;
+    }
+
+    const currentLesson: Lesson = {
+      id: initialLesson?.id || `lesson-${Date.now()}`,
+      title,
+      description,
+      level,
+      mediaType,
+      mediaUrl,
+      duration: Number(duration) || 180,
+      trimStart: Number(trimStart) || 0,
+      trimEnd: Number(trimEnd) || Number(duration) || 180,
+      preventSkipping,
+      thumbnailUrl:
+        initialLesson?.thumbnailUrl && !initialLesson.thumbnailUrl.startsWith('/src/assets/images/')
+          ? initialLesson.thumbnailUrl
+          : (mediaType === 'youtube' && extractYtId(mediaUrl) ? `https://img.youtube.com/vi/${extractYtId(mediaUrl)}/hqdefault.jpg` : undefined),
+      isPublished: true,
+      teacherId: initialLesson?.teacherId || 'teacher-chuck',
+      teacherName: initialLesson?.teacherName || 'Chuck (Teacher)',
+      createdAt: initialLesson?.createdAt || new Date().toISOString().split('T')[0],
+      captions,
+      questions,
+      difficultWords,
+    };
+
+    const payload = {
+      app: 'AllEars',
+      version: '1.0',
+      exportedAt: new Date().toISOString(),
+      lesson: currentLesson,
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const safeTitle = title.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').slice(0, 30);
+    const filename = `allears-lesson-${safeTitle || 'dataset'}.json`;
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setSuccessMessage(`Dataset for "${title}" exported as .json file for students!`);
+    setTimeout(() => setSuccessMessage(null), 3500);
+  };
+
   const formatSec = (s: number) => {
     const m = Math.floor(s / 60);
     const sec = Math.floor(s % 60);
@@ -575,7 +629,18 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {/* Export Dataset Button for Students */}
+          <button
+            type="button"
+            onClick={handleExportCurrentDataset}
+            className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+            title="Download lesson dataset JSON to send to students"
+          >
+            <Download className="w-3.5 h-3.5 text-slate-600" />
+            <span>Export Dataset</span>
+          </button>
+
           {/* Publish / Unpublish Switch */}
           <button
             type="button"
@@ -587,7 +652,7 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
             }`}
           >
             <Globe className="w-3.5 h-3.5" />
-            <span>{isPublished ? 'Published (Live to Students)' : 'Unpublished (Draft)'}</span>
+            <span>{isPublished ? 'Published (Live)' : 'Unpublished (Draft)'}</span>
           </button>
 
           {initialLesson && onDelete && (
@@ -607,7 +672,7 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
 
           <button
             onClick={onCancel}
-            className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+            className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
           >
             Cancel
           </button>
