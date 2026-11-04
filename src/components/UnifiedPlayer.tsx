@@ -555,52 +555,7 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
           </div>
         )}
 
-        {/* Top Right Video Overlay Buttons: Dual Caption Toggles & Trim Badge */}
-        <div className="absolute top-3 right-3 flex items-center gap-2 z-20">
-          {/* Teacher-Added Captions Toggle */}
-          <button
-            type="button"
-            onClick={() => {
-              const next = !inVideoCaptions;
-              setInVideoCaptions(next);
-              if (onToggleCaptions) onToggleCaptions();
-            }}
-            className={`px-2.5 py-1 rounded-md text-[11px] font-bold border transition-all flex items-center gap-1.5 cursor-pointer backdrop-blur-md shadow-xs ${
-              inVideoCaptions
-                ? 'bg-amber-500 text-slate-950 border-amber-400'
-                : 'bg-slate-900/80 text-slate-400 border-slate-700 hover:text-white'
-            }`}
-            title="Toggle Teacher-Added Captions (with CEFR vocabulary level highlights & definitions)"
-          >
-            <Subtitles className="w-3.5 h-3.5" />
-            <span>Teacher CC {inVideoCaptions ? 'ON' : 'OFF'}</span>
-          </button>
 
-          {/* YouTube Native Captions Toggle (for YouTube media) */}
-          {mediaType === 'youtube' && !useFallbackPlayer && (
-            <button
-              type="button"
-              onClick={toggleYouTubeCaptions}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-bold border transition-all flex items-center gap-1.5 cursor-pointer backdrop-blur-md shadow-xs ${
-                ytCaptionsEnabled
-                  ? 'bg-red-600 text-white border-red-500'
-                  : 'bg-slate-900/80 text-slate-400 border-slate-700 hover:text-white'
-              }`}
-              title="Toggle YouTube Native Closed Captions (auto-generated or official subtitles from YouTube)"
-            >
-              <Subtitles className="w-3.5 h-3.5" />
-              <span>YouTube CC {ytCaptionsEnabled ? 'ON' : 'OFF'}</span>
-            </button>
-          )}
-
-          {/* Trim Active Indicator */}
-          {(effectiveStart > 0 || trimEnd) && (
-            <div className="bg-slate-900/90 backdrop-blur-md px-2.5 py-1 rounded-md text-[11px] font-mono text-amber-300 border border-slate-700 flex items-center gap-1.5">
-              <Scissors className="w-3 h-3 text-amber-400" />
-              <span>Trim: {formatTime(effectiveStart)} - {formatTime(effectiveEnd)}</span>
-            </div>
-          )}
-        </div>
 
         {/* In-Video Floating Captions Overlay */}
         {inVideoCaptions && activeCaption && (
@@ -712,10 +667,15 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
             </button>
 
             {/* Time Indicator */}
-            <div className="font-mono text-slate-300 tabular-nums">
+            <div className="font-mono text-slate-300 tabular-nums flex items-center gap-1">
               <span>{formatTime(currentTime)}</span>
-              <span className="text-slate-500 mx-1">/</span>
+              <span className="text-slate-500 mx-0.5">/</span>
               <span className="text-slate-400">{formatTime(effectiveEnd)}</span>
+              {(effectiveStart > 0 || trimEnd) && (
+                <span className="text-[10px] text-amber-400/90 font-mono ml-1 px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700">
+                  Trimmed
+                </span>
+              )}
             </div>
 
             {preventSkipping && isStudent && (

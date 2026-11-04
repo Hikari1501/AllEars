@@ -62,17 +62,6 @@ export const TeacherLoginModal: React.FC<TeacherLoginModalProps> = ({
           </button>
         </div>
 
-        {/* Credentials Information */}
-        <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl space-y-1.5 text-xs">
-          <div className="font-bold text-amber-950">
-            Chuck's Authorized Credentials
-          </div>
-          <div className="text-amber-900 space-y-0.5 font-mono text-[11px]">
-            <div>Account: <span className="font-bold">ChuckACR1501@gmail.com</span> (or <span className="font-bold">chuck</span>)</div>
-            <div>Password: <span className="font-bold">password123</span></div>
-          </div>
-        </div>
-
         <form onSubmit={handleLogin} className="space-y-4">
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-slate-700">Account Name or Email</label>
@@ -80,7 +69,7 @@ export const TeacherLoginModal: React.FC<TeacherLoginModalProps> = ({
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="e.g. Chuck or ChuckACR1501@gmail.com"
+              placeholder="Username or Email"
               required
               className="w-full p-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:border-amber-500 focus:outline-hidden"
             />
@@ -92,7 +81,7 @@ export const TeacherLoginModal: React.FC<TeacherLoginModalProps> = ({
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
+              placeholder="Password"
               required
               className="w-full p-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:border-amber-500 focus:outline-hidden font-mono"
             />
@@ -115,7 +104,7 @@ export const TeacherLoginModal: React.FC<TeacherLoginModalProps> = ({
         </form>
 
         <p className="text-[11px] text-center text-slate-500 leading-relaxed">
-          Students do not need an account. If you need teacher permissions, ask Chuck to authorize your account.
+          Authorized instructor portal. Students do not need an account.
         </p>
       </div>
     </div>

@@ -6,40 +6,37 @@ An interactive English listening learning and formative assessment web platform 
 
 ## 🚀 GitHub Pages Deployment Guide
 
-If you are deploying this website via **GitHub Pages** from the `/docs` folder:
+Why did you see `github-pages 232 | Error: No such file or directory @ dir_chdir0 - /github/workspace/docs`?
+This error happened because GitHub's default **Jekyll** builder ran on your repository and couldn't find the `/docs` folder or tried to process non-Jekyll files. Because **All Ears** is a modern React/Vite web application, Jekyll should **not** build it.
 
-1. **Root `/docs` Folder**:
-   The `/docs` directory is automatically generated with your production build and already contains:
-   - `index.html` (with relative asset linking `./assets/...`)
-   - `404.html` (for seamless client-side single page app routing)
-   - `.nojekyll` (disables default Jekyll processing, fixing `dir_chdir0 - /github/workspace/docs` errors)
+Here are the two ways to deploy cleanly:
 
-2. **GitHub Repository Settings**:
-   - Go to your repository on GitHub.
-   - Navigate to **Settings** → **Pages** (under "Code and automation").
-   - Under **Build and deployment**:
-     - **Source**: Select `Deploy from a branch`.
-     - **Branch**: Select your default branch (e.g. `main` or `master`), and in the folder dropdown choose `/docs`.
-     - Click **Save**.
-   - Your site will deploy cleanly without any Jekyll errors!
+### ⭐ Option 1: GitHub Actions (Recommended — Fully Automated)
+1. In your GitHub repository, click **Settings** → **Pages** (under "Code and automation").
+2. Under **Build and deployment** → **Source**, change the dropdown from *Deploy from a branch* to **GitHub Actions**.
+3. That's it! The workflow in `.github/workflows/jekyll-gh-pages.yml` (now updated for Vite) will automatically install dependencies, build the static site, and deploy it live on every push.
 
-3. **Rebuilding for GitHub Pages**:
-   Whenever you make updates and want to refresh the `/docs` build:
+---
+
+### Option 2: Deploy from a branch (`/docs` folder)
+If you prefer deploying from the `/docs` folder on your branch:
+1. Make sure the `/docs` folder is committed to your repository:
    ```bash
    npm run build:docs
-   git add docs
-   git commit -m "Update docs build for GitHub Pages"
+   git add docs -f
+   git commit -m "Build static site into docs"
    git push
    ```
+2. The `.nojekyll` files at root and in `/docs` will stop GitHub from trying to run Jekyll.
+3. In GitHub Settings → **Pages** → Source: **Deploy from a branch**, Branch: `main` (or `master`), Folder: `/docs`.
 
 ---
 
 ## 🔑 Teacher Account Access
 
-- **Email / Username**: `ChuckACR1501@gmail.com` (or `chuck`)
-- **Password**: `password123`
-
-*Note: Default visitors join as Students. Only Chuck and teachers explicitly added by Chuck can create, edit, publish, and host live sessions.*
+- Teacher accounts are restricted to authorized instructors.
+- All users enter their credentials manually in the **Teacher Sign In** modal.
+- Students do not need to sign in and can complete homework or join live lessons with a room PIN.
 
 ---
 
