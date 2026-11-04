@@ -117,6 +117,7 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
 
   // New question form state
   const [isAddingQuestion, setIsAddingQuestion] = useState(false);
+  const [newQIsGeneral, setNewQIsGeneral] = useState<boolean>(false);
   const [newQTimestamp, setNewQTimestamp] = useState<number>(15);
   const [newQType, setNewQType] = useState<QuestionType>('multiple_choice');
   const [newQPrompt, setNewQPrompt] = useState<string>('');
@@ -464,7 +465,7 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
 
     const newQ: Question = {
       id: `q-${Date.now()}`,
-      timestamp: Number(newQTimestamp),
+      timestamp: newQIsGeneral ? null : Number(newQTimestamp),
       type: newQType,
       prompt: newQPrompt,
       explanation: newQExplanation || 'Review the listening segment.',
@@ -493,11 +494,18 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
       newQ.matchingPairs = newQMatchingPairs;
     }
 
-    setQuestions((prev) => [...prev, newQ].sort((a, b) => a.timestamp - b.timestamp));
+    setQuestions((prev) =>
+      [...prev, newQ].sort((a, b) => {
+        const aT = typeof a.timestamp === 'number' && a.timestamp >= 0 ? a.timestamp : 999999;
+        const bT = typeof b.timestamp === 'number' && b.timestamp >= 0 ? b.timestamp : 999999;
+        return aT - bT;
+      })
+    );
     setIsAddingQuestion(false);
     setNewQPrompt('');
     setNewQExplanation('');
     setNewQCloseEndedAns('');
+    setNewQIsGeneral(false);
   };
 
   const handleSaveLesson = () => {
@@ -1123,30 +1131,68 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 text-xs">
-                    <div>
-                      <label className="text-slate-700 block mb-1">Pause Timestamp (seconds)</label>
-                      <input
-                        type="number"
-                        value={newQTimestamp}
-                        onChange={(e) => setNewQTimestamp(parseInt(e.target.value) || 0)}
-                        className="w-full p-2 bg-white border border-slate-200 rounded-lg font-mono text-xs"
-                      />
+                  {/* Checkpoint Timestamp vs General Question Toggle */}
+                  <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-bold text-slate-800 text-xs">Question Timing Mode</div>
+                        <div className="text-[11px] text-slate-500">
+                          Choose whether this question auto-pauses at a specific timestamp or serves as an overall comprehension task.
+                        </div>
+                      </div>
+                      <label className="flex items-center gap-1.5 cursor-pointer text-indigo-700 font-bold text-xs bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200">
+                        <input
+                          type="checkbox"
+                          checked={newQIsGeneral}
+                          onChange={(e) => setNewQIsGeneral(e.target.checked)}
+                          className="w-3.5 h-3.5 accent-indigo-600 rounded"
+                        />
+                        <span>Whole-Video / General (No Pause)</span>
+                      </label>
                     </div>
-                    <div>
-                      <label className="text-slate-700 block mb-1">Question Type</label>
-                      <select
-                        value={newQType}
-                        onChange={(e) => setNewQType(e.target.value as QuestionType)}
-                        className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs"
-                      >
-                        <option value="multiple_choice">Multiple Choice</option>
-                        <option value="true_false">True / False</option>
-                        <option value="close_ended">Fill in the Blank</option>
-                        <option value="matching">Matching Pairs</option>
-                        <option value="open_ended">Open Reflection</option>
-                      </select>
-                    </div>
+
+                    {!newQIsGeneral ? (
+                      <div className="grid grid-cols-2 gap-3 text-xs pt-1 border-t border-slate-100">
+                        <div>
+                          <label className="text-slate-700 block mb-1 font-semibold">Pause Timestamp (seconds)</label>
+                          <input
+                            type="number"
+                            value={newQTimestamp}
+                            onChange={(e) => setNewQTimestamp(parseInt(e.target.value) || 0)}
+                            className="w-full p-2 bg-white border border-slate-200 rounded-lg font-mono text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-slate-700 block mb-1 font-semibold">Question Type</label>
+                          <select
+                            value={newQType}
+                            onChange={(e) => setNewQType(e.target.value as QuestionType)}
+                            className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs"
+                          >
+                            <option value="multiple_choice">Multiple Choice</option>
+                            <option value="true_false">True / False</option>
+                            <option value="close_ended">Fill in the Blank</option>
+                            <option value="matching">Matching Pairs</option>
+                            <option value="open_ended">Open Reflection</option>
+                          </select>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="pt-1 border-t border-slate-100">
+                        <label className="text-slate-700 block mb-1 font-semibold text-xs">Question Type</label>
+                        <select
+                          value={newQType}
+                          onChange={(e) => setNewQType(e.target.value as QuestionType)}
+                          className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs"
+                        >
+                          <option value="multiple_choice">Multiple Choice</option>
+                          <option value="true_false">True / False</option>
+                          <option value="close_ended">Fill in the Blank</option>
+                          <option value="matching">Matching Pairs</option>
+                          <option value="open_ended">Open Reflection</option>
+                        </select>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-1 text-xs">
@@ -1254,9 +1300,15 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                   >
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 text-[11px]">
-                          At {formatSec(q.timestamp)}
-                        </span>
+                        {typeof q.timestamp === 'number' && q.timestamp >= 0 ? (
+                          <span className="font-mono font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 text-[11px]">
+                            At {formatSec(q.timestamp)}
+                          </span>
+                        ) : (
+                          <span className="font-semibold px-2 py-0.5 rounded bg-indigo-100 text-indigo-900 text-[11px] border border-indigo-200">
+                            Whole Video / General (No Pause)
+                          </span>
+                        )}
                         <span className="font-bold text-slate-700 uppercase text-[10px]">
                           {q.type.replace('_', ' ')}
                         </span>

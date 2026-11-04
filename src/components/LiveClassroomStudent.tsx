@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Lesson, Question, LiveSessionState, StudentAnswer } from '../types';
 import { UnifiedPlayer } from './UnifiedPlayer';
 import { InteractiveCaptions } from './InteractiveCaptions';
-import { QuestionModal } from './QuestionModal';
-import { Radio, Award, CheckCircle2, User, HelpCircle, BookOpen, Volume2, ExternalLink } from 'lucide-react';
+import { StudentQuestionsPanel } from './StudentQuestionsPanel';
+import { Radio, Award, CheckCircle2, User, BookOpen, Volume2, ExternalLink } from 'lucide-react';
 import { VocabPopover } from './VocabPopover';
 
 interface LiveClassroomStudentProps {
@@ -22,14 +22,13 @@ export const LiveClassroomStudent: React.FC<LiveClassroomStudentProps> = ({
   onExit,
 }) => {
   const [session, setSession] = useState<LiveSessionState | null>(null);
-  const [activeQuestion, setActiveQuestion] = useState<Question | null>(null);
   const [myAnswers, setMyAnswers] = useState<Record<string, StudentAnswer>>({});
   const [myScore, setMyScore] = useState<number>(0);
   const [isLocalWordOpen, setIsLocalWordOpen] = useState(false);
   const [isSessionEnded, setIsSessionEnded] = useState(false);
   const [showCaptions, setShowCaptions] = useState(true);
 
-  // Poll live session state every 1s
+  // Poll live session state every 1.2s
   useEffect(() => {
     let isMounted = true;
     const fetchSession = async () => {
@@ -49,19 +48,21 @@ export const LiveClassroomStudent: React.FC<LiveClassroomStudentProps> = ({
           if (isMounted) {
             setSession(sess);
 
-            // Check if there is an active question from the teacher
-            if (sess.currentQuestionId) {
-              const q = lesson.questions.find((item) => item.id === sess.currentQuestionId);
-              if (q) {
-                setActiveQuestion(q);
-              }
-            } else {
-              setActiveQuestion(null);
-            }
-
-            // Check my score and answers
+            // Sync student score and answered records if stored in session
             if (sess.students[studentId]) {
               setMyScore(sess.students[studentId].score || 0);
+              const serverAns = sess.students[studentId].answers || {};
+              const converted: Record<string, StudentAnswer> = {};
+              Object.entries(serverAns).forEach(([qId, val]) => {
+                converted[qId] = {
+                  questionId: qId,
+                  answer: val.answer,
+                  isCorrect: val.isCorrect,
+                  pointsEarned: val.points,
+                  submittedAt: val.submittedAt,
+                };
+              });
+              setMyAnswers((prev) => ({ ...converted, ...prev }));
             }
           }
         }
@@ -102,9 +103,6 @@ export const LiveClassroomStudent: React.FC<LiveClassroomStudentProps> = ({
     }
   };
 
-  const isFeedbackRevealed =
-    activeQuestion && session?.revealedFeedbackForQuestionId === activeQuestion.id;
-
   if (isSessionEnded) {
     return (
       <div className="max-w-md mx-auto my-12 p-8 bg-white border border-slate-200 rounded-3xl shadow-xl text-center space-y-5 animate-in fade-in zoom-in-95">
@@ -131,7 +129,7 @@ export const LiveClassroomStudent: React.FC<LiveClassroomStudentProps> = ({
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
       {/* Student Live Header Bar */}
       <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-3">
@@ -158,44 +156,60 @@ export const LiveClassroomStudent: React.FC<LiveClassroomStudentProps> = ({
 
           <button
             onClick={onExit}
-            className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-800 rounded-lg hover:bg-slate-100 transition-colors"
+            className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-800 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
           >
             Leave Room
           </button>
         </div>
       </div>
 
-      {/* Synchronized Player (Controlled Externally by Teacher) */}
-      <div className="space-y-4">
-        <UnifiedPlayer
-          mediaType={lesson.mediaType}
-          mediaUrl={lesson.mediaUrl}
-          duration={lesson.duration}
-          trimStart={lesson.trimStart}
-          trimEnd={lesson.trimEnd}
-          questions={lesson.questions}
-          preventSkipping={true}
-          isStudent={true}
-          isControlledExternally={true}
-          externalCurrentTime={session?.currentTime || 0}
-          externalIsPlaying={Boolean(session?.isPlaying && !session?.activeVocabWord && !isLocalWordOpen)}
-          externalPlaybackSpeed={session?.playbackSpeed || 1}
-          captions={lesson.captions}
-          difficultWords={lesson.difficultWords}
-          showCaptions={showCaptions}
-          onToggleCaptions={() => setShowCaptions(!showCaptions)}
-          onWordClick={() => setIsLocalWordOpen(true)}
-          onTimeUpdate={() => {}}
-          onQuestionTrigger={() => {}}
-        />
+      {/* TWO COLUMN SIDE-BY-SIDE LAYOUT: Left = Video & Captions, Right = Questions Panel */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left Column (7 cols): Synchronized Player & Interactive Captions */}
+        <div className="lg:col-span-7 space-y-4">
+          <UnifiedPlayer
+            mediaType={lesson.mediaType}
+            mediaUrl={lesson.mediaUrl}
+            duration={lesson.duration}
+            trimStart={lesson.trimStart}
+            trimEnd={lesson.trimEnd}
+            questions={lesson.questions}
+            preventSkipping={true}
+            isStudent={true}
+            isControlledExternally={true}
+            externalCurrentTime={session?.currentTime || 0}
+            externalIsPlaying={Boolean(session?.isPlaying && !session?.activeVocabWord && !isLocalWordOpen)}
+            externalPlaybackSpeed={session?.playbackSpeed || 1}
+            captions={lesson.captions}
+            difficultWords={lesson.difficultWords}
+            showCaptions={showCaptions}
+            onToggleCaptions={() => setShowCaptions(!showCaptions)}
+            onWordClick={() => setIsLocalWordOpen(true)}
+            onTimeUpdate={() => {}}
+            onQuestionTrigger={() => {}}
+          />
 
-        <InteractiveCaptions
-          captions={lesson.captions}
-          difficultWords={lesson.difficultWords}
-          currentTime={session?.currentTime || 0}
-          canSeek={false}
-          onWordClick={() => setIsLocalWordOpen(true)}
-        />
+          <InteractiveCaptions
+            captions={lesson.captions}
+            difficultWords={lesson.difficultWords}
+            currentTime={session?.currentTime || 0}
+            canSeek={false}
+            onWordClick={() => setIsLocalWordOpen(true)}
+          />
+        </div>
+
+        {/* Right Column (5 cols): Persistent Questions Panel */}
+        <div className="lg:col-span-5 lg:sticky lg:top-20">
+          <StudentQuestionsPanel
+            questions={lesson.questions}
+            currentActiveQuestionId={session?.currentQuestionId || null}
+            answers={myAnswers}
+            onAnswerSubmit={handleStudentSubmit}
+            isLiveMode={true}
+            revealedFeedbackForQuestionId={session?.revealedFeedbackForQuestionId || null}
+            allowRewind={false}
+          />
+        </div>
       </div>
 
       {/* Teacher Vocabulary Spotlight Modal (Teacher paused video to explain word) */}
@@ -274,17 +288,6 @@ export const LiveClassroomStudent: React.FC<LiveClassroomStudentProps> = ({
             </div>
           </div>
         </div>
-      )}
-
-      {/* Live Formative Question Modal Triggered by Teacher */}
-      {activeQuestion && (
-        <QuestionModal
-          question={activeQuestion}
-          onSubmit={handleStudentSubmit}
-          onContinue={() => setActiveQuestion(null)}
-          isFeedbackRevealed={!!isFeedbackRevealed}
-          isLiveMode={true}
-        />
       )}
     </div>
   );

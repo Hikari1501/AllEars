@@ -31,7 +31,7 @@ export interface MatchingPair {
 
 export interface Question {
   id: string;
-  timestamp: number; // in seconds
+  timestamp?: number | null; // in seconds; null/undefined for general whole-video questions
   type: QuestionType;
   prompt: string;
   options?: QuestionOption[];

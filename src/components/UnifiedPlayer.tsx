@@ -68,6 +68,8 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(trimStart);
   const [inVideoCaptions, setInVideoCaptions] = useState(showCaptions);
+  const [ytCaptionsEnabled, setYtCaptionsEnabled] = useState(false);
+  const [showCaptionMenu, setShowCaptionMenu] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(1);
@@ -78,6 +80,32 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
   useEffect(() => {
     setInVideoCaptions(showCaptions);
   }, [showCaptions]);
+
+  const toggleYouTubeCaptions = () => {
+    const next = !ytCaptionsEnabled;
+    setYtCaptionsEnabled(next);
+    if (ytPlayerRef.current) {
+      try {
+        if (next) {
+          if (typeof ytPlayerRef.current.loadModule === 'function') {
+            ytPlayerRef.current.loadModule('captions');
+          }
+          if (typeof ytPlayerRef.current.setOption === 'function') {
+            ytPlayerRef.current.setOption('captions', 'track', { languageCode: 'en' });
+          }
+        } else {
+          if (typeof ytPlayerRef.current.unloadModule === 'function') {
+            ytPlayerRef.current.unloadModule('captions');
+          }
+          if (typeof ytPlayerRef.current.setOption === 'function') {
+            ytPlayerRef.current.setOption('captions', 'track', {});
+          }
+        }
+      } catch (err) {
+        console.warn('Could not toggle YouTube native captions:', err);
+      }
+    }
+  };
 
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -211,8 +239,9 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
           setMaxWatchedTime(t);
         }
 
-        // Check if any unanswered question falls on or before current time
+        // Check if any unanswered timestamped question falls on or before current time
         questions.forEach((q) => {
+          if (typeof q.timestamp !== 'number' || q.timestamp < 0) return;
           const isTriggered = triggeredQuestionIds.current.has(q.id);
           const isAnswered = answeredQuestionIds.has(q.id);
 
@@ -526,32 +555,52 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
           </div>
         )}
 
-        {/* In-Video CC Toggle Badge (Top Right) */}
-        <button
-          type="button"
-          onClick={() => {
-            const next = !inVideoCaptions;
-            setInVideoCaptions(next);
-            if (onToggleCaptions) onToggleCaptions();
-          }}
-          className={`absolute top-3 ${effectiveStart > 0 || trimEnd ? 'right-48' : 'right-3'} px-2.5 py-1 rounded-md text-[11px] font-bold border transition-all z-20 flex items-center gap-1.5 cursor-pointer backdrop-blur-md shadow-sm ${
-            inVideoCaptions
-              ? 'bg-amber-500 text-slate-950 border-amber-400'
-              : 'bg-slate-900/80 text-slate-400 border-slate-700 hover:text-white'
-          }`}
-          title={inVideoCaptions ? 'Click to turn off in-video captions' : 'Click to turn on in-video captions'}
-        >
-          <Subtitles className="w-3.5 h-3.5" />
-          <span>{inVideoCaptions ? 'CC ON' : 'CC OFF'}</span>
-        </button>
+        {/* Top Right Video Overlay Buttons: Dual Caption Toggles & Trim Badge */}
+        <div className="absolute top-3 right-3 flex items-center gap-2 z-20">
+          {/* Teacher-Added Captions Toggle */}
+          <button
+            type="button"
+            onClick={() => {
+              const next = !inVideoCaptions;
+              setInVideoCaptions(next);
+              if (onToggleCaptions) onToggleCaptions();
+            }}
+            className={`px-2.5 py-1 rounded-md text-[11px] font-bold border transition-all flex items-center gap-1.5 cursor-pointer backdrop-blur-md shadow-xs ${
+              inVideoCaptions
+                ? 'bg-amber-500 text-slate-950 border-amber-400'
+                : 'bg-slate-900/80 text-slate-400 border-slate-700 hover:text-white'
+            }`}
+            title="Toggle Teacher-Added Captions (with CEFR vocabulary level highlights & definitions)"
+          >
+            <Subtitles className="w-3.5 h-3.5" />
+            <span>Teacher CC {inVideoCaptions ? 'ON' : 'OFF'}</span>
+          </button>
 
-        {/* Trim Active Indicator */}
-        {(effectiveStart > 0 || trimEnd) && (
-          <div className="absolute top-3 right-3 bg-slate-900/90 backdrop-blur-md px-2.5 py-1 rounded-md text-[11px] font-mono text-amber-300 border border-slate-700 flex items-center gap-1.5 z-20">
-            <Scissors className="w-3 h-3 text-amber-400" />
-            <span>Trimmed: {formatTime(effectiveStart)} - {formatTime(effectiveEnd)}</span>
-          </div>
-        )}
+          {/* YouTube Native Captions Toggle (for YouTube media) */}
+          {mediaType === 'youtube' && !useFallbackPlayer && (
+            <button
+              type="button"
+              onClick={toggleYouTubeCaptions}
+              className={`px-2.5 py-1 rounded-md text-[11px] font-bold border transition-all flex items-center gap-1.5 cursor-pointer backdrop-blur-md shadow-xs ${
+                ytCaptionsEnabled
+                  ? 'bg-red-600 text-white border-red-500'
+                  : 'bg-slate-900/80 text-slate-400 border-slate-700 hover:text-white'
+              }`}
+              title="Toggle YouTube Native Closed Captions (auto-generated or official subtitles from YouTube)"
+            >
+              <Subtitles className="w-3.5 h-3.5" />
+              <span>YouTube CC {ytCaptionsEnabled ? 'ON' : 'OFF'}</span>
+            </button>
+          )}
+
+          {/* Trim Active Indicator */}
+          {(effectiveStart > 0 || trimEnd) && (
+            <div className="bg-slate-900/90 backdrop-blur-md px-2.5 py-1 rounded-md text-[11px] font-mono text-amber-300 border border-slate-700 flex items-center gap-1.5">
+              <Scissors className="w-3 h-3 text-amber-400" />
+              <span>Trim: {formatTime(effectiveStart)} - {formatTime(effectiveEnd)}</span>
+            </div>
+          )}
+        </div>
 
         {/* In-Video Floating Captions Overlay */}
         {inVideoCaptions && activeCaption && (
@@ -596,37 +645,40 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
             />
           </div>
 
-          {/* Question timestamp pins */}
-          {questions.map((q, idx) => {
-            const pinTime = Math.max(effectiveStart, Math.min(q.timestamp, effectiveEnd));
-            const pos = Math.min(
-              99,
-              Math.max(1, ((pinTime - effectiveStart) / effectiveDuration) * 100)
-            );
-            const isAnswered = answeredQuestionIds.has(q.id);
+          {/* Question timestamp pins (only for questions with valid timestamps) */}
+          {questions
+            .filter((q) => typeof q.timestamp === 'number' && q.timestamp >= 0)
+            .map((q, idx) => {
+              const qTime = q.timestamp as number;
+              const pinTime = Math.max(effectiveStart, Math.min(qTime, effectiveEnd));
+              const pos = Math.min(
+                99,
+                Math.max(1, ((pinTime - effectiveStart) / effectiveDuration) * 100)
+              );
+              const isAnswered = answeredQuestionIds.has(q.id);
 
-            return (
-              <button
-                key={q.id}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (!isControlledExternally) seekTo(q.timestamp);
-                }}
-                disabled={isControlledExternally}
-                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full flex items-center justify-center transition-transform hover:scale-125 z-10 cursor-pointer"
-                style={{ left: `${pos}%` }}
-                title={`Question ${idx + 1} at ${formatTime(q.timestamp)} (${q.type})`}
-              >
-                <span
-                  className={`w-3 h-3 rounded-full border-2 ${
-                    isAnswered
-                      ? 'bg-emerald-400 border-emerald-600 shadow-sm'
-                      : 'bg-amber-400 border-slate-950 shadow-md ring-2 ring-amber-500/50'
-                  }`}
-                />
-              </button>
-            );
-          })}
+              return (
+                <button
+                  key={q.id}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!isControlledExternally) seekTo(qTime);
+                  }}
+                  disabled={isControlledExternally}
+                  className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full flex items-center justify-center transition-transform hover:scale-125 z-10 cursor-pointer"
+                  style={{ left: `${pos}%` }}
+                  title={`Question at ${formatTime(qTime)} (${q.type})`}
+                >
+                  <span
+                    className={`w-3 h-3 rounded-full border-2 ${
+                      isAnswered
+                        ? 'bg-emerald-400 border-emerald-600 shadow-sm'
+                        : 'bg-amber-400 border-slate-950 shadow-md ring-2 ring-amber-500/50'
+                    }`}
+                  />
+                </button>
+              );
+            })}
         </div>
 
         {/* Lower Toolbar */}
@@ -693,22 +745,42 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
               ))}
             </div>
 
-            {/* Captions Toggle */}
-            <button
-              onClick={() => {
-                const next = !inVideoCaptions;
-                setInVideoCaptions(next);
-                if (onToggleCaptions) onToggleCaptions();
-              }}
-              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                inVideoCaptions
-                  ? 'text-amber-400 bg-slate-800'
-                  : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800'
-              }`}
-              title={inVideoCaptions ? 'Turn in-video captions OFF' : 'Turn in-video captions ON'}
-            >
-              <Subtitles className="w-4 h-4" />
-            </button>
+            {/* Dual Captions Toggles */}
+            <div className="flex items-center gap-1 bg-slate-800/80 p-0.5 rounded-lg">
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !inVideoCaptions;
+                  setInVideoCaptions(next);
+                  if (onToggleCaptions) onToggleCaptions();
+                }}
+                className={`px-1.5 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer flex items-center gap-1 ${
+                  inVideoCaptions
+                    ? 'bg-amber-500 text-slate-950 font-bold'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="Teacher Captions (with CEFR vocabulary level highlights)"
+              >
+                <Subtitles className="w-3.5 h-3.5" />
+                <span>Teacher CC</span>
+              </button>
+
+              {mediaType === 'youtube' && !useFallbackPlayer && (
+                <button
+                  type="button"
+                  onClick={toggleYouTubeCaptions}
+                  className={`px-1.5 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer flex items-center gap-1 ${
+                    ytCaptionsEnabled
+                      ? 'bg-red-600 text-white font-bold'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="YouTube Native Closed Captions"
+                >
+                  <Subtitles className="w-3.5 h-3.5" />
+                  <span>YT CC</span>
+                </button>
+              )}
+            </div>
 
             {/* Volume Mute */}
             <button

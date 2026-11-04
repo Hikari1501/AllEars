@@ -451,7 +451,9 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
                         {idx + 1}. {q.prompt.substring(0, 40)}...
                       </div>
                       <div className="text-[11px] text-slate-500 font-mono">
-                        At {Math.floor(q.timestamp / 60)}:{(q.timestamp % 60).toString().padStart(2, '0')} · {q.type}
+                        {typeof q.timestamp === 'number' && q.timestamp >= 0
+                          ? `At ${Math.floor(q.timestamp / 60)}:${(q.timestamp % 60).toString().padStart(2, '0')} · ${q.type}`
+                          : `Whole Video / General · ${q.type}`}
                       </div>
                     </div>
                     <button

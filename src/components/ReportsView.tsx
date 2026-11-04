@@ -384,7 +384,11 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                   </div>
 
                   <div className="text-[11px] text-slate-500 flex items-center justify-between">
-                    <span>Checkpoint at {Math.floor(q.timestamp / 60)}:{(q.timestamp % 60).toString().padStart(2, '0')}</span>
+                    <span>
+                      {typeof q.timestamp === 'number' && q.timestamp >= 0
+                        ? `Checkpoint at ${Math.floor(q.timestamp / 60)}:${(q.timestamp % 60).toString().padStart(2, '0')}`
+                        : 'General / Whole Video Comprehension'}
+                    </span>
                     <span className="italic">{q.explanation}</span>
                   </div>
                 </div>

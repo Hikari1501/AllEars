@@ -114,6 +114,14 @@ export const INITIAL_LESSONS: Lesson[] = [
         explanation: 'The speaker specifically mentioned the hippocampus, the brain structure critical for long-term memory formation.',
         points: 10,
       },
+      {
+        id: 'q5',
+        timestamp: null,
+        type: 'open_ended',
+        prompt: 'Whole Video Reflection: In your own words, summarize how understanding curiosity can help you improve your own English learning habits.',
+        explanation: 'Reflective whole-lesson synthesis connecting epistemic hunger to student study retention.',
+        points: 10,
+      },
     ],
     difficultWords: [
       {
