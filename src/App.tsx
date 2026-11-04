@@ -15,6 +15,7 @@ import { ReportsView } from './components/ReportsView';
 import { JoinModal } from './components/JoinModal';
 import { TeacherLoginModal } from './components/TeacherLoginModal';
 import { TeacherManagementModal } from './components/TeacherManagementModal';
+import heroImage from './assets/images/allears_hero_listening_1793672977345.jpg';
 import {
   Play,
   Radio,
@@ -34,6 +35,25 @@ import {
   EyeOff,
   Trash2,
 } from 'lucide-react';
+
+const extractYouTubeId = (url?: string): string | null => {
+  if (!url) return null;
+  const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+  return match && match[1] ? match[1] : null;
+};
+
+const sanitizeLessons = (list: Lesson[]): Lesson[] => {
+  return list.map((l) => {
+    const isObsoleteThumb = !l.thumbnailUrl || l.thumbnailUrl.startsWith('/src/assets/images/');
+    if (isObsoleteThumb) {
+      const ytId = extractYouTubeId(l.mediaUrl);
+      if (ytId) {
+        return { ...l, thumbnailUrl: `https://img.youtube.com/vi/${ytId}/hqdefault.jpg` };
+      }
+    }
+    return l;
+  });
+};
 
 export default function App() {
   // Default user is always Student per user request
@@ -57,9 +77,12 @@ export default function App() {
     try {
       const saved = localStorage.getItem('allears_lessons_v3');
       const parsed = saved ? JSON.parse(saved) : null;
-      return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_LESSONS;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return sanitizeLessons(parsed);
+      }
+      return sanitizeLessons(INITIAL_LESSONS);
     } catch {
-      return INITIAL_LESSONS;
+      return sanitizeLessons(INITIAL_LESSONS);
     }
   });
 
@@ -519,9 +542,12 @@ export default function App() {
 
                 <div className="lg:col-span-5 relative min-h-[240px] lg:min-h-full">
                   <img
-                    src="/src/assets/images/allears_hero_listening_1793672977345.jpg"
+                    src={heroImage}
                     alt="Student with headphones listening to English lesson"
                     referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      e.currentTarget.src = 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=1200&q=80';
+                    }}
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t lg:bg-gradient-to-r from-slate-950 via-slate-950/40 to-transparent" />
@@ -572,11 +598,27 @@ export default function App() {
                     <div>
                       {/* Media Thumbnail */}
                       <div className="relative aspect-video bg-slate-900 overflow-hidden">
-                        {lesson.thumbnailUrl ? (
+                        {lesson.thumbnailUrl || extractYouTubeId(lesson.mediaUrl) ? (
                           <img
-                            src={lesson.thumbnailUrl}
+                            src={
+                              lesson.thumbnailUrl && !lesson.thumbnailUrl.startsWith('/src/assets/images/')
+                                ? lesson.thumbnailUrl
+                                : (extractYouTubeId(lesson.mediaUrl)
+                                  ? `https://img.youtube.com/vi/${extractYouTubeId(lesson.mediaUrl)}/hqdefault.jpg`
+                                  : '')
+                            }
                             alt={lesson.title}
                             referrerPolicy="no-referrer"
+                            onError={(e) => {
+                              const ytId = extractYouTubeId(lesson.mediaUrl);
+                              if (ytId) {
+                                const fallback = `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
+                                if (e.currentTarget.src !== fallback) {
+                                  e.currentTarget.src = fallback;
+                                  return;
+                                }
+                              }
+                            }}
                             className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
                           />
                         ) : (

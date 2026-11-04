@@ -21,21 +21,90 @@ export const TeacherLoginModal: React.FC<TeacherLoginModalProps> = ({
     setIsLoading(true);
     setError(null);
 
+    const normUser = username.trim().toLowerCase();
+    const cleanPass = password.trim();
+
+    // Check credentials locally (essential for static deployments like GitHub Pages or offline)
+    const checkClientAuth = (): UserAccount | null => {
+      // 1. Primary Teacher / Admin Account
+      if (
+        (normUser === 'chuck' || normUser === 'chuckacr1501@gmail.com') &&
+        cleanPass === 'password123'
+      ) {
+        return {
+          id: 'teacher-chuck',
+          name: 'Chuck',
+          email: 'ChuckACR1501@gmail.com',
+          role: 'teacher',
+          isAdmin: true,
+        };
+      }
+
+      // 2. Any additional authorized teachers saved in localStorage
+      try {
+        const stored = localStorage.getItem('allears_authorized_teachers');
+        if (stored) {
+          const teachers = JSON.parse(stored);
+          if (Array.isArray(teachers)) {
+            const found = teachers.find(
+              (t: any) =>
+                (t.email?.toLowerCase() === normUser || t.name?.toLowerCase() === normUser) &&
+                t.password === cleanPass
+            );
+            if (found) {
+              return {
+                id: found.id || `teacher-${Date.now()}`,
+                name: found.name,
+                email: found.email,
+                role: 'teacher',
+                isAdmin: !!found.isAdmin,
+              };
+            }
+          }
+        }
+      } catch {}
+
+      return null;
+    };
+
     try {
       const res = await fetch('/api/auth/teacher-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username: normUser, password: cleanPass }),
       });
-      const data = await res.json();
-      if (data.success && data.user) {
-        onSuccess(data.user);
+
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const data = await res.json();
+        if (data.success && data.user) {
+          onSuccess(data.user);
+          onClose();
+          return;
+        } else if (res.status === 401 || res.status === 400) {
+          // Explicit credential rejection from backend
+          setError(data.error || 'Invalid teacher account name or password.');
+          return;
+        }
+      }
+
+      // If backend returned non-JSON (e.g. 404 HTML on static GitHub Pages)
+      const localUser = checkClientAuth();
+      if (localUser) {
+        onSuccess(localUser);
         onClose();
       } else {
-        setError(data.error || 'Invalid teacher credentials.');
+        setError('Invalid teacher account name or password.');
       }
-    } catch (err) {
-      setError('Network error connecting to authentication server.');
+    } catch {
+      // Network failure or static environment without /api backend
+      const localUser = checkClientAuth();
+      if (localUser) {
+        onSuccess(localUser);
+        onClose();
+      } else {
+        setError('Invalid teacher account name or password.');
+      }
     } finally {
       setIsLoading(false);
     }

@@ -5,10 +5,18 @@ interface TeacherManagementModalProps {
   onClose: () => void;
 }
 
+interface TeacherItem {
+  id: string;
+  name: string;
+  email: string;
+  isAdmin?: boolean;
+  password?: string;
+}
+
 export const TeacherManagementModal: React.FC<TeacherManagementModalProps> = ({
   onClose,
 }) => {
-  const [teachers, setTeachers] = useState<any[]>([]);
+  const [teachers, setTeachers] = useState<TeacherItem[]>([]);
   const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('welcome123');
@@ -16,15 +24,45 @@ export const TeacherManagementModal: React.FC<TeacherManagementModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchTeachers = async () => {
+    let list: TeacherItem[] = [
+      {
+        id: 'teacher-chuck',
+        name: 'Chuck',
+        email: 'ChuckACR1501@gmail.com',
+        isAdmin: true,
+      },
+    ];
+
+    try {
+      const stored = localStorage.getItem('allears_authorized_teachers');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          list = [...list, ...parsed];
+        }
+      }
+    } catch {}
+
     try {
       const res = await fetch('/api/auth/teachers');
       const data = await res.json();
-      if (data.teachers) {
-        setTeachers(data.teachers);
+      if (data.teachers && Array.isArray(data.teachers)) {
+        list = data.teachers;
       }
-    } catch (e) {
-      console.error(e);
+    } catch {
+      // In static deployment, use list
     }
+
+    // Deduplicate by email
+    const seen = new Set<string>();
+    const unique = list.filter((t) => {
+      const key = t.email.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    setTeachers(unique);
   };
 
   useEffect(() => {
@@ -36,8 +74,24 @@ export const TeacherManagementModal: React.FC<TeacherManagementModalProps> = ({
     if (!newName.trim() || !newEmail.trim() || !newPassword.trim()) return;
 
     setIsSubmitting(true);
+    const newRecord = {
+      id: `teacher-${Date.now()}`,
+      name: newName.trim(),
+      email: newEmail.trim(),
+      password: newPassword.trim(),
+      isAdmin: false,
+    };
+
+    // Store in localStorage for static deployment
     try {
-      const res = await fetch('/api/auth/add-teacher', {
+      const stored = localStorage.getItem('allears_authorized_teachers');
+      const parsed = stored ? JSON.parse(stored) : [];
+      const updated = Array.isArray(parsed) ? [...parsed, newRecord] : [newRecord];
+      localStorage.setItem('allears_authorized_teachers', JSON.stringify(updated));
+    } catch {}
+
+    try {
+      await fetch('/api/auth/add-teacher', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -46,19 +100,16 @@ export const TeacherManagementModal: React.FC<TeacherManagementModalProps> = ({
           password: newPassword,
         }),
       });
-      const data = await res.json();
-      if (data.success) {
-        setStatusMessage(`Teacher "${newName}" authorized successfully!`);
-        setNewName('');
-        setNewEmail('');
-        setNewPassword('welcome123');
-        fetchTeachers();
-        setTimeout(() => setStatusMessage(null), 3000);
-      }
     } catch (err) {
-      console.error(err);
+      console.warn('Backend offline, teacher saved to local storage:', err);
     } finally {
+      setStatusMessage(`Teacher "${newName}" authorized successfully!`);
+      setNewName('');
+      setNewEmail('');
+      setNewPassword('welcome123');
+      fetchTeachers();
       setIsSubmitting(false);
+      setTimeout(() => setStatusMessage(null), 3000);
     }
   };
 

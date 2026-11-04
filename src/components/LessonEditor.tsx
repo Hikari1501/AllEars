@@ -525,6 +525,10 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
       trimStart: Number(trimStart) || 0,
       trimEnd: Number(trimEnd) || Number(duration) || 180,
       preventSkipping,
+      thumbnailUrl:
+        initialLesson?.thumbnailUrl && !initialLesson.thumbnailUrl.startsWith('/src/assets/images/')
+          ? initialLesson.thumbnailUrl
+          : (mediaType === 'youtube' && extractYtId(mediaUrl) ? `https://img.youtube.com/vi/${extractYtId(mediaUrl)}/hqdefault.jpg` : undefined),
       isPublished,
       teacherId: initialLesson?.teacherId || 'teacher-chuck',
       teacherName: initialLesson?.teacherName || 'Chuck (Teacher)',
