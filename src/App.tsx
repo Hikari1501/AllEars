@@ -45,18 +45,32 @@ export default function App() {
   };
 
   const [currentUser, setCurrentUser] = useState<UserAccount>(() => {
-    const saved = localStorage.getItem('allears_user');
-    return saved ? JSON.parse(saved) : defaultStudentUser;
+    try {
+      const saved = localStorage.getItem('allears_user');
+      return saved ? JSON.parse(saved) : defaultStudentUser;
+    } catch {
+      return defaultStudentUser;
+    }
   });
 
   const [lessons, setLessons] = useState<Lesson[]>(() => {
-    const saved = localStorage.getItem('allears_lessons_v3');
-    return saved ? JSON.parse(saved) : INITIAL_LESSONS;
+    try {
+      const saved = localStorage.getItem('allears_lessons_v3');
+      const parsed = saved ? JSON.parse(saved) : null;
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_LESSONS;
+    } catch {
+      return INITIAL_LESSONS;
+    }
   });
 
   const [submissions, setSubmissions] = useState<LessonSubmission[]>(() => {
-    const saved = localStorage.getItem('allears_submissions_v3');
-    return saved ? JSON.parse(saved) : INITIAL_SUBMISSIONS;
+    try {
+      const saved = localStorage.getItem('allears_submissions_v3');
+      const parsed = saved ? JSON.parse(saved) : null;
+      return Array.isArray(parsed) ? parsed : INITIAL_SUBMISSIONS;
+    } catch {
+      return INITIAL_SUBMISSIONS;
+    }
   });
 
   // Navigation tab
@@ -283,7 +297,7 @@ export default function App() {
   });
 
   const currentReportLesson =
-    lessons.find((l) => l.id === reportsLessonId) || lessons[0];
+    lessons.find((l) => l.id === reportsLessonId) || lessons[0] || INITIAL_LESSONS[0];
 
   return (
     <div className="min-h-screen bg-[#FBFBFA] text-[#0F172A] flex flex-col font-sans">
