@@ -6,6 +6,21 @@ import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type } from '@google/genai';
 import { INITIAL_LESSONS } from './src/data/mockLessons.ts';
+import {
+  initDatabase,
+  findTeacher,
+  addTeacher,
+  getAllTeachers,
+  getAllLessons,
+  getLessonById,
+  saveLesson,
+  deleteLesson,
+  setLessonPublishStatus,
+  getAllReports,
+  saveSessionReport,
+  deleteSessionReport,
+  TeacherRecord,
+} from './server/db.ts';
 
 dotenv.config();
 
@@ -67,43 +82,15 @@ const liveSessions: Record<string, LiveSession> = {};
 // Track ended sessions so students cannot join and active viewers are told the session ended
 const endedSessionPins: Record<string, number> = {};
 
-// Teachers and Admin store
-interface TeacherRecord {
-  id: string;
-  name: string;
-  email: string;
-  password: string;
-  isAdmin: boolean;
-}
-
-const teachersStore: Record<string, TeacherRecord> = {
-  'chuck': {
-    id: 'teacher-chuck',
-    name: 'Chuck',
-    email: 'ChuckACR1501@gmail.com',
-    password: 'password123',
-    isAdmin: true,
-  },
-  'ChuckACR1501@gmail.com': {
-    id: 'teacher-chuck',
-    name: 'Chuck',
-    email: 'ChuckACR1501@gmail.com',
-    password: 'password123',
-    isAdmin: true,
-  },
-};
-
-// Teacher Login API
-app.post('/api/auth/teacher-login', (req: Request, res: Response) => {
-  const { username, password } = req.body;
+// Teacher Login API (Backed by PostgreSQL / DB)
+app.post('/api/auth/teacher-login', async (req: Request, res: Response) => {
+  const username = req.body.username || req.body.email;
+  const password = req.body.password;
   if (!username || !password) {
     return res.status(400).json({ error: 'Username/Email and password required' });
   }
 
-  const normalized = username.trim().toLowerCase();
-  const found = Object.values(teachersStore).find(
-    (t) => t.email.toLowerCase() === normalized || t.name.toLowerCase() === normalized
-  );
+  const found = await findTeacher(username);
 
   if (!found || found.password !== password) {
     return res.status(401).json({ error: 'Invalid teacher account name or password.' });
@@ -121,8 +108,8 @@ app.post('/api/auth/teacher-login', (req: Request, res: Response) => {
   });
 });
 
-// Admin adds a new teacher
-app.post('/api/auth/add-teacher', (req: Request, res: Response) => {
+// Admin adds a new teacher (Saved to PostgreSQL / DB)
+app.post('/api/auth/add-teacher', async (req: Request, res: Response) => {
   const { name, email, password } = req.body;
   if (!name || !email || !password) {
     return res.status(400).json({ error: 'Name, email, and password required' });
@@ -137,8 +124,7 @@ app.post('/api/auth/add-teacher', (req: Request, res: Response) => {
     isAdmin: false,
   };
 
-  teachersStore[newTeacher.email.toLowerCase()] = newTeacher;
-  teachersStore[newTeacher.name.toLowerCase()] = newTeacher;
+  await addTeacher(newTeacher);
 
   res.json({
     success: true,
@@ -150,16 +136,9 @@ app.post('/api/auth/add-teacher', (req: Request, res: Response) => {
   });
 });
 
-app.get('/api/auth/teachers', (_req: Request, res: Response) => {
-  const list = Object.values(teachersStore).map(({ id, name, email, isAdmin }) => ({
-    id,
-    name,
-    email,
-    isAdmin,
-  }));
-  // Deduplicate by email
-  const unique = Array.from(new Map(list.map((item) => [item.email, item])).values());
-  res.json({ teachers: unique });
+app.get('/api/auth/teachers', async (_req: Request, res: Response) => {
+  const teachers = await getAllTeachers();
+  res.json({ teachers });
 });
 
 // Helper functions for database persistence and session reports
@@ -242,16 +221,8 @@ if (!sessionReports || sessionReports.length === 0) {
   } catch (e) {}
 }
 
-function saveReportsToDisk() {
-  try {
-    fs.writeFileSync(REPORTS_FILE, JSON.stringify(sessionReports, null, 2), 'utf-8');
-  } catch (e) {
-    console.error('Failed to write reports database to disk:', e);
-  }
-}
-
-function archiveLiveSession(session: LiveSession) {
-  const lesson = serverLessons.find((l: any) => l.id === session.lessonId);
+async function archiveLiveSession(session: LiveSession) {
+  const lesson = await getLessonById(session.lessonId);
   const questions: any[] = lesson?.questions || [];
   const maxPossiblePoints = questions.reduce((sum: number, q: any) => sum + (q.points || 10), 0) || 10;
 
@@ -315,8 +286,7 @@ function archiveLiveSession(session: LiveSession) {
     questionStats,
   };
 
-  sessionReports.unshift(report);
-  saveReportsToDisk();
+  await saveSessionReport(report);
 
   endedSessionPins[session.pin] = Date.now();
   delete liveSessions[session.pin];
@@ -325,16 +295,16 @@ function archiveLiveSession(session: LiveSession) {
 }
 
 // REST API for Live Sessions
-app.post('/api/live/create', (req: Request, res: Response) => {
+app.post('/api/live/create', async (req: Request, res: Response) => {
   const { lessonId, teacherId = 'teacher-chuck', teacherName = 'Chuck' } = req.body;
 
   // Auto-end and archive any active sessions previously hosted by this teacher
-  Object.keys(liveSessions).forEach((oldPin) => {
+  for (const oldPin of Object.keys(liveSessions)) {
     const s = liveSessions[oldPin];
     if (s && s.teacherId === teacherId) {
-      archiveLiveSession(s);
+      await archiveLiveSession(s);
     }
-  });
+  }
 
   // Generate a friendly 6-digit pin
   const pin = Math.floor(100000 + Math.random() * 900000).toString();
@@ -360,7 +330,7 @@ app.post('/api/live/create', (req: Request, res: Response) => {
 });
 
 // Explicit endpoint to end live session and archive its report
-app.post('/api/live/end', (req: Request, res: Response) => {
+app.post('/api/live/end', async (req: Request, res: Response) => {
   const { pin } = req.body;
   if (!pin) {
     return res.status(400).json({ error: 'Session PIN is required' });
@@ -374,7 +344,7 @@ app.post('/api/live/end', (req: Request, res: Response) => {
     return res.status(404).json({ error: 'Active session not found' });
   }
 
-  const report = archiveLiveSession(session);
+  const report = await archiveLiveSession(session);
   res.json({ success: true, report, message: 'Session ended and archived successfully' });
 });
 
@@ -898,19 +868,19 @@ function saveLessonsToDisk() {
   }
 }
 
-// Lessons CRUD API
-app.get('/api/lessons', (req: Request, res: Response) => {
+// Lessons CRUD API (Backed by PostgreSQL / DB)
+app.get('/api/lessons', async (req: Request, res: Response) => {
   const { role = 'student' } = req.query;
-  // If student, only return published lessons
-  if (role === 'student') {
-    const published = serverLessons.filter((l) => l.isPublished !== false);
-    return res.json({ lessons: published });
+  try {
+    const lessons = await getAllLessons(role === 'teacher');
+    res.json({ lessons });
+  } catch (e) {
+    console.error('[API] Error getting lessons:', e);
+    res.status(500).json({ error: 'Failed to retrieve lessons' });
   }
-  // If teacher, return all lessons including drafts
-  res.json({ lessons: serverLessons });
 });
 
-app.post('/api/lessons', (req: Request, res: Response) => {
+app.post('/api/lessons', async (req: Request, res: Response) => {
   const lesson = req.body;
   if (!lesson || !lesson.id) {
     return res.status(400).json({ error: 'Valid lesson object required' });
@@ -921,137 +891,153 @@ app.post('/api/lessons', (req: Request, res: Response) => {
     lesson.isPublished = true;
   }
 
-  const existingIdx = serverLessons.findIndex((l) => l.id === lesson.id);
-  if (existingIdx >= 0) {
-    serverLessons[existingIdx] = lesson;
-  } else {
-    serverLessons.unshift(lesson);
+  try {
+    const saved = await saveLesson(lesson);
+    res.json({ success: true, lesson: saved });
+  } catch (e) {
+    console.error('[API] Error saving lesson:', e);
+    res.status(500).json({ error: 'Failed to save lesson' });
   }
-
-  // Save to database
-  saveLessonsToDisk();
-
-  res.json({ success: true, lesson });
 });
 
-app.delete('/api/lessons/:id', (req: Request, res: Response) => {
+app.delete('/api/lessons/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  serverLessons = serverLessons.filter((l) => l.id !== id);
-  // Delete from database
-  saveLessonsToDisk();
-  res.json({ success: true, id });
+  try {
+    await deleteLesson(id);
+    res.json({ success: true, id });
+  } catch (e) {
+    console.error('[API] Error deleting lesson:', e);
+    res.status(500).json({ error: 'Failed to delete lesson' });
+  }
 });
 
-app.patch('/api/lessons/:id/publish', (req: Request, res: Response) => {
+const handlePublishStatus = async (req: Request, res: Response) => {
   const { id } = req.params;
   const { isPublished } = req.body;
-  const target = serverLessons.find((l) => l.id === id);
-  if (!target) {
-    return res.status(404).json({ error: 'Lesson not found' });
+  try {
+    await setLessonPublishStatus(id, !!isPublished);
+    const updated = await getLessonById(id);
+    res.json({ success: true, lesson: updated });
+  } catch (e) {
+    console.error('[API] Error updating publish status:', e);
+    res.status(500).json({ error: 'Failed to update lesson publish status' });
   }
+};
 
-  target.isPublished = !!isPublished;
-  // Save to database
-  saveLessonsToDisk();
-  res.json({ success: true, lesson: target });
-});
+app.patch('/api/lessons/:id/publish', handlePublishStatus);
+app.put('/api/lessons/:id/publish', handlePublishStatus);
 
 // ==========================================
 // Session Reports API (Per-Session Analytics)
 // ==========================================
 
 // Get all session reports (optionally filtered by lessonId or studentId)
-app.get('/api/reports/sessions', (req: Request, res: Response) => {
-  const { lessonId, role, studentId } = req.query;
-  let filtered = [...sessionReports];
-
-  if (lessonId && typeof lessonId === 'string') {
-    filtered = filtered.filter((r) => r.lessonId === lessonId);
+app.get('/api/reports/sessions', async (req: Request, res: Response) => {
+  const { lessonId, role = 'teacher', studentId } = req.query;
+  try {
+    let reports = await getAllReports(role as string, studentId as string | undefined);
+    if (lessonId && typeof lessonId === 'string') {
+      reports = reports.filter((r) => r.lessonId === lessonId);
+    }
+    res.json({ success: true, reports });
+  } catch (e) {
+    console.error('[API] Error getting session reports:', e);
+    res.status(500).json({ error: 'Failed to retrieve session reports' });
   }
-
-  if (role === 'student' && studentId && typeof studentId === 'string') {
-    filtered = filtered.filter((r) => r.students.some((s: any) => s.id === studentId));
-  }
-
-  res.json({ success: true, reports: filtered });
 });
 
 // Get a single session report
-app.get('/api/reports/sessions/:sessionId', (req: Request, res: Response) => {
+app.get('/api/reports/sessions/:sessionId', async (req: Request, res: Response) => {
   const { sessionId } = req.params;
-  const report = sessionReports.find((r) => r.sessionId === sessionId);
-  if (!report) {
-    return res.status(404).json({ error: 'Session report not found' });
+  try {
+    const reports = await getAllReports('teacher');
+    const report = reports.find((r) => r.sessionId === sessionId);
+    if (!report) {
+      return res.status(404).json({ error: 'Session report not found' });
+    }
+    res.json({ success: true, report });
+  } catch (e) {
+    console.error('[API] Error getting session report:', e);
+    res.status(500).json({ error: 'Failed to retrieve session report' });
   }
-  res.json({ success: true, report });
 });
 
 // Record homework submission as an individual session report
-app.post('/api/reports/homework', (req: Request, res: Response) => {
+app.post('/api/reports/homework', async (req: Request, res: Response) => {
   const { submission } = req.body;
   if (!submission || !submission.lessonId) {
     return res.status(400).json({ error: 'Valid homework submission required' });
   }
 
-  const lesson = serverLessons.find((l) => l.id === submission.lessonId);
-  const questions: any[] = lesson?.questions || [];
+  try {
+    const lesson = await getLessonById(submission.lessonId);
+    const questions: any[] = lesson?.questions || [];
 
-  const questionStats: Record<string, any> = {};
-  questions.forEach((q: any) => {
-    const studentAns = submission.answers ? submission.answers[q.id] : null;
-    const isCorrect = studentAns?.isCorrect;
-    questionStats[q.id] = {
-      questionId: q.id,
-      prompt: q.prompt,
-      type: q.type,
-      totalAnswered: studentAns ? 1 : 0,
-      correctCount: isCorrect ? 1 : 0,
-      accuracy: studentAns ? (isCorrect ? 100 : 0) : 0,
+    const questionStats: Record<string, any> = {};
+    questions.forEach((q: any) => {
+      const studentAns = submission.answers ? submission.answers[q.id] : null;
+      const isCorrect = studentAns?.isCorrect;
+      questionStats[q.id] = {
+        questionId: q.id,
+        prompt: q.prompt,
+        type: q.type,
+        totalAnswered: studentAns ? 1 : 0,
+        correctCount: isCorrect ? 1 : 0,
+        accuracy: studentAns ? (isCorrect ? 100 : 0) : 0,
+      };
+    });
+
+    const hwReport = {
+      sessionId: `hw-sess-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      pin: 'HOMEWORK',
+      lessonId: submission.lessonId,
+      lessonTitle: lesson ? lesson.title : 'Homework Assignment',
+      teacherId: lesson ? lesson.teacherId : 'teacher-chuck',
+      teacherName: lesson ? lesson.teacherName : 'Chuck',
+      mode: 'homework',
+      createdAt: Date.now() - 600000,
+      endedAt: Date.now(),
+      totalStudents: 1,
+      averageScore: submission.percentage || 0,
+      students: [
+        {
+          id: submission.studentId,
+          name: submission.studentName,
+          score: submission.totalScore,
+          maxScore: submission.maxScore,
+          percentage: submission.percentage,
+          answers: submission.answers || {},
+          completedAt: submission.completedAt || new Date().toLocaleString(),
+        },
+      ],
+      questionStats,
     };
-  });
 
-  const hwReport = {
-    sessionId: `hw-sess-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-    pin: 'HOMEWORK',
-    lessonId: submission.lessonId,
-    lessonTitle: lesson ? lesson.title : 'Homework Assignment',
-    teacherId: lesson ? lesson.teacherId : 'teacher-chuck',
-    teacherName: lesson ? lesson.teacherName : 'Chuck',
-    mode: 'homework',
-    createdAt: Date.now() - 600000,
-    endedAt: Date.now(),
-    totalStudents: 1,
-    averageScore: submission.percentage || 0,
-    students: [
-      {
-        id: submission.studentId,
-        name: submission.studentName,
-        score: submission.totalScore,
-        maxScore: submission.maxScore,
-        percentage: submission.percentage,
-        answers: submission.answers || {},
-        completedAt: submission.completedAt || new Date().toLocaleString(),
-      },
-    ],
-    questionStats,
-  };
-
-  sessionReports.unshift(hwReport);
-  saveReportsToDisk();
-
-  res.json({ success: true, report: hwReport });
+    await saveSessionReport(hwReport);
+    res.json({ success: true, report: hwReport });
+  } catch (e) {
+    console.error('[API] Error saving homework report:', e);
+    res.status(500).json({ error: 'Failed to save homework report' });
+  }
 });
 
 // Delete a session report
-app.delete('/api/reports/sessions/:sessionId', (req: Request, res: Response) => {
+app.delete('/api/reports/sessions/:sessionId', async (req: Request, res: Response) => {
   const { sessionId } = req.params;
-  sessionReports = sessionReports.filter((r) => r.sessionId !== sessionId);
-  saveReportsToDisk();
-  res.json({ success: true, sessionId });
+  try {
+    await deleteSessionReport(sessionId);
+    res.json({ success: true, sessionId });
+  } catch (e) {
+    console.error('[API] Error deleting session report:', e);
+    res.status(500).json({ error: 'Failed to delete session report' });
+  }
 });
 
 // Setup Vite middleware in dev or static serving in production
 async function startServer() {
+  // Initialize Database tables and seeds (Render PostgreSQL or fallback)
+  await initDatabase(INITIAL_LESSONS);
+
   const isDev = process.env.NODE_ENV !== 'production';
 
   if (isDev) {

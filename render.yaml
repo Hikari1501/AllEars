@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: allears
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: allears-db
+          property: connectionString
+
+databases:
+  - name: allears-db
+    plan: free
+    databaseName: allears
+    user: allears_user

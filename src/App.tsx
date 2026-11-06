@@ -172,17 +172,8 @@ export default function App() {
         const res = await fetch(`/api/lessons?role=${currentUser.role}`);
         if (res.ok) {
           const data = await res.json();
-          if (data.lessons && data.lessons.length > 0) {
-            setLessons(data.lessons);
-          } else {
-            // Seed server lessons with initial catalog
-            INITIAL_LESSONS.forEach((l) => {
-              fetch('/api/lessons', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(l),
-              }).catch(() => {});
-            });
+          if (data.lessons && Array.isArray(data.lessons)) {
+            setLessons(sanitizeLessons(data.lessons));
           }
         }
       } catch (e) {
