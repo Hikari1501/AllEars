@@ -16,6 +16,14 @@ export interface TeacherRecord {
   isAdmin: boolean;
 }
 
+export interface StudentRecord {
+  id: string;
+  name: string;
+  email: string;
+  password: string;
+  createdAt?: string;
+}
+
 // Fallback JSON data directories
 const DATA_DIR = path.resolve(__dirname, '../data');
 if (!fs.existsSync(DATA_DIR)) {
@@ -25,6 +33,8 @@ if (!fs.existsSync(DATA_DIR)) {
 const LESSONS_FILE = path.join(DATA_DIR, 'db-lessons.json');
 const REPORTS_FILE = path.join(DATA_DIR, 'db-session-reports.json');
 const TEACHERS_FILE = path.join(DATA_DIR, 'db-teachers.json');
+const STUDENTS_FILE = path.join(DATA_DIR, 'db-students.json');
+const STUDENT_LESSONS_FILE = path.join(DATA_DIR, 'db-student-lessons.json');
 
 let pool: pg.Pool | null = null;
 let isPostgresActive = false;
@@ -43,6 +53,8 @@ let memoryTeachers: Record<string, TeacherRecord> = {
   'chuck': DEFAULT_TEACHER,
   'chuckacr1501@gmail.com': DEFAULT_TEACHER,
 };
+let memoryStudents: Record<string, StudentRecord> = {};
+let memoryStudentLessons: Record<string, Lesson[]> = {};
 let memoryLessons: Lesson[] = [];
 let memoryReports: any[] = [];
 
@@ -96,6 +108,14 @@ export async function initDatabase(initialLessons: Lesson[]) {
           created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         );
 
+        CREATE TABLE IF NOT EXISTS students (
+          id VARCHAR(128) PRIMARY KEY,
+          name TEXT NOT NULL,
+          email VARCHAR(255) UNIQUE NOT NULL,
+          password TEXT NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        );
+
         CREATE TABLE IF NOT EXISTS lessons (
           id VARCHAR(128) PRIMARY KEY,
           title TEXT NOT NULL,
@@ -118,6 +138,15 @@ export async function initDatabase(initialLessons: Lesson[]) {
           updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         );
 
+        CREATE TABLE IF NOT EXISTS student_lessons (
+          id VARCHAR(128) PRIMARY KEY,
+          student_id VARCHAR(128) NOT NULL,
+          lesson_data JSONB NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_student_lessons_student_id ON student_lessons(student_id);
+
         CREATE TABLE IF NOT EXISTS session_reports (
           session_id VARCHAR(128) PRIMARY KEY,
           lesson_id VARCHAR(128),
@@ -129,6 +158,19 @@ export async function initDatabase(initialLessons: Lesson[]) {
           data JSONB NOT NULL,
           created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         );
+
+        -- Self-healing schema migrations for existing Render tables
+        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS description TEXT DEFAULT '';
+        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS trim_start NUMERIC DEFAULT 0;
+        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS trim_end NUMERIC DEFAULT 180;
+        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS prevent_skipping BOOLEAN DEFAULT FALSE;
+        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS thumbnail_url TEXT;
+        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS teacher_id VARCHAR(128);
+        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS teacher_name TEXT;
+        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS is_published BOOLEAN DEFAULT TRUE;
+        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS captions JSONB DEFAULT '[]'::jsonb;
+        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS questions JSONB DEFAULT '[]'::jsonb;
+        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS difficult_words JSONB DEFAULT '[]'::jsonb;
       `);
 
       // Seed Chuck's default teacher record
@@ -302,7 +344,7 @@ function rowToLesson(row: any): Lesson {
     thumbnailUrl: row.thumbnail_url || undefined,
     teacherId: row.teacher_id,
     teacherName: row.teacher_name,
-    isPublished: row.is_published,
+    isPublished: row.is_published === null || row.is_published === undefined ? true : Boolean(row.is_published),
     captions: typeof row.captions === 'string' ? JSON.parse(row.captions) : (row.captions || []),
     questions: typeof row.questions === 'string' ? JSON.parse(row.questions) : (row.questions || []),
     difficultWords: typeof row.difficult_words === 'string' ? JSON.parse(row.difficult_words) : (row.difficult_words || []),
@@ -315,7 +357,7 @@ export async function getAllLessons(includeUnpublished: boolean): Promise<Lesson
     try {
       const query = includeUnpublished
         ? 'SELECT * FROM lessons ORDER BY created_at DESC'
-        : 'SELECT * FROM lessons WHERE is_published = TRUE ORDER BY created_at DESC';
+        : 'SELECT * FROM lessons WHERE is_published IS NOT FALSE ORDER BY created_at DESC';
       const res = await pool.query(query);
       return res.rows.map(rowToLesson);
     } catch (e) {
@@ -521,3 +563,129 @@ export async function deleteSessionReport(sessionId: string): Promise<boolean> {
   writeJsonSafe(REPORTS_FILE, memoryReports);
   return true;
 }
+
+// -------------------------------------------------------------
+// Student Accounts & Private Lessons Operations
+// -------------------------------------------------------------
+
+export async function findStudent(identifier: string): Promise<StudentRecord | null> {
+  const norm = identifier.trim().toLowerCase();
+  if (isPostgresActive && pool) {
+    try {
+      const res = await pool.query(
+        'SELECT * FROM students WHERE LOWER(email) = $1 OR LOWER(name) = $1 LIMIT 1',
+        [norm]
+      );
+      if (res.rows.length > 0) {
+        const r = res.rows[0];
+        return {
+          id: r.id,
+          name: r.name,
+          email: r.email,
+          password: r.password,
+          createdAt: r.created_at,
+        };
+      }
+      return null;
+    } catch (e) {
+      console.error('[DB] Error finding student in PostgreSQL:', e);
+    }
+  }
+
+  // Fallback
+  return memoryStudents[norm] || null;
+}
+
+export async function addStudent(student: StudentRecord): Promise<StudentRecord> {
+  if (isPostgresActive && pool) {
+    try {
+      await pool.query(
+        `INSERT INTO students (id, name, email, password)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (email) DO UPDATE SET password = EXCLUDED.password, name = EXCLUDED.name`,
+        [student.id, student.name, student.email, student.password]
+      );
+      return student;
+    } catch (e) {
+      console.error('[DB] Error adding student to PostgreSQL:', e);
+    }
+  }
+
+  // Fallback
+  memoryStudents[student.email.toLowerCase()] = student;
+  memoryStudents[student.name.toLowerCase()] = student;
+  writeJsonSafe(STUDENTS_FILE, memoryStudents);
+  return student;
+}
+
+export async function getStudentLessons(studentId: string): Promise<Lesson[]> {
+  if (isPostgresActive && pool) {
+    try {
+      const res = await pool.query(
+        'SELECT lesson_data FROM student_lessons WHERE student_id = $1 ORDER BY updated_at DESC',
+        [studentId]
+      );
+      return res.rows.map((r) => typeof r.lesson_data === 'string' ? JSON.parse(r.lesson_data) : r.lesson_data);
+    } catch (e) {
+      console.error('[DB] Error getting student private lessons from PostgreSQL:', e);
+    }
+  }
+
+  // Fallback
+  return memoryStudentLessons[studentId] || [];
+}
+
+export async function saveStudentLesson(studentId: string, lesson: Lesson): Promise<Lesson> {
+  const markedLesson: Lesson = {
+    ...lesson,
+    isLocalStudentOnly: true,
+  };
+
+  if (isPostgresActive && pool) {
+    try {
+      await pool.query(
+        `INSERT INTO student_lessons (id, student_id, lesson_data, updated_at)
+         VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+         ON CONFLICT (id) DO UPDATE SET lesson_data = EXCLUDED.lesson_data, updated_at = CURRENT_TIMESTAMP`,
+        [markedLesson.id, studentId, JSON.stringify(markedLesson)]
+      );
+      return markedLesson;
+    } catch (e) {
+      console.error('[DB] Error saving student private lesson to PostgreSQL:', e);
+    }
+  }
+
+  // Fallback
+  const list = memoryStudentLessons[studentId] || [];
+  const idx = list.findIndex((l) => l.id === markedLesson.id);
+  if (idx >= 0) {
+    list[idx] = markedLesson;
+  } else {
+    list.unshift(markedLesson);
+  }
+  memoryStudentLessons[studentId] = list;
+  writeJsonSafe(STUDENT_LESSONS_FILE, memoryStudentLessons);
+  return markedLesson;
+}
+
+export async function deleteStudentLesson(studentId: string, lessonId: string): Promise<boolean> {
+  if (isPostgresActive && pool) {
+    try {
+      await pool.query(
+        'DELETE FROM student_lessons WHERE id = $1 AND student_id = $2',
+        [lessonId, studentId]
+      );
+      return true;
+    } catch (e) {
+      console.error('[DB] Error deleting student private lesson from PostgreSQL:', e);
+    }
+  }
+
+  // Fallback
+  if (memoryStudentLessons[studentId]) {
+    memoryStudentLessons[studentId] = memoryStudentLessons[studentId].filter((l) => l.id !== lessonId);
+    writeJsonSafe(STUDENT_LESSONS_FILE, memoryStudentLessons);
+  }
+  return true;
+}
+

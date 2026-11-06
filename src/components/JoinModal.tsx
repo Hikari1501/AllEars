@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Radio, ArrowRight, AlertCircle } from 'lucide-react';
+import { X, Radio, ArrowRight, AlertCircle, Clipboard } from 'lucide-react';
 
 interface JoinModalProps {
   onClose: () => void;
@@ -18,6 +18,18 @@ export const JoinModal: React.FC<JoinModalProps> = ({
   const [studentName, setStudentName] = useState(defaultStudentName);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  const cleanAndSetPin = (raw: string) => {
+    if (!raw) return;
+    const match = raw.match(/\b\d{6}\b/) || raw.match(/join=(\d{6})/);
+    if (match && match[1]) {
+      setPin(match[1]);
+    } else if (match && match[0]) {
+      setPin(match[0]);
+    } else {
+      setPin(raw.replace(/\D/g, '').slice(0, 6));
+    }
+  };
 
   const handleJoinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,12 +73,34 @@ export const JoinModal: React.FC<JoinModalProps> = ({
 
         <form onSubmit={handleJoinSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-700">6-Digit Room PIN</label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-700">6-Digit Room PIN</label>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const text = await navigator.clipboard.readText();
+                    cleanAndSetPin(text);
+                  } catch (err) {
+                    console.warn('Clipboard read failed:', err);
+                  }
+                }}
+                className="text-[11px] font-bold text-amber-700 hover:text-amber-800 flex items-center gap-1 cursor-pointer"
+              >
+                <Clipboard className="w-3.5 h-3.5" />
+                <span>Paste PIN</span>
+              </button>
+            </div>
+
             <input
               type="text"
-              maxLength={6}
               value={pin}
-              onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+              onPaste={(e) => {
+                e.preventDefault();
+                const pasted = e.clipboardData.getData('text') || '';
+                cleanAndSetPin(pasted);
+              }}
+              onChange={(e) => cleanAndSetPin(e.target.value)}
               placeholder="e.g. 849201"
               autoFocus
               className="w-full p-3 text-center text-2xl font-mono font-bold tracking-widest bg-slate-50 border-2 border-slate-200 rounded-xl focus:border-amber-500 focus:outline-hidden"

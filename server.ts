@@ -20,6 +20,12 @@ import {
   saveSessionReport,
   deleteSessionReport,
   TeacherRecord,
+  StudentRecord,
+  findStudent,
+  addStudent,
+  getStudentLessons,
+  saveStudentLesson,
+  deleteStudentLesson,
 } from './server/db.ts';
 
 dotenv.config();
@@ -139,6 +145,110 @@ app.post('/api/auth/add-teacher', async (req: Request, res: Response) => {
 app.get('/api/auth/teachers', async (_req: Request, res: Response) => {
   const teachers = await getAllTeachers();
   res.json({ teachers });
+});
+
+// Student Registration API (Backed by PostgreSQL / DB)
+app.post('/api/auth/student-register', async (req: Request, res: Response) => {
+  const { name, email, password } = req.body;
+  if (!name || !email || !password) {
+    return res.status(400).json({ error: 'Name, email, and password required' });
+  }
+
+  const existing = await findStudent(email);
+  if (existing) {
+    return res.status(409).json({ error: 'An account with this email or username already exists.' });
+  }
+
+  const newStudent: StudentRecord = {
+    id: `student-${Date.now()}`,
+    name: name.trim(),
+    email: email.trim(),
+    password: password.trim(),
+  };
+
+  await addStudent(newStudent);
+
+  res.json({
+    success: true,
+    user: {
+      id: newStudent.id,
+      name: newStudent.name,
+      email: newStudent.email,
+      role: 'student',
+    },
+  });
+});
+
+// Student Login API (Backed by PostgreSQL / DB)
+app.post('/api/auth/student-login', async (req: Request, res: Response) => {
+  const username = req.body.username || req.body.email;
+  const password = req.body.password;
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username/Email and password required' });
+  }
+
+  const found = await findStudent(username);
+  if (!found || found.password !== password) {
+    return res.status(401).json({ error: 'Invalid student username/email or password.' });
+  }
+
+  res.json({
+    success: true,
+    user: {
+      id: found.id,
+      name: found.name,
+      email: found.email,
+      role: 'student',
+    },
+  });
+});
+
+// Student Private Lessons API (Private to each student, not shared with others)
+app.get('/api/student-lessons', async (req: Request, res: Response) => {
+  const studentId = (req.headers['x-student-id'] || req.query.studentId) as string;
+  if (!studentId) {
+    return res.json({ lessons: [] });
+  }
+
+  try {
+    const lessons = await getStudentLessons(studentId);
+    res.json({ lessons });
+  } catch (e) {
+    console.error('[API] Error getting student lessons:', e);
+    res.status(500).json({ error: 'Failed to retrieve student lessons' });
+  }
+});
+
+app.post('/api/student-lessons', async (req: Request, res: Response) => {
+  const studentId = (req.headers['x-student-id'] || req.body.studentId) as string;
+  const lesson = req.body.lesson || req.body;
+  if (!studentId || !lesson || !lesson.id) {
+    return res.status(400).json({ error: 'Student ID and valid lesson required' });
+  }
+
+  try {
+    const saved = await saveStudentLesson(studentId, lesson);
+    res.json({ success: true, lesson: saved });
+  } catch (e) {
+    console.error('[API] Error saving student private lesson:', e);
+    res.status(500).json({ error: 'Failed to save student lesson' });
+  }
+});
+
+app.delete('/api/student-lessons/:id', async (req: Request, res: Response) => {
+  const studentId = (req.headers['x-student-id'] || req.query.studentId) as string;
+  const { id } = req.params;
+  if (!studentId) {
+    return res.status(400).json({ error: 'Student ID required' });
+  }
+
+  try {
+    await deleteStudentLesson(studentId, id);
+    res.json({ success: true, id });
+  } catch (e) {
+    console.error('[API] Error deleting student lesson:', e);
+    res.status(500).json({ error: 'Failed to delete student lesson' });
+  }
 });
 
 // Helper functions for database persistence and session reports

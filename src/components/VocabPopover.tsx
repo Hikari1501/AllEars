@@ -7,6 +7,8 @@ interface VocabPopoverProps {
   onClose: () => void;
   isTeacher?: boolean;
   onShowToClass?: () => void;
+  isShown?: boolean;
+  onUnshowFromClass?: () => void;
 }
 
 export const VocabPopover: React.FC<VocabPopoverProps> = ({
@@ -14,6 +16,8 @@ export const VocabPopover: React.FC<VocabPopoverProps> = ({
   onClose,
   isTeacher,
   onShowToClass,
+  isShown = false,
+  onUnshowFromClass,
 }) => {
   const speakWord = () => {
     if ('speechSynthesis' in window) {
@@ -111,7 +115,20 @@ export const VocabPopover: React.FC<VocabPopoverProps> = ({
             </a>
 
             <div className="flex items-center gap-2">
-              {isTeacher && onShowToClass && (
+              {isTeacher && isShown && onUnshowFromClass && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onUnshowFromClass();
+                    onClose();
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-colors cursor-pointer shadow-xs"
+                >
+                  <Radio className="w-3.5 h-3.5" />
+                  <span>Unshow from Class</span>
+                </button>
+              )}
+              {isTeacher && !isShown && onShowToClass && (
                 <button
                   type="button"
                   onClick={() => {
@@ -121,7 +138,7 @@ export const VocabPopover: React.FC<VocabPopoverProps> = ({
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors cursor-pointer shadow-xs"
                 >
                   <Radio className="w-3.5 h-3.5" />
-                  <span>Show to Class (Pause Video)</span>
+                  <span>Show to Class</span>
                 </button>
               )}
               <button
