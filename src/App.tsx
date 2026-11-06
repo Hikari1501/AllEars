@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   UserAccount,
   Lesson,
@@ -39,6 +39,7 @@ import {
   Download,
   FileUp,
   CheckCircle2,
+  Shield,
 } from 'lucide-react';
 
 const extractYouTubeId = (url?: string): string | null => {
@@ -78,7 +79,8 @@ export default function App() {
     }
   });
 
-  const [lessons, setLessons] = useState<Lesson[]>(() => {
+  // Central lessons from server / PostgreSQL database
+  const [serverLessons, setServerLessons] = useState<Lesson[]>(() => {
     try {
       const saved = localStorage.getItem('allears_lessons_v3');
       const parsed = saved ? JSON.parse(saved) : null;
@@ -90,6 +92,29 @@ export default function App() {
       return sanitizeLessons(INITIAL_LESSONS);
     }
   });
+
+  // Private lessons imported by a student on this device only (never uploaded or shared)
+  const [studentLocalLessons, setStudentLocalLessons] = useState<Lesson[]>(() => {
+    try {
+      const saved = localStorage.getItem('allears_student_local_lessons');
+      const parsed = saved ? JSON.parse(saved) : null;
+      return Array.isArray(parsed) ? sanitizeLessons(parsed) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Active lessons:
+  // - Teachers see ONLY central server lessons from database (teachers do not see students' private device imports)
+  // - Students see central published lessons + their private self-study imports on this device
+  const lessons = useMemo(() => {
+    if (currentUser.role === 'teacher') {
+      return serverLessons;
+    }
+    const localIds = new Set(studentLocalLessons.map((l) => l.id));
+    const nonDuplicatedServer = serverLessons.filter((l) => !localIds.has(l.id));
+    return [...studentLocalLessons, ...nonDuplicatedServer];
+  }, [currentUser.role, serverLessons, studentLocalLessons]);
 
   const [submissions, setSubmissions] = useState<LessonSubmission[]>(() => {
     try {
@@ -125,25 +150,60 @@ export default function App() {
   const [importNotification, setImportNotification] = useState<string | null>(null);
 
   // Handle lesson dataset import
-  const handleImportLesson = (imported: Lesson, practiceImmediately: boolean) => {
-    setLessons((prev) => {
-      const idx = prev.findIndex((l) => l.id === imported.id);
-      if (idx >= 0) {
-        const copy = [...prev];
-        copy[idx] = imported;
-        return copy;
+  const handleImportLesson = async (imported: Lesson, practiceImmediately: boolean) => {
+    if (currentUser.role === 'teacher') {
+      // Teacher import: Persist to PostgreSQL database for all students
+      const teacherLesson: Lesson = {
+        ...imported,
+        isLocalStudentOnly: false,
+        teacherId: currentUser.id,
+        teacherName: currentUser.name,
+      };
+
+      try {
+        await fetch('/api/lessons', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-role': 'teacher',
+            'x-teacher-id': currentUser.id,
+          },
+          body: JSON.stringify(teacherLesson),
+        });
+      } catch (e) {
+        console.warn('Failed to save imported lesson to server:', e);
       }
-      return [imported, ...prev];
-    });
 
-    // Also persist to server if server is online
-    fetch('/api/lessons', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(imported),
-    }).catch(() => {});
+      setServerLessons((prev) => {
+        const idx = prev.findIndex((l) => l.id === teacherLesson.id);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = teacherLesson;
+          return copy;
+        }
+        return [teacherLesson, ...prev];
+      });
 
-    setImportNotification(`Successfully imported "${imported.title}" to your lessons!`);
+      setImportNotification(`Successfully added "${teacherLesson.title}" to the central curriculum!`);
+    } else {
+      // Student import: Persist ONLY to this device (localStorage)
+      // Never send to server or share with other students or teachers
+      const studentOnlyLesson: Lesson = {
+        ...imported,
+        isLocalStudentOnly: true,
+        teacherName: imported.teacherName || 'Self-Study Import',
+      };
+
+      setStudentLocalLessons((prev) => {
+        const filtered = prev.filter((l) => l.id !== studentOnlyLesson.id);
+        const updated = [studentOnlyLesson, ...filtered];
+        localStorage.setItem('allears_student_local_lessons', JSON.stringify(updated));
+        return updated;
+      });
+
+      setImportNotification(`Imported "${studentOnlyLesson.title}" for self-study on this device (private to you)!`);
+    }
+
     setTimeout(() => setImportNotification(null), 4500);
 
     if (practiceImmediately) {
@@ -160,10 +220,15 @@ export default function App() {
     localStorage.setItem('allears_user', JSON.stringify(currentUser));
   }, [currentUser]);
 
-  // Persist lessons locally
+  // Persist server lessons locally
   useEffect(() => {
-    localStorage.setItem('allears_lessons_v3', JSON.stringify(lessons));
-  }, [lessons]);
+    localStorage.setItem('allears_lessons_v3', JSON.stringify(serverLessons));
+  }, [serverLessons]);
+
+  // Persist student private lessons locally
+  useEffect(() => {
+    localStorage.setItem('allears_student_local_lessons', JSON.stringify(studentLocalLessons));
+  }, [studentLocalLessons]);
 
   // Sync lessons with backend server so all visitors can see published lessons
   useEffect(() => {
@@ -173,7 +238,7 @@ export default function App() {
         if (res.ok) {
           const data = await res.json();
           if (data.lessons && Array.isArray(data.lessons)) {
-            setLessons(sanitizeLessons(data.lessons));
+            setServerLessons(sanitizeLessons(data.lessons));
           }
         }
       } catch (e) {
@@ -278,19 +343,28 @@ export default function App() {
     setCurrentTab('reports');
   };
 
-  // Save lesson from editor to both server and local state
+  // Save lesson from editor to both server and local state (Teachers Only)
   const handleSaveLesson = async (savedLesson: Lesson) => {
+    if (currentUser.role !== 'teacher') {
+      alert('Only teachers can create or edit lessons.');
+      return;
+    }
+
     try {
       await fetch('/api/lessons', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-role': 'teacher',
+          'x-teacher-id': currentUser.id,
+        },
         body: JSON.stringify(savedLesson),
       });
     } catch (e) {
       console.warn('Failed to save lesson to server:', e);
     }
 
-    setLessons((prev) => {
+    setServerLessons((prev) => {
       const idx = prev.findIndex((l) => l.id === savedLesson.id);
       if (idx >= 0) {
         const copy = [...prev];
@@ -303,32 +377,56 @@ export default function App() {
     setCurrentTab('lessons');
   };
 
-  // Delete a lesson
+  // Delete a lesson (Teachers delete central lessons; Students remove their imported device lessons)
   const handleDeleteLesson = async (lessonId: string) => {
+    // If student removing their personal device-imported lesson
+    if (currentUser.role === 'student') {
+      setStudentLocalLessons((prev) => {
+        const updated = prev.filter((l) => l.id !== lessonId);
+        localStorage.setItem('allears_student_local_lessons', JSON.stringify(updated));
+        return updated;
+      });
+      setImportNotification('Removed self-study lesson from your device.');
+      setTimeout(() => setImportNotification(null), 3000);
+      return;
+    }
+
+    // Teacher deleting central lesson from database
     try {
-      await fetch(`/api/lessons/${lessonId}`, { method: 'DELETE' });
+      await fetch(`/api/lessons/${lessonId}`, {
+        method: 'DELETE',
+        headers: {
+          'x-user-role': 'teacher',
+          'x-teacher-id': currentUser.id,
+        },
+      });
     } catch (e) {
       console.warn(e);
     }
-    setLessons((prev) => prev.filter((l) => l.id !== lessonId));
+    setServerLessons((prev) => prev.filter((l) => l.id !== lessonId));
     setEditingLesson(null);
     setCurrentTab('lessons');
   };
 
-  // Toggle publish / unpublish status
+  // Toggle publish / unpublish status (Teachers Only)
   const handleTogglePublish = async (lessonId: string, currentStatus: boolean) => {
+    if (currentUser.role !== 'teacher') return;
     const nextStatus = !currentStatus;
     try {
       await fetch(`/api/lessons/${lessonId}/publish`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-role': 'teacher',
+          'x-teacher-id': currentUser.id,
+        },
         body: JSON.stringify({ isPublished: nextStatus }),
       });
     } catch (e) {
       console.warn(e);
     }
 
-    setLessons((prev) =>
+    setServerLessons((prev) =>
       prev.map((l) => (l.id === lessonId ? { ...l, isPublished: nextStatus } : l))
     );
   };
@@ -695,6 +793,14 @@ export default function App() {
                           </div>
                         )}
 
+                        {/* Private Device Only indicator for student personal imports */}
+                        {!isTeacher && lesson.isLocalStudentOnly && (
+                          <div className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/95 text-slate-950 flex items-center gap-1 shadow-xs">
+                            <Shield className="w-3 h-3" />
+                            <span>My Device Only</span>
+                          </div>
+                        )}
+
                         <div className="absolute bottom-2.5 right-2.5 px-2 py-0.5 rounded-md bg-slate-950/80 text-[11px] font-mono text-white">
                           {Math.floor((lesson.trimEnd || lesson.duration) / 60)}:{((lesson.trimEnd || lesson.duration) % 60).toString().padStart(2, '0')}
                         </div>
@@ -790,34 +896,57 @@ export default function App() {
                           </div>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-2 w-full">
-                          <button
-                            onClick={() => setActiveHomeworkLesson(lesson)}
-                            className="flex-1 py-2.5 px-4 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
-                          >
-                            <Play className="w-3.5 h-3.5 fill-current" />
-                            <span>Practice Homework</span>
-                          </button>
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-2 w-full">
+                            <button
+                              onClick={() => setActiveHomeworkLesson(lesson)}
+                              className="flex-1 py-2.5 px-4 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                            >
+                              <Play className="w-3.5 h-3.5 fill-current" />
+                              <span>Practice Homework</span>
+                            </button>
 
-                          <button
-                            onClick={() => {
-                              setReportsLessonId(lesson.id);
-                              setCurrentTab('reports');
-                            }}
-                            className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-colors"
-                            title="View My Report"
-                          >
-                            Report
-                          </button>
+                            <button
+                              onClick={() => {
+                                setReportsLessonId(lesson.id);
+                                setCurrentTab('reports');
+                              }}
+                              className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-colors"
+                              title="View My Report"
+                            >
+                              Report
+                            </button>
 
-                          <button
-                            onClick={() => setExportingLesson(lesson)}
-                            className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-colors flex items-center gap-1 cursor-pointer"
-                            title="Export this lesson dataset"
-                          >
-                            <Download className="w-3.5 h-3.5" />
-                            <span className="hidden sm:inline">Export</span>
-                          </button>
+                            <button
+                              onClick={() => setExportingLesson(lesson)}
+                              className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-colors flex items-center gap-1 cursor-pointer"
+                              title="Export this lesson dataset"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Export</span>
+                            </button>
+
+                            {lesson.isLocalStudentOnly && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (confirm(`Remove personal lesson "${lesson.title}" from this device?`)) {
+                                    handleDeleteLesson(lesson.id);
+                                  }
+                                }}
+                                className="py-2.5 px-2.5 bg-slate-100 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-xl transition-colors cursor-pointer"
+                                title="Remove personal self-study lesson from this device"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+
+                          {lesson.isLocalStudentOnly && (
+                            <p className="text-[10px] text-amber-700/90 font-medium text-center">
+                              Private to this device (not shared with teacher or other students)
+                            </p>
+                          )}
                         </div>
                       )}
                     </div>
@@ -859,6 +988,7 @@ export default function App() {
         onClose={() => setIsImportModalOpen(false)}
         onImport={handleImportLesson}
         existingLessonIds={lessons.map((l) => l.id)}
+        isTeacher={isTeacher}
       />
 
       {/* Export Lesson Modal */}

@@ -93,6 +93,7 @@ export interface Lesson {
   questions: Question[];
   difficultWords: VocabEntry[];
   isPublished?: boolean;
+  isLocalStudentOnly?: boolean; // For private student self-study lessons on this device only
   createdAt: string;
 }
 

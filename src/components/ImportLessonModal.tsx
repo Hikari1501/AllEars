@@ -12,6 +12,8 @@ import {
   FileUp,
   Sparkles,
   ArrowRight,
+  Globe,
+  Shield,
 } from 'lucide-react';
 import { Lesson, CEFRLevel } from '../types';
 
@@ -20,6 +22,7 @@ interface ImportLessonModalProps {
   onClose: () => void;
   onImport: (lesson: Lesson, practiceImmediately: boolean) => void;
   existingLessonIds: string[];
+  isTeacher?: boolean;
 }
 
 export const ImportLessonModal: React.FC<ImportLessonModalProps> = ({
@@ -27,6 +30,7 @@ export const ImportLessonModal: React.FC<ImportLessonModalProps> = ({
   onClose,
   onImport,
   existingLessonIds,
+  isTeacher = false,
 }) => {
   const [activeTab, setActiveTab] = useState<'upload' | 'paste'>('upload');
   const [pastedText, setPastedText] = useState('');
@@ -100,7 +104,8 @@ export const ImportLessonModal: React.FC<ImportLessonModalProps> = ({
         captions: Array.isArray(data.captions) ? data.captions : [],
         questions: Array.isArray(data.questions) ? data.questions : [],
         difficultWords: Array.isArray(data.difficultWords) ? data.difficultWords : [],
-        isPublished: true,
+        isPublished: isTeacher ? (data.isPublished !== false) : false,
+        isLocalStudentOnly: !isTeacher,
         createdAt: data.createdAt || new Date().toISOString().split('T')[0],
       };
 
@@ -189,7 +194,9 @@ export const ImportLessonModal: React.FC<ImportLessonModalProps> = ({
             <div>
               <h3 className="text-base font-bold text-slate-900">Import Lesson Dataset</h3>
               <p className="text-xs text-slate-500">
-                Study a lesson package sent by your teacher on this device
+                {isTeacher
+                  ? 'Import dataset to your curriculum and publish to all students'
+                  : 'Import dataset for personal self-study on this device'}
               </p>
             </div>
           </div>
@@ -349,6 +356,19 @@ export const ImportLessonModal: React.FC<ImportLessonModalProps> = ({
                 </div>
               </div>
 
+              {/* Scope & Privacy Banner */}
+              {isTeacher ? (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2.5 text-xs text-emerald-800">
+                  <Globe className="w-4 h-4 shrink-0 text-emerald-600" />
+                  <span><strong>Teacher Import:</strong> This lesson will be saved to the central database and can be published to all your students.</span>
+                </div>
+              ) : (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-2.5 text-xs text-amber-900">
+                  <Shield className="w-4 h-4 shrink-0 text-amber-700" />
+                  <span><strong>Private Self-Study:</strong> This lesson is saved to this device only. It will NOT be uploaded to the server or visible to your teacher or other students.</span>
+                </div>
+              )}
+
               {/* Action Buttons */}
               <div className="space-y-2 pt-2">
                 <button
@@ -365,7 +385,7 @@ export const ImportLessonModal: React.FC<ImportLessonModalProps> = ({
                   onClick={() => handleFinalImport(false)}
                   className="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold rounded-xl text-xs transition-colors cursor-pointer"
                 >
-                  Save to My Lessons Catalog
+                  {isTeacher ? 'Save to Central Curriculum' : 'Save to My Device (Self-Study)'}
                 </button>
 
                 <button

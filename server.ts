@@ -868,6 +868,13 @@ function saveLessonsToDisk() {
   }
 }
 
+// Helper middleware/check for teacher-only operations
+function isTeacherAuthorized(req: Request): boolean {
+  const roleHeader = (req.headers['x-user-role'] || req.headers['role'] || '') as string;
+  const bodyRole = req.body?.userRole as string | undefined;
+  return roleHeader.toLowerCase() === 'teacher' || bodyRole === 'teacher';
+}
+
 // Lessons CRUD API (Backed by PostgreSQL / DB)
 app.get('/api/lessons', async (req: Request, res: Response) => {
   const { role = 'student' } = req.query;
@@ -881,6 +888,12 @@ app.get('/api/lessons', async (req: Request, res: Response) => {
 });
 
 app.post('/api/lessons', async (req: Request, res: Response) => {
+  if (!isTeacherAuthorized(req)) {
+    return res.status(403).json({
+      error: 'Permission denied: Only teachers can create, edit, or publish lessons to the central library.',
+    });
+  }
+
   const lesson = req.body;
   if (!lesson || !lesson.id) {
     return res.status(400).json({ error: 'Valid lesson object required' });
@@ -901,6 +914,12 @@ app.post('/api/lessons', async (req: Request, res: Response) => {
 });
 
 app.delete('/api/lessons/:id', async (req: Request, res: Response) => {
+  if (!isTeacherAuthorized(req)) {
+    return res.status(403).json({
+      error: 'Permission denied: Only teachers can delete lessons.',
+    });
+  }
+
   const { id } = req.params;
   try {
     await deleteLesson(id);
@@ -912,6 +931,12 @@ app.delete('/api/lessons/:id', async (req: Request, res: Response) => {
 });
 
 const handlePublishStatus = async (req: Request, res: Response) => {
+  if (!isTeacherAuthorized(req)) {
+    return res.status(403).json({
+      error: 'Permission denied: Only teachers can publish or unpublish lessons.',
+    });
+  }
+
   const { id } = req.params;
   const { isPublished } = req.body;
   try {

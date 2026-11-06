@@ -1,0 +1,484 @@
+[
+  {
+    "id": "lesson-curiosity-ted",
+    "title": "The Psychology of Human Curiosity",
+    "description": "Explore why the human brain craves answers, how epistemic hunger drives learning, and what happens neurologically when curiosity is sparked.",
+    "level": "B2",
+    "mediaType": "youtube",
+    "mediaUrl": "https://www.youtube.com/watch?v=f99P4eWbC9w",
+    "duration": 185,
+    "trimStart": 0,
+    "trimEnd": 180,
+    "preventSkipping": true,
+    "thumbnailUrl": "https://img.youtube.com/vi/f99P4eWbC9w/hqdefault.jpg",
+    "teacherId": "teacher-chuck",
+    "teacherName": "Chuck (Teacher)",
+    "createdAt": "2026-10-15",
+    "captions": [
+      {
+        "id": "c1",
+        "start": 0,
+        "end": 7.5,
+        "text": "Curiosity is often described as an intrinsic drive—a psychological itch that compels us to investigate the unknown.",
+        "speaker": "Narrator"
+      },
+      {
+        "id": "c2",
+        "start": 7.6,
+        "end": 16,
+        "text": "In cognitive psychology, George Loewenstein proposed the information gap theory. When we realize an asymmetry between what we know and what we want to know, it creates acute mental discomfort.",
+        "speaker": "Narrator"
+      },
+      {
+        "id": "c3",
+        "start": 16.2,
+        "end": 25.8,
+        "text": "Neuroscientists have discovered that satisfying our curiosity activates the brain's dopaminergic reward pathway, the very same circuitry triggered by food and social affirmation.",
+        "speaker": "Dr. Sarah"
+      },
+      {
+        "id": "c4",
+        "start": 26,
+        "end": 35.5,
+        "text": "However, not all curiosity is identical. Psychologists distinguish between perceptual curiosity—which is provoked by novel sensory stimuli—and epistemic curiosity, the deep pursuit of intellectual knowledge.",
+        "speaker": "Dr. Sarah"
+      },
+      {
+        "id": "c5",
+        "start": 35.8,
+        "end": 45,
+        "text": "When teachers harness epistemic curiosity, students exhibit markedly higher retention rates because their hippocampus is primed for memory consolidation.",
+        "speaker": "Narrator"
+      },
+      {
+        "id": "c6",
+        "start": 45.2,
+        "end": 56.5,
+        "text": "So the next time you feel an irresistible urge to delve into an esoteric topic, remember: your synapses are orchestrating a feast of discovery.",
+        "speaker": "Narrator"
+      }
+    ],
+    "questions": [
+      {
+        "id": "q1",
+        "timestamp": 16,
+        "type": "multiple_choice",
+        "prompt": "According to psychologists, which of the following describe why curiosity feels so urgent? (Select ALL correct answers):",
+        "options": [
+          {
+            "id": "a",
+            "text": "Mental discomfort caused by realizing a gap in knowledge"
+          },
+          {
+            "id": "b",
+            "text": "An intrinsic psychological drive to explore the unfamiliar"
+          },
+          {
+            "id": "c",
+            "text": "A biological reflex strictly controlled by body temperature"
+          },
+          {
+            "id": "d",
+            "text": "Anticipation of dopaminergic neurological reward"
+          }
+        ],
+        "allowMultipleAnswers": true,
+        "correctAnswers": [
+          "a",
+          "b",
+          "d"
+        ],
+        "correctAnswer": "a",
+        "explanation": "Curiosity involves an intrinsic drive, an information gap causing cognitive discomfort, and neurological anticipation of dopamine release.",
+        "points": 15
+      },
+      {
+        "id": "q2",
+        "timestamp": 26,
+        "type": "true_false",
+        "prompt": "True or False: Neuroscientists found that satisfying curiosity activates the same dopamine reward pathway associated with food and social affirmation.",
+        "options": [
+          {
+            "id": "true",
+            "text": "True"
+          },
+          {
+            "id": "false",
+            "text": "False"
+          }
+        ],
+        "correctAnswer": "true",
+        "explanation": "Correct! The audio explicitly stated that curiosity resolution stimulates the brain's dopaminergic reward pathway.",
+        "points": 10
+      },
+      {
+        "id": "q3",
+        "timestamp": 36,
+        "type": "matching",
+        "prompt": "Match each type of curiosity with its correct psychological description based on the audio:",
+        "matchingPairs": [
+          {
+            "left": "Perceptual Curiosity",
+            "right": "Triggered by novel sensory stimuli"
+          },
+          {
+            "left": "Epistemic Curiosity",
+            "right": "The deep pursuit of intellectual knowledge"
+          },
+          {
+            "left": "Information Gap",
+            "right": "Discomfort caused by lack of knowledge"
+          }
+        ],
+        "explanation": "Perceptual relates to sensory novelty, whereas epistemic relates to intellectual knowledge and understanding.",
+        "points": 15
+      },
+      {
+        "id": "q4",
+        "timestamp": 45,
+        "type": "close_ended",
+        "prompt": "Fill in the blank: When teachers harness curiosity, students exhibit higher retention because the ____________ is primed for memory consolidation.",
+        "correctAnswer": "hippocampus",
+        "explanation": "The speaker specifically mentioned the hippocampus, the brain structure critical for long-term memory formation.",
+        "points": 10
+      },
+      {
+        "id": "q5",
+        "timestamp": null,
+        "type": "open_ended",
+        "prompt": "Whole Video Reflection: In your own words, summarize how understanding curiosity can help you improve your own English learning habits.",
+        "explanation": "Reflective whole-lesson synthesis connecting epistemic hunger to student study retention.",
+        "points": 10
+      }
+    ],
+    "difficultWords": [
+      {
+        "word": "intrinsic",
+        "phonetic": "/ɪnˈtrɪn.zɪk/",
+        "cefrLevel": "C1",
+        "partOfSpeech": "adjective",
+        "definition": "Belonging naturally; essential, rather than arising from external factors.",
+        "example": "Curiosity is an intrinsic drive in young children.",
+        "cambridgeSlug": "intrinsic"
+      },
+      {
+        "word": "epistemic",
+        "phonetic": "/ˌep.əˈstiː.mɪk/",
+        "cefrLevel": "C2",
+        "partOfSpeech": "adjective",
+        "definition": "Relating to knowledge or the degree of its validation and acquisition.",
+        "example": "Philosophers study the epistemic value of scientific claims.",
+        "cambridgeSlug": "epistemic"
+      },
+      {
+        "word": "asymmetry",
+        "phonetic": "/eɪˈsɪm.ə.tri/",
+        "cefrLevel": "C1",
+        "partOfSpeech": "noun",
+        "definition": "Lack of equality or equivalence between parts or aspects of something.",
+        "example": "There was an information asymmetry between the buyer and the seller.",
+        "cambridgeSlug": "asymmetry"
+      },
+      {
+        "word": "dopaminergic",
+        "phonetic": "/ˌdoʊ.pə.mɪˈnɜːr.dʒɪk/",
+        "cefrLevel": "C2",
+        "partOfSpeech": "adjective",
+        "definition": "Related to the neurotransmitter dopamine, especially neural pathways governing pleasure and reward.",
+        "example": "Certain learning environments actively stimulate dopaminergic pathways.",
+        "cambridgeSlug": "dopaminergic"
+      },
+      {
+        "word": "consolidation",
+        "phonetic": "/kənˌsɑː.ləˈdeɪ.ʃən/",
+        "cefrLevel": "B2",
+        "partOfSpeech": "noun",
+        "definition": "The process of becoming stronger and more certain, especially stabilizing memories.",
+        "example": "Sleep plays a crucial role in memory consolidation.",
+        "cambridgeSlug": "consolidation"
+      },
+      {
+        "word": "esoteric",
+        "phonetic": "/ˌes.əˈter.ɪk/",
+        "cefrLevel": "C1",
+        "partOfSpeech": "adjective",
+        "definition": "Intended for or likely to be understood by only a small number of people with specialized knowledge.",
+        "example": "She spent the afternoon reading about esoteric ancient linguistic dialects.",
+        "cambridgeSlug": "esoteric"
+      }
+    ]
+  },
+  {
+    "id": "lesson-cafe-dialogue",
+    "title": "Everyday English: The Neighborhood Cafe",
+    "description": "Listen to a natural conversational dialogue between two friends reuniting at a local cafe, discussing daily routines, local news, and future plans.",
+    "level": "B1",
+    "mediaType": "youtube",
+    "mediaUrl": "https://www.youtube.com/watch?v=M0yi0A9jGvY",
+    "duration": 150,
+    "trimStart": 0,
+    "trimEnd": 150,
+    "preventSkipping": false,
+    "thumbnailUrl": "https://img.youtube.com/vi/M0yi0A9jGvY/hqdefault.jpg",
+    "teacherId": "teacher-chuck",
+    "teacherName": "Chuck (Teacher)",
+    "createdAt": "2026-10-20",
+    "captions": [
+      {
+        "id": "cc1",
+        "start": 0,
+        "end": 5.5,
+        "text": "Hey Marcus! Over here by the window! It has been an absolute age since we last caught up.",
+        "speaker": "Elena"
+      },
+      {
+        "id": "cc2",
+        "start": 5.8,
+        "end": 12,
+        "text": "Elena! Good to see you. Sorry I'm a few minutes late; finding a parking spot around here was a total nightmare.",
+        "speaker": "Marcus"
+      },
+      {
+        "id": "cc3",
+        "start": 12.5,
+        "end": 19.5,
+        "text": "No worries at all. I actually ordered you a flat white already—I remembered you like oat milk.",
+        "speaker": "Elena"
+      },
+      {
+        "id": "cc4",
+        "start": 20,
+        "end": 28,
+        "text": "You're a lifesaver. So tell me everything! How did that interview at the environmental consultancy go?",
+        "speaker": "Marcus"
+      },
+      {
+        "id": "cc5",
+        "start": 28.5,
+        "end": 38,
+        "text": "It went surprisingly smoothly! The panel asked very practical questions about urban sustainability projects. I should hear back by Friday.",
+        "speaker": "Elena"
+      }
+    ],
+    "questions": [
+      {
+        "id": "qc1",
+        "timestamp": 12,
+        "type": "multiple_choice",
+        "prompt": "Why was Marcus delayed arriving at the cafe?",
+        "options": [
+          {
+            "id": "a",
+            "text": "His morning train was delayed by weather"
+          },
+          {
+            "id": "b",
+            "text": "He struggled to find a parking spot nearby"
+          },
+          {
+            "id": "c",
+            "text": "He got lost on the way to the cafe"
+          },
+          {
+            "id": "d",
+            "text": "He was waiting for a phone call from his boss"
+          }
+        ],
+        "correctAnswer": "b",
+        "correctAnswers": [
+          "b"
+        ],
+        "allowMultipleAnswers": false,
+        "explanation": "Marcus stated: \"finding a parking spot around here was a total nightmare.\"",
+        "points": 10
+      },
+      {
+        "id": "qc2",
+        "timestamp": 28,
+        "type": "close_ended",
+        "prompt": "What beverage did Elena order for Marcus in advance? (Type the name of the coffee drink)",
+        "correctAnswer": "flat white",
+        "explanation": "Elena ordered him a flat white with oat milk.",
+        "points": 10
+      },
+      {
+        "id": "qc3",
+        "timestamp": 38,
+        "type": "open_ended",
+        "prompt": "In your own words, summarize how Elena felt about her job interview and when she expects to receive the results.",
+        "explanation": "Elena felt it went smoothly with practical sustainability questions, and expects an answer by Friday.",
+        "points": 15
+      }
+    ],
+    "difficultWords": [
+      {
+        "word": "absolute age",
+        "phonetic": "/ˈæb.sə.luːt eɪdʒ/",
+        "cefrLevel": "B1",
+        "partOfSpeech": "idiom",
+        "definition": "A very long time.",
+        "example": "I haven't seen my cousins in an absolute age.",
+        "cambridgeSlug": "age"
+      },
+      {
+        "word": "consultancy",
+        "phonetic": "/kənˈsʌl.tən.si/",
+        "cefrLevel": "B2",
+        "partOfSpeech": "noun",
+        "definition": "A professional firm or company that gives expert advice on a particular subject.",
+        "example": "She works for an international management consultancy.",
+        "cambridgeSlug": "consultancy"
+      },
+      {
+        "word": "sustainability",
+        "phonetic": "/səˌsteɪ.nəˈbɪl.ə.t̬i/",
+        "cefrLevel": "B2",
+        "partOfSpeech": "noun",
+        "definition": "The quality of causing little or no damage to the environment and therefore able to continue for a long time.",
+        "example": "The university prioritizes environmental sustainability.",
+        "cambridgeSlug": "sustainability"
+      }
+    ]
+  },
+  {
+    "id": "lesson-business-meeting",
+    "title": "Business English: Cross-Functional Alignment",
+    "description": "Listen to a strategic quarterly review meeting where department heads negotiate project deadlines, resource allocation, and product launch milestones.",
+    "level": "C1",
+    "mediaType": "youtube",
+    "mediaUrl": "https://www.youtube.com/watch?v=UF8uR6Z6KLc",
+    "duration": 210,
+    "trimStart": 0,
+    "trimEnd": 200,
+    "preventSkipping": true,
+    "thumbnailUrl": "https://img.youtube.com/vi/UF8uR6Z6KLc/hqdefault.jpg",
+    "teacherId": "teacher-chuck",
+    "teacherName": "Chuck (Teacher)",
+    "createdAt": "2026-10-25",
+    "captions": [
+      {
+        "id": "cb1",
+        "start": 0,
+        "end": 8,
+        "text": "Good morning everyone. Let's cut to the chase: Q3 engineering deliverables are currently facing a bottleneck in QA testing.",
+        "speaker": "Julian"
+      },
+      {
+        "id": "cb2",
+        "start": 8.5,
+        "end": 18,
+        "text": "If we want to hit our November milestone without compromising software integrity, we need to deprioritize peripheral feature requests.",
+        "speaker": "Julian"
+      },
+      {
+        "id": "cb3",
+        "start": 18.5,
+        "end": 27,
+        "text": "From a marketing standpoint, postponing the localization roll-out is viable, provided the core analytics dashboard remains intact.",
+        "speaker": "Clara"
+      },
+      {
+        "id": "cb4",
+        "start": 27.5,
+        "end": 37,
+        "text": "Agreed. Let's establish a unified triage protocol so our engineers aren't pulled in disparate directions during the final sprint.",
+        "speaker": "Julian"
+      }
+    ],
+    "questions": [
+      {
+        "id": "qb1",
+        "timestamp": 18,
+        "type": "multiple_choice",
+        "prompt": "What strategies does Julian suggest to hit the November deadline? (Select all that apply)",
+        "options": [
+          {
+            "id": "a",
+            "text": "Deprioritize peripheral feature requests"
+          },
+          {
+            "id": "b",
+            "text": "Maintain uncompromising software integrity"
+          },
+          {
+            "id": "c",
+            "text": "Double everyone’s working hours without consultation"
+          },
+          {
+            "id": "d",
+            "text": "Postpone unnecessary marketing localization"
+          }
+        ],
+        "allowMultipleAnswers": true,
+        "correctAnswers": [
+          "a",
+          "b",
+          "d"
+        ],
+        "correctAnswer": "a",
+        "explanation": "Julian and Clara agreed to deprioritize peripheral requests, protect software integrity, and postpone localization.",
+        "points": 15
+      },
+      {
+        "id": "qb2",
+        "timestamp": 37,
+        "type": "matching",
+        "prompt": "Match each business idiom / phrase used in the meeting with its professional definition:",
+        "matchingPairs": [
+          {
+            "left": "Cut to the chase",
+            "right": "Come directly to the most important point"
+          },
+          {
+            "left": "Bottleneck",
+            "right": "A point of congestion slowing down the entire process"
+          },
+          {
+            "left": "Triage protocol",
+            "right": "A system to prioritize tasks by urgency"
+          }
+        ],
+        "explanation": "These are standard business idioms used in cross-functional stakeholder negotiations.",
+        "points": 15
+      }
+    ],
+    "difficultWords": [
+      {
+        "word": "cut to the chase",
+        "phonetic": "/kʌt tuː ðə tʃeɪs/",
+        "cefrLevel": "B2",
+        "partOfSpeech": "idiom",
+        "definition": "To focus on the essential matter without wasting time on preliminaries.",
+        "example": "We only have ten minutes left, so let us cut to the chase.",
+        "cambridgeSlug": "cut-to-the-chase"
+      },
+      {
+        "word": "bottleneck",
+        "phonetic": "/ˈbɑː.t̬əl.nek/",
+        "cefrLevel": "C1",
+        "partOfSpeech": "noun",
+        "definition": "A problem that delays progress, especially in manufacturing, technology, or business workflows.",
+        "example": "Supply chain delays caused a severe bottleneck at the assembly plant.",
+        "cambridgeSlug": "bottleneck"
+      },
+      {
+        "word": "peripheral",
+        "phonetic": "/pəˈrɪf.ɚ.əl/",
+        "cefrLevel": "C1",
+        "partOfSpeech": "adjective",
+        "definition": "Not central, auxiliary; of secondary importance.",
+        "example": "Let us focus on core objectives before handling peripheral concerns.",
+        "cambridgeSlug": "peripheral"
+      },
+      {
+        "word": "disparate",
+        "phonetic": "/ˈdɪs.pɚ.ət/",
+        "cefrLevel": "C2",
+        "partOfSpeech": "adjective",
+        "definition": "Fundamentally distinct or different in kind; entirely dissimilar.",
+        "example": "The team combined data from disparate international sources.",
+        "cambridgeSlug": "disparate"
+      }
+    ]
+  }
+]
