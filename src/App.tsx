@@ -15,6 +15,8 @@ import { ReportsView } from './components/ReportsView';
 import { JoinModal } from './components/JoinModal';
 import { TeacherLoginModal } from './components/TeacherLoginModal';
 import { TeacherManagementModal } from './components/TeacherManagementModal';
+import { StudentAccountModal } from './components/StudentAccountModal';
+import { LiveClassroomProjector } from './components/LiveClassroomProjector';
 import { ImportLessonModal } from './components/ImportLessonModal';
 import { ExportLessonModal } from './components/ExportLessonModal';
 import heroImage from './assets/images/allears_hero_listening_1793672977345.jpg';
@@ -145,9 +147,20 @@ export default function App() {
   const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
   const [isTeacherLoginOpen, setIsTeacherLoginOpen] = useState(false);
   const [isTeacherManagementOpen, setIsTeacherManagementOpen] = useState(false);
+  const [isStudentAccountOpen, setIsStudentAccountOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [exportingLesson, setExportingLesson] = useState<Lesson | null>(null);
   const [importNotification, setImportNotification] = useState<string | null>(null);
+
+  // Standalone Screen Share / Projector Tab Mode
+  const projectorPin = useMemo(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('projector');
+    } catch {
+      return null;
+    }
+  }, []);
 
   // Handle lesson dataset import
   const handleImportLesson = async (imported: Lesson, practiceImmediately: boolean) => {
@@ -161,7 +174,7 @@ export default function App() {
       };
 
       try {
-        await fetch('/api/lessons', {
+        const res = await fetch('/api/lessons', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -170,6 +183,10 @@ export default function App() {
           },
           body: JSON.stringify(teacherLesson),
         });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          console.warn('Server lesson save notice:', errData.error || res.statusText);
+        }
       } catch (e) {
         console.warn('Failed to save imported lesson to server:', e);
       }
@@ -186,13 +203,31 @@ export default function App() {
 
       setImportNotification(`Successfully added "${teacherLesson.title}" to the central curriculum!`);
     } else {
-      // Student import: Persist ONLY to this device (localStorage)
-      // Never send to server or share with other students or teachers
+      // Student import: Persist to their private student account in the database (or local storage for guest)
+      const isRegistered = currentUser.role === 'student' && currentUser.id !== 'student-guest';
       const studentOnlyLesson: Lesson = {
         ...imported,
         isLocalStudentOnly: true,
-        teacherName: imported.teacherName || 'Self-Study Import',
+        teacherName: imported.teacherName || `${currentUser.name}'s Custom Study`,
       };
+
+      if (isRegistered) {
+        try {
+          await fetch('/api/student-lessons', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-student-id': currentUser.id,
+            },
+            body: JSON.stringify({
+              studentId: currentUser.id,
+              lesson: studentOnlyLesson,
+            }),
+          });
+        } catch (e) {
+          console.warn('Could not save to student account database:', e);
+        }
+      }
 
       setStudentLocalLessons((prev) => {
         const filtered = prev.filter((l) => l.id !== studentOnlyLesson.id);
@@ -201,7 +236,11 @@ export default function App() {
         return updated;
       });
 
-      setImportNotification(`Imported "${studentOnlyLesson.title}" for self-study on this device (private to you)!`);
+      setImportNotification(
+        isRegistered
+          ? `Imported "${studentOnlyLesson.title}" to your private student account!`
+          : `Imported "${studentOnlyLesson.title}" for self-study on this device!`
+      );
     }
 
     setTimeout(() => setImportNotification(null), 4500);
@@ -253,12 +292,48 @@ export default function App() {
     localStorage.setItem('allears_submissions_v3', JSON.stringify(submissions));
   }, [submissions]);
 
+  // Sync student private lessons from database whenever a registered student is active
+  useEffect(() => {
+    if (currentUser.role === 'student' && currentUser.id !== 'student-guest') {
+      const fetchStudentLessons = async () => {
+        try {
+          const res = await fetch(`/api/student-lessons?studentId=${currentUser.id}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.lessons && Array.isArray(data.lessons)) {
+              setStudentLocalLessons(sanitizeLessons(data.lessons));
+            }
+          }
+        } catch (e) {
+          console.warn('Could not sync student private lessons:', e);
+        }
+      };
+      fetchStudentLessons();
+    }
+  }, [currentUser.id, currentUser.role]);
+
   // Handle successful teacher login
   const handleTeacherLoginSuccess = (teacherUser: UserAccount) => {
     setCurrentUser(teacherUser);
   };
 
-  // Sign out back to Student
+  // Handle successful student login / registration
+  const handleStudentLoginSuccess = async (studentUser: UserAccount) => {
+    setCurrentUser(studentUser);
+    try {
+      const res = await fetch(`/api/student-lessons?studentId=${studentUser.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.lessons && Array.isArray(data.lessons)) {
+          setStudentLocalLessons(sanitizeLessons(data.lessons));
+        }
+      }
+    } catch (e) {
+      console.warn('Could not sync student private lessons on login:', e);
+    }
+  };
+
+  // Sign out back to Student Guest
   const handleSignOut = () => {
     setCurrentUser(defaultStudentUser);
     if (currentTab === 'create') {
@@ -343,50 +418,115 @@ export default function App() {
     setCurrentTab('reports');
   };
 
-  // Save lesson from editor to both server and local state (Teachers Only)
+  // Save lesson from editor:
+  // - Teachers save to central library / PostgreSQL database for all students
+  // - Students save privately to their student account in the database (or device storage for guest)
   const handleSaveLesson = async (savedLesson: Lesson) => {
-    if (currentUser.role !== 'teacher') {
-      alert('Only teachers can create or edit lessons.');
-      return;
-    }
-
-    try {
-      await fetch('/api/lessons', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-role': 'teacher',
-          'x-teacher-id': currentUser.id,
-        },
-        body: JSON.stringify(savedLesson),
-      });
-    } catch (e) {
-      console.warn('Failed to save lesson to server:', e);
-    }
-
-    setServerLessons((prev) => {
-      const idx = prev.findIndex((l) => l.id === savedLesson.id);
-      if (idx >= 0) {
-        const copy = [...prev];
-        copy[idx] = savedLesson;
-        return copy;
+    if (currentUser.role === 'teacher') {
+      try {
+        const res = await fetch('/api/lessons', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-role': 'teacher',
+            'x-teacher-id': currentUser.id,
+          },
+          body: JSON.stringify(savedLesson),
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          console.warn('Save notice:', errData.error || res.statusText);
+        } else {
+          setImportNotification(`Successfully published "${savedLesson.title}" to the curriculum!`);
+          setTimeout(() => setImportNotification(null), 3500);
+        }
+      } catch (e) {
+        console.warn('Failed to save lesson to server:', e);
       }
-      return [savedLesson, ...prev];
-    });
+
+      setServerLessons((prev) => {
+        const idx = prev.findIndex((l) => l.id === savedLesson.id);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = savedLesson;
+          return copy;
+        }
+        return [savedLesson, ...prev];
+      });
+    } else {
+      // Student creating or editing their private lesson
+      const isRegistered = currentUser.role === 'student' && currentUser.id !== 'student-guest';
+      const studentLesson: Lesson = {
+        ...savedLesson,
+        isLocalStudentOnly: true,
+        teacherId: currentUser.id,
+        teacherName: currentUser.name,
+      };
+
+      if (isRegistered) {
+        try {
+          await fetch('/api/student-lessons', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-student-id': currentUser.id,
+            },
+            body: JSON.stringify({
+              studentId: currentUser.id,
+              lesson: studentLesson,
+            }),
+          });
+        } catch (e) {
+          console.warn('Failed to save student lesson to server database:', e);
+        }
+      }
+
+      setStudentLocalLessons((prev) => {
+        const idx = prev.findIndex((l) => l.id === studentLesson.id);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = studentLesson;
+          return copy;
+        }
+        return [studentLesson, ...prev];
+      });
+
+      setImportNotification(
+        isRegistered
+          ? `Saved "${studentLesson.title}" to your private student account!`
+          : `Saved "${studentLesson.title}" for self-study on this device!`
+      );
+      setTimeout(() => setImportNotification(null), 4000);
+    }
+
     setEditingLesson(null);
     setCurrentTab('lessons');
   };
 
-  // Delete a lesson (Teachers delete central lessons; Students remove their imported device lessons)
+  // Delete a lesson (Teachers delete central lessons; Students remove their account/device lessons)
   const handleDeleteLesson = async (lessonId: string) => {
-    // If student removing their personal device-imported lesson
+    // If student removing their personal lesson
     if (currentUser.role === 'student') {
+      const isRegistered = currentUser.id !== 'student-guest';
+      if (isRegistered) {
+        try {
+          await fetch(`/api/student-lessons/${lessonId}?studentId=${currentUser.id}`, {
+            method: 'DELETE',
+            headers: {
+              'x-student-id': currentUser.id,
+            },
+          });
+        } catch (e) {
+          console.warn('Failed to delete student lesson from database:', e);
+        }
+      }
+
       setStudentLocalLessons((prev) => {
         const updated = prev.filter((l) => l.id !== lessonId);
         localStorage.setItem('allears_student_local_lessons', JSON.stringify(updated));
         return updated;
       });
-      setImportNotification('Removed self-study lesson from your device.');
+      setImportNotification('Removed self-study lesson.');
       setTimeout(() => setImportNotification(null), 3000);
       return;
     }
@@ -432,6 +572,22 @@ export default function App() {
   };
 
   const isTeacher = currentUser.role === 'teacher';
+  const isRegisteredStudent = currentUser.role === 'student' && currentUser.id !== 'student-guest';
+
+  // Standalone Screen Share / Projector View for Google Meet or Zoom
+  if (projectorPin) {
+    const projectorLesson =
+      lessons.find((l) => l.id) || INITIAL_LESSONS[0];
+    return (
+      <LiveClassroomProjector
+        lesson={projectorLesson}
+        pin={projectorPin}
+        onExit={() => {
+          window.location.href = window.location.pathname;
+        }}
+      />
+    );
+  }
 
   // Filter lessons (Students only see published lessons; teachers see all)
   const filteredLessons = lessons.filter((l) => {
@@ -460,6 +616,7 @@ export default function App() {
         currentUser={currentUser}
         onOpenTeacherLogin={() => setIsTeacherLoginOpen(true)}
         onOpenTeacherManagement={() => setIsTeacherManagementOpen(true)}
+        onOpenStudentAuth={() => setIsStudentAccountOpen(true)}
         onSignOut={handleSignOut}
         onOpenJoinModal={() => setIsJoinModalOpen(true)}
         onOpenImportModal={() => setIsImportModalOpen(true)}
@@ -506,9 +663,9 @@ export default function App() {
           />
         )}
 
-        {/* 4. Lesson Editor (Two-column layout, Teachers Only) */}
+        {/* 4. Lesson Editor (Teachers & Registered Students) */}
         {(currentTab === 'create' || editingLesson) && !activeLiveTeacher && !activeLiveStudent && !activeHomeworkLesson && (
-          isTeacher ? (
+          (isTeacher || isRegisteredStudent) ? (
             <LessonEditor
               initialLesson={editingLesson}
               onSave={handleSaveLesson}
@@ -519,20 +676,28 @@ export default function App() {
               onDelete={handleDeleteLesson}
             />
           ) : (
-            <div className="max-w-md mx-auto my-12 p-8 bg-white border border-slate-200 rounded-2xl text-center space-y-4">
+            <div className="max-w-md mx-auto my-12 p-8 bg-white border border-slate-200 rounded-2xl text-center space-y-4 shadow-xs">
               <div className="w-12 h-12 bg-amber-100 text-amber-800 rounded-2xl flex items-center justify-center mx-auto">
                 <Lock className="w-6 h-6" />
               </div>
-              <h3 className="text-lg font-bold text-slate-900">Teacher Permission Required</h3>
+              <h3 className="text-lg font-bold text-slate-900">Sign In to Build Lessons</h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Only authorized teachers can create or edit lessons. Please sign in with your teacher credentials.
+                Create custom listening comprehension lessons and save them privately to your personal student account or teacher curriculum.
               </p>
-              <button
-                onClick={() => setIsTeacherLoginOpen(true)}
-                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold cursor-pointer"
-              >
-                Teacher Sign In
-              </button>
+              <div className="flex flex-col gap-2 pt-2">
+                <button
+                  onClick={() => setIsStudentAccountOpen(true)}
+                  className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs cursor-pointer transition-colors shadow-xs"
+                >
+                  Student Sign In / Create Account
+                </button>
+                <button
+                  onClick={() => setIsTeacherLoginOpen(true)}
+                  className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs cursor-pointer transition-colors"
+                >
+                  Teacher Portal Sign In
+                </button>
+              </div>
             </div>
           )
         )}
@@ -897,10 +1062,10 @@ export default function App() {
                         </div>
                       ) : (
                         <div className="space-y-1.5">
-                          <div className="flex items-center gap-2 w-full">
+                          <div className="flex items-center gap-2 w-full flex-wrap">
                             <button
                               onClick={() => setActiveHomeworkLesson(lesson)}
-                              className="flex-1 py-2.5 px-4 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                              className="flex-1 min-w-[130px] py-2.5 px-4 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
                             >
                               <Play className="w-3.5 h-3.5 fill-current" />
                               <span>Practice Homework</span>
@@ -917,6 +1082,19 @@ export default function App() {
                               Report
                             </button>
 
+                            {lesson.isLocalStudentOnly && (
+                              <button
+                                onClick={() => {
+                                  setEditingLesson(lesson);
+                                  setCurrentTab('create');
+                                }}
+                                className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-colors cursor-pointer"
+                                title="Edit My Custom Lesson"
+                              >
+                                Edit
+                              </button>
+                            )}
+
                             <button
                               onClick={() => setExportingLesson(lesson)}
                               className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-colors flex items-center gap-1 cursor-pointer"
@@ -930,12 +1108,12 @@ export default function App() {
                               <button
                                 type="button"
                                 onClick={() => {
-                                  if (confirm(`Remove personal lesson "${lesson.title}" from this device?`)) {
+                                  if (confirm(`Remove personal lesson "${lesson.title}"?`)) {
                                     handleDeleteLesson(lesson.id);
                                   }
                                 }}
                                 className="py-2.5 px-2.5 bg-slate-100 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-xl transition-colors cursor-pointer"
-                                title="Remove personal self-study lesson from this device"
+                                title="Remove personal self-study lesson"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -944,7 +1122,7 @@ export default function App() {
 
                           {lesson.isLocalStudentOnly && (
                             <p className="text-[10px] text-amber-700/90 font-medium text-center">
-                              Private to this device (not shared with teacher or other students)
+                              {isRegisteredStudent ? 'Private to your student account (not shared with others)' : 'Private to this device (not shared with others)'}
                             </p>
                           )}
                         </div>
@@ -966,6 +1144,13 @@ export default function App() {
           defaultStudentName={currentUser.name}
         />
       )}
+
+      {/* Student Account Modal (Register & Login) */}
+      <StudentAccountModal
+        isOpen={isStudentAccountOpen}
+        onClose={() => setIsStudentAccountOpen(false)}
+        onSuccess={handleStudentLoginSuccess}
+      />
 
       {/* Teacher Login Modal */}
       {isTeacherLoginOpen && (

@@ -4,7 +4,30 @@ An interactive English listening learning and formative assessment web platform 
 
 ---
 
-## 🚀 GitHub Pages Deployment Guide
+## 🚀 Deploying on Render (Free Tier: Web Service + PostgreSQL)
+
+Render hosts both the **frontend**, the **Node.js/Express backend**, and the **managed PostgreSQL database** under its Free plan:
+
+### 1-Click Blueprint Deployment
+1. Push your updated code to your GitHub repository:
+   ```bash
+   git add .
+   git commit -m "feat: student accounts, 2-tab live mode, and render migration"
+   git push
+   ```
+2. Log into [Render Dashboard](https://dashboard.render.com/).
+3. Click **New +** → **Blueprint**.
+4. Connect your `AllEars` GitHub repository.
+5. Render detects `render.yaml` and provisions:
+   - **`allears-db`**: A managed PostgreSQL database (Free plan).
+   - **`allears`**: A Node.js web service running both backend API and static frontend (Free plan).
+6. Click **Apply**.
+   - Note: The build command is already configured with `--legacy-peer-deps` (`npm install --legacy-peer-deps && npm run build`) to ensure build success with Node 24.
+7. Once deployment finishes, open your Render URL (e.g., `https://allears.onrender.com`). All lessons, student accounts, teacher curriculum, and live classroom sessions will be stored in your PostgreSQL database!
+
+---
+
+## 🚀 GitHub Pages Deployment Guide (Static Alternative)
 
 Why did you see `github-pages 232 | Error: No such file or directory @ dir_chdir0 - /github/workspace/docs`?
 This error happened because GitHub's default **Jekyll** builder ran on your repository and couldn't find the `/docs` folder or tried to process non-Jekyll files. Because **All Ears** is a modern React/Vite web application, Jekyll should **not** build it.

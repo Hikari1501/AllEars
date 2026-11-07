@@ -8,6 +8,7 @@ interface NavbarProps {
   currentUser: UserAccount;
   onOpenTeacherLogin: () => void;
   onOpenTeacherManagement: () => void;
+  onOpenStudentAuth: () => void;
   onSignOut: () => void;
   onOpenJoinModal: () => void;
   onOpenImportModal: () => void;
@@ -19,11 +20,13 @@ export const Navbar: React.FC<NavbarProps> = ({
   currentUser,
   onOpenTeacherLogin,
   onOpenTeacherManagement,
+  onOpenStudentAuth,
   onSignOut,
   onOpenJoinModal,
   onOpenImportModal,
 }) => {
   const isTeacher = currentUser.role === 'teacher';
+  const isRegisteredStudent = currentUser.role === 'student' && currentUser.id !== 'student-guest';
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200">
@@ -65,18 +68,22 @@ export const Navbar: React.FC<NavbarProps> = ({
             Live Classroom
           </button>
 
-          {isTeacher && (
-            <button
-              onClick={() => onSelectTab('create')}
-              className={`whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
-                currentTab === 'create'
-                  ? 'text-amber-700 font-bold border-b-2 border-amber-600 pb-0.5'
-                  : 'hover:text-slate-900'
-              }`}
-            >
-              Create Lesson
-            </button>
-          )}
+          <button
+            onClick={() => {
+              if (!isTeacher && !isRegisteredStudent) {
+                onOpenStudentAuth();
+              } else {
+                onSelectTab('create');
+              }
+            }}
+            className={`whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+              currentTab === 'create'
+                ? 'text-amber-700 font-bold border-b-2 border-amber-600 pb-0.5'
+                : 'hover:text-slate-900'
+            }`}
+          >
+            {isTeacher ? 'Create Lesson' : 'Build Custom Lesson'}
+          </button>
 
           <button
             onClick={() => onSelectTab('reports')}
@@ -109,8 +116,8 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>Join with PIN</span>
           </button>
 
-          {/* Teacher account pill vs Sign In button */}
-          {isTeacher ? (
+          {/* Teacher account pill */}
+          {isTeacher && (
             <div className="flex items-center gap-2">
               {currentUser.isAdmin && (
                 <button
@@ -134,20 +141,58 @@ export const Navbar: React.FC<NavbarProps> = ({
 
               <button
                 onClick={onSignOut}
-                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg transition-colors"
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg transition-colors cursor-pointer"
                 title="Sign out of Teacher account"
               >
                 <LogOut className="w-4 h-4" />
               </button>
             </div>
-          ) : (
-            <button
-              onClick={onOpenTeacherLogin}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-slate-950 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer border border-slate-200"
-            >
-              <LogIn className="w-3.5 h-3.5 text-slate-500" />
-              <span>Teacher Sign In</span>
-            </button>
+          )}
+
+          {/* Registered Student account pill */}
+          {isRegisteredStudent && (
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 px-2.5 py-1 bg-slate-100 border border-slate-200 rounded-xl text-xs">
+                <User className="w-3.5 h-3.5 text-amber-600" />
+                <span className="font-bold text-slate-800 truncate max-w-[110px]">
+                  {currentUser.name}
+                </span>
+                <span className="text-[10px] text-slate-500 font-semibold uppercase">
+                  Student
+                </span>
+              </div>
+
+              <button
+                onClick={onSignOut}
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg transition-colors cursor-pointer"
+                title="Sign out of Student account"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {/* Guest visitors: Student Sign In & Teacher Sign In options */}
+          {!isTeacher && !isRegisteredStudent && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onOpenStudentAuth}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-800 hover:text-slate-950 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer border border-slate-200"
+                title="Sign in or register personal student account"
+              >
+                <User className="w-3.5 h-3.5 text-amber-600" />
+                <span>Student Sign In</span>
+              </button>
+
+              <button
+                onClick={onOpenTeacherLogin}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer"
+                title="Sign in with Teacher credentials"
+              >
+                <LogIn className="w-3.5 h-3.5 text-slate-400" />
+                <span className="hidden sm:inline">Teacher</span>
+              </button>
+            </div>
           )}
         </div>
       </div>
