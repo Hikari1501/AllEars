@@ -79,6 +79,7 @@ interface LiveSession {
   revealedFeedbackForQuestionId: string | null;
   activeVocabWord: any | null;
   allowEditAnswer?: boolean;
+  allowStudentCaptions?: boolean;
   isCompleted: boolean;
   students: Record<string, LiveStudent>;
   lastUpdated: number;
@@ -432,6 +433,7 @@ app.post('/api/live/create', async (req: Request, res: Response) => {
     revealedFeedbackForQuestionId: null,
     activeVocabWord: null,
     allowEditAnswer: false,
+    allowStudentCaptions: true,
     isCompleted: false,
     students: {},
     lastUpdated: Date.now(),
@@ -497,7 +499,7 @@ app.post('/api/live/join', (req: Request, res: Response) => {
 
 // Update live session state (supported via /api/live/update-state and /api/live/update alias)
 const handleUpdateSessionState = (req: Request, res: Response) => {
-  const { pin, currentTime, isPlaying, playbackSpeed, currentQuestionId, isCompleted, activeVocabWord, allowEditAnswer } = req.body;
+  const { pin, currentTime, isPlaying, playbackSpeed, currentQuestionId, isCompleted, activeVocabWord, allowEditAnswer, allowStudentCaptions } = req.body;
   const session = liveSessions[pin];
   if (!session) {
     return res.status(404).json({ error: 'Session not found' });
@@ -509,6 +511,7 @@ const handleUpdateSessionState = (req: Request, res: Response) => {
   if (currentQuestionId !== undefined) session.currentQuestionId = currentQuestionId;
   if (isCompleted !== undefined) session.isCompleted = isCompleted;
   if (allowEditAnswer !== undefined) session.allowEditAnswer = Boolean(allowEditAnswer);
+  if (allowStudentCaptions !== undefined) session.allowStudentCaptions = Boolean(allowStudentCaptions);
   if (activeVocabWord !== undefined) {
     session.activeVocabWord = activeVocabWord;
     if (activeVocabWord) {

@@ -52,11 +52,11 @@ export const VocabPopover: React.FC<VocabPopoverProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
       <div 
-        className="w-full max-w-md bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+        className="w-full max-w-lg max-h-[92vh] flex flex-col bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50/70">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50/70 shrink-0">
           <div className="flex items-center gap-2.5">
             <BookOpen className="w-4 h-4 text-amber-600" />
             <span className="text-xs font-semibold tracking-wider uppercase text-slate-500">Vocabulary Glossary</span>
@@ -70,8 +70,8 @@ export const VocabPopover: React.FC<VocabPopoverProps> = ({
           </button>
         </div>
 
-        {/* Word Hero */}
-        <div className="p-5 space-y-4">
+        {/* Word Content & Image (Scrolls if image or definitions are tall) */}
+        <div className="p-5 space-y-4 overflow-y-auto max-h-[calc(92vh-4.5rem)]">
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="flex items-center gap-2 flex-wrap">
@@ -106,13 +106,13 @@ export const VocabPopover: React.FC<VocabPopoverProps> = ({
             <p className="text-sm italic text-slate-700">"{vocab.example}"</p>
           </div>
 
-          {/* Online Illustration Image if available */}
+          {/* Online Illustration Image if available - scales to fit without cropping */}
           {vocab.imageUrl && (
-            <div className="w-full h-44 rounded-xl overflow-hidden border border-slate-200 bg-slate-100 shadow-inner">
+            <div className="w-full rounded-xl overflow-hidden border border-slate-200 bg-slate-900/5 flex items-center justify-center p-2 shadow-inner">
               <img
                 src={vocab.imageUrl}
                 alt={vocab.word}
-                className="w-full h-full object-cover"
+                className="max-h-72 w-auto max-w-full rounded-lg object-contain shadow-xs"
                 onError={(e) => {
                   (e.target as HTMLElement).style.display = 'none';
                 }}

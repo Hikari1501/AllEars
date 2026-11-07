@@ -137,8 +137,9 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
   const [editingCapSpeaker, setEditingCapSpeaker] = useState<string>('');
   const [editingCapText, setEditingCapText] = useState<string>('');
 
-  // New question form state
+  // New / edit question form state
   const [isAddingQuestion, setIsAddingQuestion] = useState(false);
+  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
   const [newQIsGeneral, setNewQIsGeneral] = useState<boolean>(false);
   const [newQTimestamp, setNewQTimestamp] = useState<number>(15);
   const [newQTimestampStr, setNewQTimestampStr] = useState<string>('00:15');
@@ -527,55 +528,142 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
     });
   };
 
-  const handleAddQuestionManual = () => {
-    if (!newQPrompt.trim()) return;
-
-    const parsedTs = newQIsGeneral ? null : parseTimeToSeconds(newQTimestampStr || newQTimestamp);
-
-    const newQ: Question = {
-      id: `q-${Date.now()}`,
-      timestamp: parsedTs,
-      type: newQType,
-      prompt: newQPrompt,
-      explanation: newQExplanation || 'Review the listening segment.',
-      points: 10,
-    };
-
-    if (newQType === 'multiple_choice') {
-      newQ.options = newQOptions.map((text, idx) => ({
-        id: String.fromCharCode(97 + idx),
-        text,
-      }));
-      newQ.allowMultipleAnswers = newQAllowMulti;
-      newQ.correctAnswers = Array.from(newQCorrectAnswers);
-      newQ.correctAnswer = Array.from(newQCorrectAnswers)[0] || 'a';
-    } else if (newQType === 'true_false') {
-      newQ.options = [
-        { id: 'true', text: 'True' },
-        { id: 'false', text: 'False' },
-      ];
-      const correctVal = Array.from(newQCorrectAnswers)[0] === 'false' ? 'false' : 'true';
-      newQ.correctAnswer = correctVal;
-      newQ.correctAnswers = [correctVal];
-    } else if (newQType === 'close_ended') {
-      newQ.correctAnswer = newQCloseEndedAns.trim();
-    } else if (newQType === 'matching') {
-      newQ.matchingPairs = newQMatchingPairs;
-    }
-
-    setQuestions((prev) =>
-      [...prev, newQ].sort((a, b) => {
-        const aT = typeof a.timestamp === 'number' && a.timestamp >= 0 ? a.timestamp : 999999;
-        const bT = typeof b.timestamp === 'number' && b.timestamp >= 0 ? b.timestamp : 999999;
-        return aT - bT;
-      })
-    );
-    setIsAddingQuestion(false);
+  // Open form to add a new question
+  const handleOpenAddQuestion = () => {
+    setEditingQuestionId(null);
     setNewQPrompt('');
     setNewQExplanation('');
     setNewQCloseEndedAns('');
     setNewQIsGeneral(false);
+    setNewQTimestamp(15);
     setNewQTimestampStr('00:15');
+    setNewQOptions(['Option A', 'Option B', 'Option C', 'Option D']);
+    setNewQCorrectAnswers(new Set(['a']));
+    setNewQAllowMulti(false);
+    setNewQType('multiple_choice');
+    setIsAddingQuestion(true);
+  };
+
+  // Open form to edit an existing question
+  const handleStartEditQuestion = (q: Question) => {
+    setEditingQuestionId(q.id);
+    setNewQPrompt(q.prompt);
+    setNewQExplanation(q.explanation || '');
+    setNewQType(q.type);
+    const isGen = q.timestamp == null || q.timestamp < 0;
+    setNewQIsGeneral(isGen);
+    setNewQTimestamp(q.timestamp ?? 15);
+    setNewQTimestampStr(formatSec(q.timestamp));
+
+    if (q.type === 'multiple_choice') {
+      if (q.options && q.options.length > 0) {
+        setNewQOptions(q.options.map((o) => o.text));
+      } else {
+        setNewQOptions(['Option A', 'Option B', 'Option C', 'Option D']);
+      }
+      setNewQAllowMulti(!!q.allowMultipleAnswers);
+      if (q.correctAnswers && q.correctAnswers.length > 0) {
+        setNewQCorrectAnswers(new Set(q.correctAnswers));
+      } else if (q.correctAnswer) {
+        setNewQCorrectAnswers(new Set([q.correctAnswer]));
+      } else {
+        setNewQCorrectAnswers(new Set(['a']));
+      }
+    } else if (q.type === 'true_false') {
+      setNewQCorrectAnswers(new Set([q.correctAnswer || 'true']));
+    } else if (q.type === 'close_ended') {
+      setNewQCloseEndedAns(q.correctAnswer || '');
+    } else if (q.type === 'matching') {
+      setNewQMatchingPairs(
+        q.matchingPairs && q.matchingPairs.length > 0
+          ? q.matchingPairs
+          : [
+              { left: 'Term 1', right: 'Definition 1' },
+              { left: 'Term 2', right: 'Definition 2' },
+            ]
+      );
+    }
+    setIsAddingQuestion(true);
+    // Smooth scroll to the question editor card
+    setTimeout(() => {
+      const el = document.getElementById('question-editor-card');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 50);
+  };
+
+  const handleCancelQuestionForm = () => {
+    setIsAddingQuestion(false);
+    setEditingQuestionId(null);
+    setNewQPrompt('');
+    setNewQExplanation('');
+    setNewQCloseEndedAns('');
+    setNewQIsGeneral(false);
+    setNewQTimestamp(15);
+    setNewQTimestampStr('00:15');
+    setNewQOptions(['Option A', 'Option B', 'Option C', 'Option D']);
+    setNewQCorrectAnswers(new Set(['a']));
+    setNewQAllowMulti(false);
+  };
+
+  const handleSaveQuestion = () => {
+    if (!newQPrompt.trim()) return;
+
+    const parsedTs = newQIsGeneral ? null : parseTimeToSeconds(newQTimestampStr || newQTimestamp);
+
+    const questionData: Question = {
+      id: editingQuestionId || `q-${Date.now()}`,
+      timestamp: parsedTs,
+      type: newQType,
+      prompt: newQPrompt.trim(),
+      explanation: newQExplanation.trim() || 'Review the listening segment.',
+      points: 10,
+    };
+
+    if (newQType === 'multiple_choice') {
+      questionData.options = newQOptions.map((text, idx) => ({
+        id: String.fromCharCode(97 + idx),
+        text,
+      }));
+      questionData.allowMultipleAnswers = newQAllowMulti;
+      questionData.correctAnswers = Array.from(newQCorrectAnswers);
+      questionData.correctAnswer = Array.from(newQCorrectAnswers)[0] || 'a';
+    } else if (newQType === 'true_false') {
+      questionData.options = [
+        { id: 'true', text: 'True' },
+        { id: 'false', text: 'False' },
+      ];
+      const correctVal = Array.from(newQCorrectAnswers)[0] === 'false' ? 'false' : 'true';
+      questionData.correctAnswer = correctVal;
+      questionData.correctAnswers = [correctVal];
+    } else if (newQType === 'close_ended') {
+      questionData.correctAnswer = newQCloseEndedAns.trim();
+    } else if (newQType === 'matching') {
+      questionData.matchingPairs = newQMatchingPairs;
+    }
+
+    if (editingQuestionId) {
+      setQuestions((prev) =>
+        prev
+          .map((q) => (q.id === editingQuestionId ? questionData : q))
+          .sort((a, b) => {
+            const aT = typeof a.timestamp === 'number' && a.timestamp >= 0 ? a.timestamp : 999999;
+            const bT = typeof b.timestamp === 'number' && b.timestamp >= 0 ? b.timestamp : 999999;
+            return aT - bT;
+          })
+      );
+      setSuccessMessage(`Updated question successfully!`);
+    } else {
+      setQuestions((prev) =>
+        [...prev, questionData].sort((a, b) => {
+          const aT = typeof a.timestamp === 'number' && a.timestamp >= 0 ? a.timestamp : 999999;
+          const bT = typeof b.timestamp === 'number' && b.timestamp >= 0 ? b.timestamp : 999999;
+          return aT - bT;
+        })
+      );
+      setSuccessMessage(`Added new question to lesson!`);
+    }
+    setTimeout(() => setSuccessMessage(null), 3000);
+    handleCancelQuestionForm();
   };
 
   const handleStartEditQTimestamp = (q: Question) => {
@@ -1200,9 +1288,11 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
                   + Type Custom Caption Line
                 </span>
-                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 text-xs items-start">
                   <div className="sm:col-span-2">
-                    <label className="block text-slate-500 mb-1">Start (mm:ss or s)</label>
+                    <label className="h-5 flex items-center text-slate-600 font-semibold mb-1 truncate">
+                      Start (mm:ss)
+                    </label>
                     <input
                       type="text"
                       value={newCapStartStr}
@@ -1211,12 +1301,16 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                         setNewCapStart(parseTimeToSeconds(e.target.value));
                       }}
                       placeholder="00:00"
-                      className="w-full p-2 bg-white border border-slate-200 rounded-lg font-mono text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                      className="w-full h-9 p-2 bg-white border border-slate-200 rounded-lg font-mono text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"
                     />
-                    <span className="text-[10px] text-slate-400 font-mono block mt-0.5">{formatSec(newCapStart)}</span>
+                    <span className="text-[10px] text-slate-400 font-mono block mt-1 truncate">
+                      {formatSec(newCapStart)}
+                    </span>
                   </div>
                   <div className="sm:col-span-2">
-                    <label className="block text-slate-500 mb-1">End (mm:ss or s)</label>
+                    <label className="h-5 flex items-center text-slate-600 font-semibold mb-1 truncate">
+                      End (mm:ss)
+                    </label>
                     <input
                       type="text"
                       value={newCapEndStr}
@@ -1225,38 +1319,46 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                         setNewCapEnd(parseTimeToSeconds(e.target.value));
                       }}
                       placeholder="00:05"
-                      className="w-full p-2 bg-white border border-slate-200 rounded-lg font-mono text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                      className="w-full h-9 p-2 bg-white border border-slate-200 rounded-lg font-mono text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"
                     />
-                    <span className="text-[10px] text-slate-400 font-mono block mt-0.5">{formatSec(newCapEnd)}</span>
+                    <span className="text-[10px] text-slate-400 font-mono block mt-1 truncate">
+                      {formatSec(newCapEnd)}
+                    </span>
                   </div>
                   <div className="sm:col-span-3">
-                    <label className="block text-slate-500 mb-1">Speaker</label>
+                    <label className="h-5 flex items-center text-slate-600 font-semibold mb-1 truncate">
+                      Speaker
+                    </label>
                     <input
                       type="text"
                       value={newCapSpeaker}
                       onChange={(e) => setNewCapSpeaker(e.target.value)}
                       placeholder="e.g. Elena"
-                      className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs"
+                      className="w-full h-9 p-2 bg-white border border-slate-200 rounded-lg text-xs"
                     />
+                    <span className="text-[10px] text-transparent select-none block mt-1 truncate">.</span>
                   </div>
                   <div className="sm:col-span-5">
-                    <label className="block text-slate-500 mb-1">Spoken Line (Full sentence)</label>
+                    <label className="h-5 flex items-center text-slate-600 font-semibold mb-1 truncate">
+                      Spoken Line (Full sentence)
+                    </label>
                     <div className="flex gap-2">
                       <input
                         type="text"
                         value={newCapText}
                         onChange={(e) => setNewCapText(e.target.value)}
                         placeholder="Type English words spoken..."
-                        className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs"
+                        className="w-full h-9 p-2 bg-white border border-slate-200 rounded-lg text-xs"
                       />
                       <button
                         type="button"
                         onClick={handleAddCaptionLine}
-                        className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold shrink-0 cursor-pointer"
+                        className="h-9 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold shrink-0 cursor-pointer shadow-xs transition-colors flex items-center justify-center"
                       >
                         Add
                       </button>
                     </div>
+                    <span className="text-[10px] text-transparent select-none block mt-1 truncate">.</span>
                   </div>
                 </div>
               </div>
@@ -1397,8 +1499,8 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setIsAddingQuestion(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold cursor-pointer"
+                    onClick={handleOpenAddQuestion}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold cursor-pointer shadow-xs"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>+ Add Checkpoint</span>
@@ -1406,17 +1508,24 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                 </div>
               </div>
 
-              {/* Add question modal / form */}
+              {/* Add / Edit question modal / form */}
               {isAddingQuestion && (
-                <div className="p-4 border-2 border-amber-300 bg-amber-50/50 rounded-2xl space-y-3">
+                <div id="question-editor-card" className="p-4 border-2 border-amber-300 bg-amber-50/60 rounded-2xl space-y-3.5 shadow-sm">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-900">
-                      Add Formative Checkpoint
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                        {editingQuestionId ? 'Edit Checkpoint Question' : 'Add Formative Checkpoint'}
+                      </span>
+                      {editingQuestionId && (
+                        <span className="px-2 py-0.5 rounded-full bg-amber-200 text-amber-950 font-bold text-[10px] border border-amber-300">
+                          Editing Mode
+                        </span>
+                      )}
+                    </div>
                     <button
                       type="button"
-                      onClick={() => setIsAddingQuestion(false)}
-                      className="text-xs text-slate-500 hover:text-slate-800"
+                      onClick={handleCancelQuestionForm}
+                      className="text-xs font-semibold text-slate-500 hover:text-slate-800 px-2 py-1 rounded-lg hover:bg-amber-100/60 transition-colors"
                     >
                       Cancel
                     </button>
@@ -1505,7 +1614,7 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                       value={newQPrompt}
                       onChange={(e) => setNewQPrompt(e.target.value)}
                       placeholder="What caused Marcus to be late?"
-                      className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs"
+                      className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"
                     />
                   </div>
 
@@ -1534,7 +1643,7 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleToggleMultiCorrect(optId)}
-                                className={`px-2 py-1 rounded text-[11px] font-bold border transition-colors ${
+                                className={`px-2 py-1 rounded text-[11px] font-bold border transition-colors cursor-pointer ${
                                   isCorrect
                                     ? 'bg-emerald-600 text-white border-emerald-700'
                                     : 'bg-white text-slate-600 border-slate-300'
@@ -1542,7 +1651,7 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                               >
                                 {isCorrect ? '✓ Correct' : 'Mark Correct'}
                               </button>
-                              <span className="font-mono uppercase font-bold">{optId}.</span>
+                              <span className="font-mono uppercase font-bold text-slate-700">{optId}.</span>
                               <input
                                 type="text"
                                 value={opt}
@@ -1584,91 +1693,170 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                     />
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={handleAddQuestionManual}
-                    className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold"
-                  >
-                    Add Question to Lesson
-                  </button>
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleSaveQuestion}
+                      className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold cursor-pointer shadow-xs transition-colors"
+                    >
+                      {editingQuestionId ? 'Save Question Changes' : 'Add Question to Lesson'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCancelQuestionForm}
+                      className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
               )}
 
               {/* Questions list */}
               <div className="space-y-2.5">
-                {questions.map((q) => (
-                  <div
-                    key={q.id}
-                    className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex items-start justify-between gap-3 text-xs"
-                  >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        {editingQTimestampId === q.id ? (
-                          <div className="flex items-center gap-1.5 p-1 bg-amber-50 border border-amber-300 rounded-lg">
-                            <span className="text-[10px] font-semibold text-slate-600">Timestamp:</span>
-                            <input
-                              type="text"
-                              value={editingQTimestampStr}
-                              onChange={(e) => setEditingQTimestampStr(e.target.value)}
-                              placeholder="01:30"
-                              className="w-20 p-1 bg-white border border-amber-300 rounded font-mono text-xs"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => handleSaveEditQTimestamp(q.id)}
-                              className="px-2 py-0.5 bg-amber-600 text-white rounded text-[10px] font-bold"
-                            >
-                              Save
-                            </button>
-                            <button
-                              type="button"
-                              onClick={handleCancelEditQTimestamp}
-                              className="px-1.5 py-0.5 text-slate-500 hover:text-slate-800 text-[10px]"
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-1.5">
-                            {typeof q.timestamp === 'number' && q.timestamp >= 0 ? (
+                {questions.map((q) => {
+                  const isCurrentlyEditing = editingQuestionId === q.id;
+
+                  return (
+                    <div
+                      key={q.id}
+                      className={`p-4 rounded-xl border flex items-start justify-between gap-4 text-xs transition-all ${
+                        isCurrentlyEditing
+                          ? 'bg-amber-50/80 border-amber-400 ring-2 ring-amber-400/40 shadow-xs'
+                          : 'bg-slate-50 border-slate-200'
+                      }`}
+                    >
+                      <div className="space-y-2 flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {editingQTimestampId === q.id ? (
+                            <div className="flex items-center gap-1.5 p-1 bg-amber-50 border border-amber-300 rounded-lg">
+                              <span className="text-[10px] font-semibold text-slate-600">Timestamp:</span>
+                              <input
+                                type="text"
+                                value={editingQTimestampStr}
+                                onChange={(e) => setEditingQTimestampStr(e.target.value)}
+                                placeholder="01:30"
+                                className="w-20 p-1 bg-white border border-amber-300 rounded font-mono text-xs"
+                              />
                               <button
                                 type="button"
-                                onClick={() => handleStartEditQTimestamp(q)}
-                                className="font-mono font-bold px-2 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 text-[11px] flex items-center gap-1 cursor-pointer"
-                                title="Click to edit pause timestamp in mm:ss"
+                                onClick={() => handleSaveEditQTimestamp(q.id)}
+                                className="px-2 py-0.5 bg-amber-600 text-white rounded text-[10px] font-bold cursor-pointer"
                               >
-                                <span>At {formatSec(q.timestamp)}</span>
-                                <Edit3 className="w-2.5 h-2.5 text-amber-700 opacity-60" />
+                                Save
                               </button>
-                            ) : (
-                              <span className="font-semibold px-2 py-0.5 rounded bg-indigo-100 text-indigo-900 text-[11px] border border-indigo-200">
-                                Whole Video / General (No Pause)
-                              </span>
-                            )}
+                              <button
+                                type="button"
+                                onClick={handleCancelEditQTimestamp}
+                                className="px-1.5 py-0.5 text-slate-500 hover:text-slate-800 text-[10px] cursor-pointer"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5">
+                              {typeof q.timestamp === 'number' && q.timestamp >= 0 ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartEditQTimestamp(q)}
+                                  className="font-mono font-bold px-2 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 text-[11px] flex items-center gap-1 cursor-pointer transition-colors"
+                                  title="Click to edit pause timestamp in mm:ss"
+                                >
+                                  <span>At {formatSec(q.timestamp)}</span>
+                                  <Edit3 className="w-2.5 h-2.5 text-amber-700 opacity-60" />
+                                </button>
+                              ) : (
+                                <span className="font-semibold px-2 py-0.5 rounded bg-indigo-100 text-indigo-900 text-[11px] border border-indigo-200">
+                                  Whole Video / General (No Pause)
+                                </span>
+                              )}
+                            </div>
+                          )}
+
+                          <span className="font-bold text-slate-700 uppercase text-[10px] px-2 py-0.5 bg-slate-200/70 rounded">
+                            {q.type.replace('_', ' ')}
+                          </span>
+
+                          {q.allowMultipleAnswers && (
+                            <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-800 font-bold rounded text-[9px]">
+                              Multi-Select
+                            </span>
+                          )}
+
+                          {isCurrentlyEditing && (
+                            <span className="px-1.5 py-0.5 bg-amber-200 text-amber-950 font-bold rounded text-[9px] animate-pulse">
+                              Editing Above ↑
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="font-bold text-slate-900 text-sm leading-snug">
+                          {q.prompt}
+                        </div>
+
+                        {/* Options / Answer Preview */}
+                        {q.options && q.options.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 pt-0.5">
+                            {q.options.map((opt) => {
+                              const isCorrect =
+                                q.correctAnswers?.includes(opt.id) ||
+                                q.correctAnswer === opt.id ||
+                                q.correctAnswer === opt.text;
+
+                              return (
+                                <span
+                                  key={opt.id}
+                                  className={`px-2 py-0.5 rounded-md text-[11px] border flex items-center gap-1 ${
+                                    isCorrect
+                                      ? 'bg-emerald-50 text-emerald-900 border-emerald-300 font-semibold'
+                                      : 'bg-white text-slate-600 border-slate-200'
+                                  }`}
+                                >
+                                  <span className="font-mono uppercase font-bold text-[10px]">{opt.id}.</span>
+                                  <span>{opt.text}</span>
+                                  {isCorrect && <Check className="w-3 h-3 text-emerald-600 stroke-[2.5]" />}
+                                </span>
+                              );
+                            })}
                           </div>
                         )}
-                        <span className="font-bold text-slate-700 uppercase text-[10px]">
-                          {q.type.replace('_', ' ')}
-                        </span>
-                        {q.allowMultipleAnswers && (
-                          <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-800 font-bold rounded text-[9px]">
-                            Multi-Select
-                          </span>
+
+                        {q.type === 'close_ended' && q.correctAnswer && (
+                          <div className="text-[11px] text-slate-600 font-mono">
+                            Expected: <span className="font-bold text-emerald-700 font-sans">"{q.correctAnswer}"</span>
+                          </div>
+                        )}
+
+                        {q.explanation && (
+                          <div className="text-slate-500 italic text-[11px]">
+                            {q.explanation}
+                          </div>
                         )}
                       </div>
-                      <div className="font-bold text-slate-900 text-sm">{q.prompt}</div>
-                      <div className="text-slate-500 italic text-[11px]">{q.explanation}</div>
-                    </div>
 
-                    <button
-                      type="button"
-                      onClick={() => setQuestions(questions.filter((item) => item.id !== q.id))}
-                      className="text-slate-400 hover:text-rose-600 p-1"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
+                      {/* Question Card Actions: Edit Content & Delete */}
+                      <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => handleStartEditQuestion(q)}
+                          className="flex items-center gap-1 px-2.5 py-1 text-slate-700 hover:text-amber-900 bg-white hover:bg-amber-50 border border-slate-200 hover:border-amber-300 rounded-lg text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
+                          title="Edit question prompt, options, answer, and explanation"
+                        >
+                          <Edit3 className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setQuestions(questions.filter((item) => item.id !== q.id))}
+                          className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                          title="Delete question"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

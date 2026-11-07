@@ -30,6 +30,7 @@ import {
   Tv,
   Lock,
   Unlock,
+  Subtitles,
 } from 'lucide-react';
 
 interface LiveClassroomTeacherProps {
@@ -214,6 +215,14 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
     updateServerState({ allowEditAnswer: nextVal });
   };
 
+  // Toggle allowing students to toggle captions on their screens
+  const handleToggleAllowStudentCaptions = async () => {
+    const current = session?.allowStudentCaptions !== false; // defaults to true
+    const nextVal = !current;
+    setSession((prev) => (prev ? { ...prev, allowStudentCaptions: nextVal } : null));
+    updateServerState({ allowStudentCaptions: nextVal });
+  };
+
   const copyRoomLink = () => {
     const url = `${window.location.origin}/?join=${pin}`;
     navigator.clipboard.writeText(url);
@@ -335,6 +344,25 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
               <Lock className="w-3.5 h-3.5 text-slate-500" />
             )}
             <span>Edit Answers: {session?.allowEditAnswer ? 'Allowed' : 'Locked'}</span>
+          </button>
+
+          {/* Teacher Option: Allow or Disallow Student Captions */}
+          <button
+            type="button"
+            onClick={handleToggleAllowStudentCaptions}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+              session?.allowStudentCaptions !== false
+                ? 'bg-amber-50 border-amber-300 text-amber-900 shadow-2xs'
+                : 'bg-rose-50 border-rose-300 text-rose-800 shadow-2xs'
+            }`}
+            title={
+              session?.allowStudentCaptions !== false
+                ? 'Students CAN toggle interactive captions on their screen (Click to disallow)'
+                : 'Students CANNOT view or toggle captions on their screen (Click to allow)'
+            }
+          >
+            <Subtitles className="w-3.5 h-3.5" />
+            <span>Student Captions: {session?.allowStudentCaptions !== false ? 'Allowed' : 'Disallowed'}</span>
           </button>
 
           {totalStudents < 3 && (

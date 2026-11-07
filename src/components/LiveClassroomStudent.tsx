@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Lesson, Question, LiveSessionState, StudentAnswer, LiveStudentData } from '../types';
 import { InteractiveCaptions } from './InteractiveCaptions';
 import { StudentQuestionsPanel } from './StudentQuestionsPanel';
-import { Radio, Award, CheckCircle2, User, BookOpen, Volume2, ExternalLink, Cast, Users, HelpCircle } from 'lucide-react';
+import { Radio, Award, CheckCircle2, User, BookOpen, Volume2, ExternalLink, Cast, Users, HelpCircle, Lock } from 'lucide-react';
 import { VocabPopover } from './VocabPopover';
 
 interface LiveClassroomStudentProps {
@@ -227,15 +227,32 @@ export const LiveClassroomStudent: React.FC<LiveClassroomStudentProps> = ({
                 <BookOpen className="w-4 h-4 text-amber-600" />
                 <span>Live Interactive Captions</span>
               </div>
-              <button
-                onClick={() => setShowCaptions(!showCaptions)}
-                className="text-[11px] font-semibold text-amber-800 hover:underline cursor-pointer"
-              >
-                {showCaptions ? 'Hide Captions' : 'Show Captions'}
-              </button>
+              {session?.allowStudentCaptions !== false ? (
+                <button
+                  onClick={() => setShowCaptions(!showCaptions)}
+                  className="text-[11px] font-semibold text-amber-800 hover:underline cursor-pointer"
+                >
+                  {showCaptions ? 'Hide Captions' : 'Show Captions'}
+                </button>
+              ) : (
+                <span className="text-[11px] font-semibold text-rose-600 flex items-center gap-1">
+                  <Lock className="w-3 h-3" />
+                  <span>Locked by Teacher</span>
+                </span>
+              )}
             </div>
 
-            {showCaptions ? (
+            {session?.allowStudentCaptions === false ? (
+              <div className="py-8 px-4 text-center space-y-2.5 bg-slate-50 border border-dashed border-slate-200 rounded-xl animate-in fade-in">
+                <div className="w-10 h-10 rounded-full bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center mx-auto">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <div className="text-xs font-bold text-slate-800">Captions Disabled by Teacher</div>
+                <p className="text-[11px] text-slate-500 max-w-xs mx-auto leading-relaxed">
+                  The teacher has disabled subtitles for this live listening practice. Please focus your attention on the video sound from the shared screen.
+                </p>
+              </div>
+            ) : showCaptions ? (
               <InteractiveCaptions
                 captions={lesson.captions}
                 difficultWords={lesson.difficultWords}
@@ -325,11 +342,11 @@ export const LiveClassroomStudent: React.FC<LiveClassroomStudentProps> = ({
 
               {/* Illustration Image if available */}
               {session.activeVocabWord.imageUrl && (
-                <div className="w-full h-48 rounded-xl overflow-hidden border border-slate-200 bg-slate-100 shadow-inner">
+                <div className="w-full rounded-xl overflow-hidden border border-slate-200 bg-slate-900/5 flex items-center justify-center p-2 shadow-inner">
                   <img
                     src={session.activeVocabWord.imageUrl}
                     alt={session.activeVocabWord.word}
-                    className="w-full h-full object-cover"
+                    className="max-h-64 w-auto max-w-full rounded-lg object-contain"
                     onError={(e) => {
                       (e.target as HTMLElement).style.display = 'none';
                     }}

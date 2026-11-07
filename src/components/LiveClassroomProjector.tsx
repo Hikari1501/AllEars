@@ -229,11 +229,11 @@ export const LiveClassroomProjector: React.FC<LiveClassroomProjectorProps> = ({
                 </p>
               )}
               {session.activeVocabWord.imageUrl && (
-                <div className="mt-2.5 w-full h-36 rounded-xl overflow-hidden border border-slate-700 bg-black">
+                <div className="mt-2.5 w-full rounded-xl overflow-hidden border border-slate-700 bg-black/60 flex items-center justify-center p-1.5 shadow-inner">
                   <img
                     src={session.activeVocabWord.imageUrl}
                     alt={session.activeVocabWord.word}
-                    className="w-full h-full object-cover"
+                    className="max-h-56 w-auto max-w-full rounded-lg object-contain"
                     onError={(e) => {
                       (e.target as HTMLElement).style.display = 'none';
                     }}
