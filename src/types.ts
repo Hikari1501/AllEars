@@ -138,6 +138,7 @@ export interface LiveSessionState {
   currentQuestionId: string | null;
   revealedFeedbackForQuestionId: string | null;
   activeVocabWord?: VocabEntry | null;
+  allowEditAnswer?: boolean;
   isCompleted: boolean;
   students: Record<string, LiveStudentData>;
   lastUpdated: number;

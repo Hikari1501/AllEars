@@ -28,6 +28,8 @@ import {
   ExternalLink,
   Sliders,
   Tv,
+  Lock,
+  Unlock,
 } from 'lucide-react';
 
 interface LiveClassroomTeacherProps {
@@ -49,6 +51,7 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
   );
   const [copiedLink, setCopiedLink] = useState(false);
   const [isAddingBots, setIsAddingBots] = useState(false);
+  const [feedbackSentId, setFeedbackSentId] = useState<string | null>(null);
   const [pauseTrigger, setPauseTrigger] = useState(0);
   const [showCaptions, setShowCaptions] = useState(true);
   const [teacherViewMode, setTeacherViewMode] = useState<'console' | 'projector'>('console');
@@ -95,7 +98,7 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
   // Sync state to server
   const updateServerState = async (updates: Partial<LiveSessionState>) => {
     try {
-      await fetch('/api/live/update', {
+      await fetch('/api/live/update-state', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pin, ...updates }),
@@ -162,8 +165,13 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
     }
   };
 
-  // Teacher sends instant feedback / reveals correct answers
+  // Teacher sends instant feedback / reveals correct answers with touch-response feedback
   const handleRevealFeedback = async (questionId: string) => {
+    setFeedbackSentId(questionId);
+    setTimeout(() => {
+      setFeedbackSentId((prev) => (prev === questionId ? null : prev));
+    }, 2200);
+
     try {
       await fetch('/api/live/reveal-feedback', {
         method: 'POST',
@@ -186,15 +194,24 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
     updateServerState({ currentQuestionId: null, isPlaying: true });
   };
 
-  // Broadcast a difficult vocabulary word to all students (pauses playback)
+  // Broadcast a difficult vocabulary word to all students (pauses playback and spotlights word)
   const handleBroadcastVocab = async (vocab: VocabEntry) => {
     setPauseTrigger(Date.now());
+    setSession((prev) => (prev ? { ...prev, isPlaying: false, activeVocabWord: vocab } : null));
     updateServerState({ isPlaying: false, activeVocabWord: vocab });
   };
 
   // Dismiss vocabulary spotlight
   const handleDismissVocabSpotlight = async () => {
+    setSession((prev) => (prev ? { ...prev, activeVocabWord: null } : null));
     updateServerState({ activeVocabWord: null });
+  };
+
+  // Toggle allowing students to edit their answers after submitting
+  const handleToggleAllowEditAnswer = async () => {
+    const nextVal = !session?.allowEditAnswer;
+    setSession((prev) => (prev ? { ...prev, allowEditAnswer: nextVal } : null));
+    updateServerState({ allowEditAnswer: nextVal });
   };
 
   const copyRoomLink = () => {
@@ -296,6 +313,29 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
               <span>Screen Share View</span>
             </button>
           </div>
+
+          {/* Teacher Option: Allow or Disallow Answer Editing */}
+          <button
+            type="button"
+            onClick={handleToggleAllowEditAnswer}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+              session?.allowEditAnswer
+                ? 'bg-emerald-50 border-emerald-300 text-emerald-800 shadow-2xs'
+                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+            }`}
+            title={
+              session?.allowEditAnswer
+                ? 'Students CAN change and edit their answers after submitting (Click to lock)'
+                : 'Students CANNOT edit answers after submitting (Click to allow editing)'
+            }
+          >
+            {session?.allowEditAnswer ? (
+              <Unlock className="w-3.5 h-3.5 text-emerald-600" />
+            ) : (
+              <Lock className="w-3.5 h-3.5 text-slate-500" />
+            )}
+            <span>Edit Answers: {session?.allowEditAnswer ? 'Allowed' : 'Locked'}</span>
+          </button>
 
           {totalStudents < 3 && (
             <button
@@ -574,9 +614,20 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
                         <button
                           type="button"
                           onClick={() => handleRevealFeedback(inspectingQuestion.id)}
-                          className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-2xs"
+                          className={`px-3.5 py-1.5 font-bold rounded-xl text-xs transition-all duration-200 cursor-pointer shadow-2xs flex items-center gap-1.5 ${
+                            feedbackSentId === inspectingQuestion.id
+                              ? 'bg-emerald-600 text-white shadow-md scale-105'
+                              : 'bg-amber-500 hover:bg-amber-400 text-slate-950'
+                          }`}
                         >
-                          Send Instant Feedback
+                          {feedbackSentId === inspectingQuestion.id ? (
+                            <>
+                              <Check className="w-3.5 h-3.5 stroke-[3] text-white" />
+                              <span>Feedback Sent!</span>
+                            </>
+                          ) : (
+                            <span>Send Instant Feedback</span>
+                          )}
                         </button>
                       </div>
                     </div>

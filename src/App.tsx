@@ -168,6 +168,7 @@ export default function App() {
       // Teacher import: Persist to PostgreSQL database for all students
       const teacherLesson: Lesson = {
         ...imported,
+        isPublished: true,
         isLocalStudentOnly: false,
         teacherId: currentUser.id,
         teacherName: currentUser.name,
@@ -207,6 +208,7 @@ export default function App() {
       const isRegistered = currentUser.role === 'student' && currentUser.id !== 'student-guest';
       const studentOnlyLesson: Lesson = {
         ...imported,
+        isPublished: true,
         isLocalStudentOnly: true,
         teacherName: imported.teacherName || `${currentUser.name}'s Custom Study`,
       };
@@ -271,12 +273,13 @@ export default function App() {
 
   // Sync lessons with backend server so all visitors can see published lessons
   useEffect(() => {
+    let isMounted = true;
     const fetchServerLessons = async () => {
       try {
         const res = await fetch(`/api/lessons?role=${currentUser.role}`);
         if (res.ok) {
           const data = await res.json();
-          if (data.lessons && Array.isArray(data.lessons)) {
+          if (isMounted && data.lessons && Array.isArray(data.lessons)) {
             setServerLessons(sanitizeLessons(data.lessons));
           }
         }
@@ -285,6 +288,13 @@ export default function App() {
       }
     };
     fetchServerLessons();
+    const interval = setInterval(fetchServerLessons, 6000);
+    window.addEventListener('focus', fetchServerLessons);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      window.removeEventListener('focus', fetchServerLessons);
+    };
   }, [currentUser.role]);
 
   // Persist submissions
@@ -581,6 +591,7 @@ export default function App() {
     return (
       <LiveClassroomProjector
         lesson={projectorLesson}
+        allLessons={lessons}
         pin={projectorPin}
         onExit={() => {
           window.location.href = window.location.pathname;
@@ -589,9 +600,9 @@ export default function App() {
     );
   }
 
-  // Filter lessons (Students only see published lessons; teachers see all)
+  // Filter lessons (Students see published lessons + their own account/device lessons; teachers see all)
   const filteredLessons = lessons.filter((l) => {
-    if (!isTeacher && l.isPublished === false) return false;
+    if (!isTeacher && !l.isLocalStudentOnly && l.isPublished === false) return false;
     const matchesLevel = levelFilter === 'all' || l.level === levelFilter;
     const matchesSearch =
       l.title.toLowerCase().includes(searchQuery.toLowerCase()) ||

@@ -261,6 +261,7 @@ export const LiveClassroomStudent: React.FC<LiveClassroomStudentProps> = ({
             isLiveMode={true}
             revealedFeedbackForQuestionId={session?.revealedFeedbackForQuestionId || null}
             allowRewind={false}
+            allowEditAnswer={session?.allowEditAnswer ?? false}
           />
         </div>
       </div>

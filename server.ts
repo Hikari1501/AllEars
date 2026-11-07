@@ -78,6 +78,7 @@ interface LiveSession {
   currentQuestionId: string | null;
   revealedFeedbackForQuestionId: string | null;
   activeVocabWord: any | null;
+  allowEditAnswer?: boolean;
   isCompleted: boolean;
   students: Record<string, LiveStudent>;
   lastUpdated: number;
@@ -430,6 +431,7 @@ app.post('/api/live/create', async (req: Request, res: Response) => {
     currentQuestionId: null,
     revealedFeedbackForQuestionId: null,
     activeVocabWord: null,
+    allowEditAnswer: false,
     isCompleted: false,
     students: {},
     lastUpdated: Date.now(),
@@ -493,8 +495,9 @@ app.post('/api/live/join', (req: Request, res: Response) => {
   res.json({ success: true, studentId: id, session });
 });
 
-app.post('/api/live/update-state', (req: Request, res: Response) => {
-  const { pin, currentTime, isPlaying, playbackSpeed, currentQuestionId, isCompleted, activeVocabWord } = req.body;
+// Update live session state (supported via /api/live/update-state and /api/live/update alias)
+const handleUpdateSessionState = (req: Request, res: Response) => {
+  const { pin, currentTime, isPlaying, playbackSpeed, currentQuestionId, isCompleted, activeVocabWord, allowEditAnswer } = req.body;
   const session = liveSessions[pin];
   if (!session) {
     return res.status(404).json({ error: 'Session not found' });
@@ -505,6 +508,7 @@ app.post('/api/live/update-state', (req: Request, res: Response) => {
   if (playbackSpeed !== undefined) session.playbackSpeed = playbackSpeed;
   if (currentQuestionId !== undefined) session.currentQuestionId = currentQuestionId;
   if (isCompleted !== undefined) session.isCompleted = isCompleted;
+  if (allowEditAnswer !== undefined) session.allowEditAnswer = Boolean(allowEditAnswer);
   if (activeVocabWord !== undefined) {
     session.activeVocabWord = activeVocabWord;
     if (activeVocabWord) {
@@ -514,7 +518,10 @@ app.post('/api/live/update-state', (req: Request, res: Response) => {
   session.lastUpdated = Date.now();
 
   res.json({ success: true, session });
-});
+};
+
+app.post('/api/live/update-state', handleUpdateSessionState);
+app.post('/api/live/update', handleUpdateSessionState);
 
 // Teacher reveals feedback & answers to the whole class
 app.post('/api/live/reveal-feedback', (req: Request, res: Response) => {
@@ -530,12 +537,22 @@ app.post('/api/live/reveal-feedback', (req: Request, res: Response) => {
   res.json({ success: true, session });
 });
 
-// Student submits an answer in live room
+// Student submits an answer in live room (with support for editing answers if permitted by teacher)
 app.post('/api/live/submit-answer', (req: Request, res: Response) => {
   const { pin, studentId, questionId, answer, isCorrect, points = 0 } = req.body;
   const session = liveSessions[pin];
   if (!session || !session.students[studentId]) {
     return res.status(404).json({ error: 'Student or session not found' });
+  }
+
+  const existingAnswer = session.students[studentId].answers[questionId];
+  if (existingAnswer && !session.allowEditAnswer) {
+    return res.status(403).json({ error: 'Editing answers is locked by your teacher.' });
+  }
+
+  // Adjust score if updating an existing answer
+  if (existingAnswer && existingAnswer.isCorrect) {
+    session.students[studentId].score = Math.max(0, session.students[studentId].score - existingAnswer.points);
   }
 
   session.students[studentId].answers[questionId] = {

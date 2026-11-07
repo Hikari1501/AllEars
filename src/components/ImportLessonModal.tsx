@@ -104,7 +104,7 @@ export const ImportLessonModal: React.FC<ImportLessonModalProps> = ({
         captions: Array.isArray(data.captions) ? data.captions : [],
         questions: Array.isArray(data.questions) ? data.questions : [],
         difficultWords: Array.isArray(data.difficultWords) ? data.difficultWords : [],
-        isPublished: isTeacher ? (data.isPublished !== false) : false,
+        isPublished: true,
         isLocalStudentOnly: !isTeacher,
         createdAt: data.createdAt || new Date().toISOString().split('T')[0],
       };

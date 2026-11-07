@@ -12,6 +12,8 @@ import {
   Clock,
   Layers,
   Check,
+  Lock,
+  Unlock,
 } from 'lucide-react';
 
 interface StudentQuestionsPanelProps {
@@ -25,6 +27,7 @@ interface StudentQuestionsPanelProps {
   isLiveMode?: boolean;
   revealedFeedbackForQuestionId?: string | null;
   allowRewind?: boolean;
+  allowEditAnswer?: boolean;
 }
 
 export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
@@ -38,6 +41,7 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
   isLiveMode = false,
   revealedFeedbackForQuestionId = null,
   allowRewind = true,
+  allowEditAnswer = true,
 }) => {
   // Local pending states for non-submitted inputs
   const [selectedChoices, setSelectedChoices] = useState<Record<string, Set<string>>>({});
@@ -65,6 +69,7 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
   };
 
   const handleChoiceClick = (question: Question, optionId: string) => {
+    if (answers[question.id] && !allowEditAnswer) return;
     const isMulti = question.allowMultipleAnswers;
     const currentSet = new Set(selectedChoices[question.id] || []);
 
@@ -92,18 +97,21 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
   };
 
   const handleMultiSubmit = (question: Question) => {
+    if (answers[question.id] && !allowEditAnswer) return;
     const chosen = Array.from(selectedChoices[question.id] || []);
     if (chosen.length === 0) return;
     evaluateAndSubmit(question, chosen);
   };
 
   const handleTextSubmit = (question: Question) => {
+    if (answers[question.id] && !allowEditAnswer) return;
     const text = (textAnswers[question.id] || '').trim();
     if (!text) return;
     evaluateAndSubmit(question, text);
   };
 
   const handleMatchingPair = (question: Question, left: string, right: string) => {
+    if (answers[question.id] && !allowEditAnswer) return;
     const current = { ...(matchingSelections[question.id] || {}) };
     current[left] = right;
     setMatchingSelections((prev) => ({
@@ -359,9 +367,26 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                   )}
 
                   {/* Question Prompt */}
-                  <div className="text-xs sm:text-sm font-semibold text-slate-900 leading-snug mb-3">
+                  <div className="text-xs sm:text-sm font-semibold text-slate-900 leading-snug mb-2.5">
                     {q.prompt}
                   </div>
+
+                  {/* Answer Status / Edit Permission Notice */}
+                  {isAnswered && (
+                    <div className="flex items-center gap-1.5 text-[11px] mb-2.5 font-medium">
+                      {!allowEditAnswer ? (
+                        <span className="inline-flex items-center gap-1.5 text-slate-600 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg">
+                          <Lock className="w-3.5 h-3.5 text-slate-500" />
+                          <span>Answer submitted (Editing locked by teacher)</span>
+                        </span>
+                      ) : isLiveMode ? (
+                        <span className="inline-flex items-center gap-1.5 text-amber-900 bg-amber-50 border border-amber-300 px-2.5 py-1 rounded-lg">
+                          <Unlock className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Answer submitted (Editing allowed · Click to update your answer)</span>
+                        </span>
+                      ) : null}
+                    </div>
+                  )}
 
                   {/* Interactive Question Input Components */}
                   <div className="space-y-2 text-xs">
@@ -370,7 +395,7 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                       <div className="space-y-1.5">
                         {q.allowMultipleAnswers && (
                           <div className="text-[10px] text-indigo-700 font-bold mb-1">
-                            * Select all that apply, then click Submit
+                            * Select all that apply, then click {isAnswered ? 'Update' : 'Submit'}
                           </div>
                         )}
                         {q.options.map((opt) => {
@@ -383,8 +408,11 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                             <button
                               key={opt.id}
                               type="button"
+                              disabled={isAnswered && !allowEditAnswer}
                               onClick={() => handleChoiceClick(q, opt.id)}
-                              className={`w-full text-left p-2.5 rounded-lg border transition-all flex items-center justify-between gap-2 cursor-pointer ${
+                              className={`w-full text-left p-2.5 rounded-lg border transition-all flex items-center justify-between gap-2 ${
+                                isAnswered && !allowEditAnswer ? 'cursor-not-allowed opacity-85' : 'cursor-pointer'
+                              } ${
                                 isSelected
                                   ? 'bg-amber-500/15 border-amber-500 text-slate-950 font-semibold'
                                   : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
@@ -407,10 +435,10 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                           <button
                             type="button"
                             onClick={() => handleMultiSubmit(q)}
-                            disabled={!selectedChoices[q.id] || selectedChoices[q.id].size === 0}
+                            disabled={(!selectedChoices[q.id] || selectedChoices[q.id].size === 0) || (isAnswered && !allowEditAnswer)}
                             className="w-full mt-2 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
                           >
-                            Submit Answer ({selectedChoices[q.id]?.size || 0} selected)
+                            {isAnswered ? 'Update Answer' : 'Submit Answer'} ({selectedChoices[q.id]?.size || 0} selected)
                           </button>
                         )}
                       </div>
@@ -427,8 +455,11 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                             <button
                               key={val}
                               type="button"
+                              disabled={isAnswered && !allowEditAnswer}
                               onClick={() => handleChoiceClick(q, val)}
-                              className={`py-2 px-3 rounded-lg border font-bold capitalize transition-all cursor-pointer ${
+                              className={`py-2 px-3 rounded-lg border font-bold capitalize transition-all ${
+                                isAnswered && !allowEditAnswer ? 'cursor-not-allowed opacity-85' : 'cursor-pointer'
+                              } ${
                                 isSelected
                                   ? val === 'true'
                                     ? 'bg-emerald-600 text-white border-emerald-700'
@@ -448,6 +479,7 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                       <div className="flex gap-2">
                         <input
                           type="text"
+                          disabled={isAnswered && !allowEditAnswer}
                           value={textAnswers[q.id] !== undefined ? textAnswers[q.id] : (existingAnswer?.answer || '')}
                           onChange={(e) =>
                             setTextAnswers((prev) => ({
@@ -459,14 +491,15 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                             if (e.key === 'Enter') handleTextSubmit(q);
                           }}
                           placeholder="Type your answer here..."
-                          className="flex-1 p-2 bg-white border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                          className="flex-1 p-2 bg-white border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none disabled:bg-slate-100 disabled:cursor-not-allowed"
                         />
                         <button
                           type="button"
+                          disabled={isAnswered && !allowEditAnswer}
                           onClick={() => handleTextSubmit(q)}
-                          className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-xs transition-colors shrink-0"
+                          className="px-3 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-bold rounded-lg text-xs transition-colors shrink-0 cursor-pointer disabled:cursor-not-allowed"
                         >
-                          Submit
+                          {isAnswered ? 'Update' : 'Submit'}
                         </button>
                       </div>
                     )}
@@ -486,13 +519,16 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                                 <button
                                   key={p.left}
                                   type="button"
+                                  disabled={isAnswered && !allowEditAnswer}
                                   onClick={() =>
                                     setActiveMatchingLeft((prev) => ({
                                       ...prev,
                                       [q.id]: p.left,
                                     }))
                                   }
-                                  className={`w-full text-left p-1.5 rounded border text-[11px] transition-colors cursor-pointer ${
+                                  className={`w-full text-left p-1.5 rounded border text-[11px] transition-colors ${
+                                    isAnswered && !allowEditAnswer ? 'cursor-not-allowed opacity-85' : 'cursor-pointer'
+                                  } ${
                                     isSelectedLeft
                                       ? 'bg-amber-200 border-amber-400 font-bold'
                                       : paired
@@ -510,13 +546,16 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                               <button
                                 key={p.right}
                                 type="button"
+                                disabled={isAnswered && !allowEditAnswer}
                                 onClick={() => {
                                   const currentLeft = activeMatchingLeft[q.id];
                                   if (currentLeft) {
                                     handleMatchingPair(q, currentLeft, p.right);
                                   }
                                 }}
-                                className="w-full text-left p-1.5 rounded border text-[11px] bg-white border-slate-200 hover:bg-amber-50 cursor-pointer"
+                                className={`w-full text-left p-1.5 rounded border text-[11px] bg-white border-slate-200 hover:bg-amber-50 ${
+                                  isAnswered && !allowEditAnswer ? 'cursor-not-allowed opacity-85' : 'cursor-pointer'
+                                }`}
                               >
                                 {p.right}
                               </button>
@@ -531,6 +570,7 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                       <div className="space-y-1.5">
                         <textarea
                           rows={2}
+                          disabled={isAnswered && !allowEditAnswer}
                           value={textAnswers[q.id] !== undefined ? textAnswers[q.id] : (existingAnswer?.answer || '')}
                           onChange={(e) =>
                             setTextAnswers((prev) => ({
@@ -539,14 +579,15 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                             }))
                           }
                           placeholder="Type your reflection or answer..."
-                          className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                          className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none disabled:bg-slate-100 disabled:cursor-not-allowed"
                         />
                         <button
                           type="button"
+                          disabled={isAnswered && !allowEditAnswer}
                           onClick={() => handleTextSubmit(q)}
-                          className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-xs transition-colors cursor-pointer"
+                          className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-bold rounded-lg text-xs transition-colors cursor-pointer disabled:cursor-not-allowed"
                         >
-                          Submit Reflection
+                          {isAnswered ? 'Update Reflection' : 'Submit Reflection'}
                         </button>
                       </div>
                     )}
