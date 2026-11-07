@@ -323,6 +323,20 @@ export const LiveClassroomStudent: React.FC<LiveClassroomStudentProps> = ({
                 </p>
               </div>
 
+              {/* Illustration Image if available */}
+              {session.activeVocabWord.imageUrl && (
+                <div className="w-full h-48 rounded-xl overflow-hidden border border-slate-200 bg-slate-100 shadow-inner">
+                  <img
+                    src={session.activeVocabWord.imageUrl}
+                    alt={session.activeVocabWord.word}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLElement).style.display = 'none';
+                    }}
+                  />
+                </div>
+              )}
+
               {/* Cambridge link */}
               <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
                 <a

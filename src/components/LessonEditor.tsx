@@ -63,6 +63,18 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
   const [duration, setDuration] = useState<number>(initialLesson?.duration || 180);
   const [trimStart, setTrimStart] = useState<number>(initialLesson?.trimStart || 0);
   const [trimEnd, setTrimEnd] = useState<number>(initialLesson?.trimEnd || initialLesson?.duration || 180);
+  const [trimStartStr, setTrimStartStr] = useState<string>(() => {
+    const s = initialLesson?.trimStart || 0;
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
+  });
+  const [trimEndStr, setTrimEndStr] = useState<string>(() => {
+    const s = initialLesson?.trimEnd || initialLesson?.duration || 180;
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
+  });
   const [preventSkipping, setPreventSkipping] = useState<boolean>(
     initialLesson?.preventSkipping ?? true
   );
@@ -110,16 +122,28 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
 
   // Manual caption adder state
   const [newCapStart, setNewCapStart] = useState<number>(0);
+  const [newCapStartStr, setNewCapStartStr] = useState<string>('00:00');
   const [newCapEnd, setNewCapEnd] = useState<number>(5);
+  const [newCapEndStr, setNewCapEndStr] = useState<string>('00:05');
   const [newCapSpeaker, setNewCapSpeaker] = useState<string>('Speaker');
   const [newCapText, setNewCapText] = useState<string>('');
   const [rawTranscriptText, setRawTranscriptText] = useState<string>('');
   const [showBulkCaptionInput, setShowBulkCaptionInput] = useState<boolean>(false);
 
+  // Caption inline editor state
+  const [editingCapId, setEditingCapId] = useState<string | null>(null);
+  const [editingCapStartStr, setEditingCapStartStr] = useState<string>('');
+  const [editingCapEndStr, setEditingCapEndStr] = useState<string>('');
+  const [editingCapSpeaker, setEditingCapSpeaker] = useState<string>('');
+  const [editingCapText, setEditingCapText] = useState<string>('');
+
   // New question form state
   const [isAddingQuestion, setIsAddingQuestion] = useState(false);
   const [newQIsGeneral, setNewQIsGeneral] = useState<boolean>(false);
   const [newQTimestamp, setNewQTimestamp] = useState<number>(15);
+  const [newQTimestampStr, setNewQTimestampStr] = useState<string>('00:15');
+  const [editingQTimestampId, setEditingQTimestampId] = useState<string | null>(null);
+  const [editingQTimestampStr, setEditingQTimestampStr] = useState<string>('');
   const [newQType, setNewQType] = useState<QuestionType>('multiple_choice');
   const [newQPrompt, setNewQPrompt] = useState<string>('');
   const [newQOptions, setNewQOptions] = useState<string[]>([
@@ -142,7 +166,7 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
   const [editingVocabOriginalWord, setEditingVocabOriginalWord] = useState<string | null>(null);
   const [vocabWord, setVocabWord] = useState('');
   const [vocabPhonetic, setVocabPhonetic] = useState('');
-  const [vocabLevel, setVocabLevel] = useState<'B1' | 'B2' | 'C1' | 'C2'>('B2');
+  const [vocabLevel, setVocabLevel] = useState<'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2'>('B2');
   const [vocabPos, setVocabPos] = useState<PartOfSpeech>('adjective');
   const [vocabDefinition, setVocabDefinition] = useState('');
   const [vocabExample, setVocabExample] = useState('');
@@ -233,17 +257,59 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
   // Add individual custom caption line
   const handleAddCaptionLine = () => {
     if (!newCapText.trim()) return;
+    const startSec = parseTimeToSeconds(newCapStartStr || newCapStart);
+    const endSec = parseTimeToSeconds(newCapEndStr || newCapEnd);
+    const effectiveEnd = Math.max(startSec + 0.5, endSec);
+    const nextStart = Math.round(effectiveEnd * 10) / 10;
+    const nextEnd = Math.round((nextStart + 5) * 10) / 10;
+
     const newCap: CaptionSegment = {
       id: `cap-${Date.now()}`,
-      start: Number(newCapStart),
-      end: Number(newCapEnd),
+      start: startSec,
+      end: effectiveEnd,
       speaker: newCapSpeaker.trim() || 'Speaker',
       text: newCapText.trim(),
     };
     setCaptions((prev) => [...prev, newCap].sort((a, b) => a.start - b.start));
     setNewCapText('');
-    setNewCapStart(Number(newCapEnd));
-    setNewCapEnd(Number(newCapEnd) + 6);
+    setNewCapStart(nextStart);
+    setNewCapStartStr(formatSec(nextStart));
+    setNewCapEnd(nextEnd);
+    setNewCapEndStr(formatSec(nextEnd));
+  };
+
+  // Caption inline editor handlers
+  const handleStartEditCaption = (cap: CaptionSegment) => {
+    setEditingCapId(cap.id);
+    setEditingCapStartStr(formatSec(cap.start));
+    setEditingCapEndStr(formatSec(cap.end));
+    setEditingCapSpeaker(cap.speaker || 'Speaker');
+    setEditingCapText(cap.text);
+  };
+
+  const handleSaveEditCaption = (capId: string) => {
+    const startSec = parseTimeToSeconds(editingCapStartStr);
+    const endSec = parseTimeToSeconds(editingCapEndStr);
+    setCaptions((prev) =>
+      prev
+        .map((c) =>
+          c.id === capId
+            ? {
+                ...c,
+                start: startSec,
+                end: Math.max(startSec + 0.5, endSec),
+                speaker: editingCapSpeaker.trim() || 'Speaker',
+                text: editingCapText.trim(),
+              }
+            : c
+        )
+        .sort((a, b) => a.start - b.start)
+    );
+    setEditingCapId(null);
+  };
+
+  const handleCancelEditCaption = () => {
+    setEditingCapId(null);
   };
 
   // Parse bulk pasted text or SRT
@@ -464,9 +530,11 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
   const handleAddQuestionManual = () => {
     if (!newQPrompt.trim()) return;
 
+    const parsedTs = newQIsGeneral ? null : parseTimeToSeconds(newQTimestampStr || newQTimestamp);
+
     const newQ: Question = {
       id: `q-${Date.now()}`,
-      timestamp: newQIsGeneral ? null : Number(newQTimestamp),
+      timestamp: parsedTs,
       type: newQType,
       prompt: newQPrompt,
       explanation: newQExplanation || 'Review the listening segment.',
@@ -507,6 +575,30 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
     setNewQExplanation('');
     setNewQCloseEndedAns('');
     setNewQIsGeneral(false);
+    setNewQTimestampStr('00:15');
+  };
+
+  const handleStartEditQTimestamp = (q: Question) => {
+    setEditingQTimestampId(q.id);
+    setEditingQTimestampStr(formatSec(q.timestamp));
+  };
+
+  const handleSaveEditQTimestamp = (qId: string) => {
+    const parsed = parseTimeToSeconds(editingQTimestampStr);
+    setQuestions((prev) =>
+      prev
+        .map((q) => (q.id === qId ? { ...q, timestamp: parsed } : q))
+        .sort((a, b) => {
+          const aT = typeof a.timestamp === 'number' && a.timestamp >= 0 ? a.timestamp : 999999;
+          const bT = typeof b.timestamp === 'number' && b.timestamp >= 0 ? b.timestamp : 999999;
+          return aT - bT;
+        })
+    );
+    setEditingQTimestampId(null);
+  };
+
+  const handleCancelEditQTimestamp = () => {
+    setEditingQTimestampId(null);
   };
 
   const handleSaveLesson = () => {
@@ -595,10 +687,32 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
     setTimeout(() => setSuccessMessage(null), 3500);
   };
 
-  const formatSec = (s: number) => {
+  const formatSec = (s?: number | null) => {
+    if (s === undefined || s === null || isNaN(s) || s < 0) return '00:00';
     const m = Math.floor(s / 60);
     const sec = Math.floor(s % 60);
-    return `${m}:${sec.toString().padStart(2, '0')}`;
+    return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
+  };
+
+  const parseTimeToSeconds = (input: string | number): number => {
+    if (typeof input === 'number') return isNaN(input) ? 0 : Math.max(0, input);
+    const str = String(input).trim();
+    if (!str) return 0;
+    if (str.includes(':')) {
+      const parts = str.split(':');
+      if (parts.length === 2) {
+        const mins = parseFloat(parts[0]) || 0;
+        const secs = parseFloat(parts[1]) || 0;
+        return Math.max(0, Math.round((mins * 60 + secs) * 10) / 10);
+      } else if (parts.length === 3) {
+        const hrs = parseFloat(parts[0]) || 0;
+        const mins = parseFloat(parts[1]) || 0;
+        const secs = parseFloat(parts[2]) || 0;
+        return Math.max(0, Math.round((hrs * 3600 + mins * 60 + secs) * 10) / 10);
+      }
+    }
+    const num = parseFloat(str);
+    return isNaN(num) ? 0 : Math.max(0, num);
   };
 
   return (
@@ -751,26 +865,40 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
 
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div>
-                  <label className="text-slate-600 block mb-1">Start Trim (sec)</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-slate-600 font-medium">Start Trim (mm:ss or sec)</label>
+                    <span className="text-[10px] font-mono text-amber-900 font-bold">{formatSec(trimStart)}</span>
+                  </div>
                   <input
-                    type="number"
-                    min={0}
-                    max={trimEnd - 1}
-                    value={trimStart}
-                    onChange={(e) => setTrimStart(parseInt(e.target.value) || 0)}
-                    className="w-full p-2 bg-white border border-amber-300 rounded-lg font-mono text-xs"
+                    type="text"
+                    value={trimStartStr}
+                    onChange={(e) => {
+                      setTrimStartStr(e.target.value);
+                      const parsed = parseTimeToSeconds(e.target.value);
+                      setTrimStart(parsed);
+                    }}
+                    placeholder="00:00"
+                    className="w-full p-2 bg-white border border-amber-300 rounded-lg font-mono text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"
                   />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block font-mono">Raw: {trimStart}s</span>
                 </div>
                 <div>
-                  <label className="text-slate-600 block mb-1">End Trim (sec)</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-slate-600 font-medium">End Trim (mm:ss or sec)</label>
+                    <span className="text-[10px] font-mono text-amber-900 font-bold">{formatSec(trimEnd)}</span>
+                  </div>
                   <input
-                    type="number"
-                    min={trimStart + 1}
-                    max={duration}
-                    value={trimEnd}
-                    onChange={(e) => setTrimEnd(parseInt(e.target.value) || duration)}
-                    className="w-full p-2 bg-white border border-amber-300 rounded-lg font-mono text-xs"
+                    type="text"
+                    value={trimEndStr}
+                    onChange={(e) => {
+                      setTrimEndStr(e.target.value);
+                      const parsed = parseTimeToSeconds(e.target.value);
+                      setTrimEnd(parsed || duration);
+                    }}
+                    placeholder="03:00"
+                    className="w-full p-2 bg-white border border-amber-300 rounded-lg font-mono text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"
                   />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block font-mono">Raw: {trimEnd}s</span>
                 </div>
               </div>
             </div>
@@ -870,6 +998,7 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                     onChange={(e) => setLevel(e.target.value as CEFRLevel)}
                     className="w-full p-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl"
                   >
+                    <option value="A1">A1 Beginner</option>
                     <option value="A2">A2 Elementary</option>
                     <option value="B1">B1 Intermediate</option>
                     <option value="B2">B2 Upper Intermediate</option>
@@ -1073,22 +1202,32 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                 </span>
                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 text-xs">
                   <div className="sm:col-span-2">
-                    <label className="block text-slate-500 mb-1">Start (s)</label>
+                    <label className="block text-slate-500 mb-1">Start (mm:ss or s)</label>
                     <input
-                      type="number"
-                      value={newCapStart}
-                      onChange={(e) => setNewCapStart(parseFloat(e.target.value) || 0)}
-                      className="w-full p-2 bg-white border border-slate-200 rounded-lg font-mono text-xs"
+                      type="text"
+                      value={newCapStartStr}
+                      onChange={(e) => {
+                        setNewCapStartStr(e.target.value);
+                        setNewCapStart(parseTimeToSeconds(e.target.value));
+                      }}
+                      placeholder="00:00"
+                      className="w-full p-2 bg-white border border-slate-200 rounded-lg font-mono text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"
                     />
+                    <span className="text-[10px] text-slate-400 font-mono block mt-0.5">{formatSec(newCapStart)}</span>
                   </div>
                   <div className="sm:col-span-2">
-                    <label className="block text-slate-500 mb-1">End (s)</label>
+                    <label className="block text-slate-500 mb-1">End (mm:ss or s)</label>
                     <input
-                      type="number"
-                      value={newCapEnd}
-                      onChange={(e) => setNewCapEnd(parseFloat(e.target.value) || 0)}
-                      className="w-full p-2 bg-white border border-slate-200 rounded-lg font-mono text-xs"
+                      type="text"
+                      value={newCapEndStr}
+                      onChange={(e) => {
+                        setNewCapEndStr(e.target.value);
+                        setNewCapEnd(parseTimeToSeconds(e.target.value));
+                      }}
+                      placeholder="00:05"
+                      className="w-full p-2 bg-white border border-slate-200 rounded-lg font-mono text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"
                     />
+                    <span className="text-[10px] text-slate-400 font-mono block mt-0.5">{formatSec(newCapEnd)}</span>
                   </div>
                   <div className="sm:col-span-3">
                     <label className="block text-slate-500 mb-1">Speaker</label>
@@ -1101,7 +1240,7 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                     />
                   </div>
                   <div className="sm:col-span-5">
-                    <label className="block text-slate-500 mb-1">Spoken Line</label>
+                    <label className="block text-slate-500 mb-1">Spoken Line (Full sentence)</label>
                     <div className="flex gap-2">
                       <input
                         type="text"
@@ -1113,7 +1252,7 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                       <button
                         type="button"
                         onClick={handleAddCaptionLine}
-                        className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold shrink-0"
+                        className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold shrink-0 cursor-pointer"
                       >
                         Add
                       </button>
@@ -1122,39 +1261,122 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                 </div>
               </div>
 
-              {/* Captions Table */}
-              <div className="space-y-2 max-h-64 overflow-y-auto pr-1 divide-y divide-slate-100 border border-slate-200 rounded-xl p-2 bg-slate-50/50">
-                {captions.map((cap) => (
-                  <div
-                    key={cap.id}
-                    className="pt-2 flex items-center justify-between gap-3 text-xs p-1.5 hover:bg-white rounded-lg"
-                  >
-                    <span className="font-mono text-slate-500 w-24 shrink-0">
-                      {formatSec(cap.start)} - {formatSec(cap.end)}
-                    </span>
-                    <span className="font-semibold text-slate-800 w-20 truncate shrink-0">
-                      {cap.speaker}:
-                    </span>
-                    <span className="text-slate-800 flex-1 truncate">{cap.text}</span>
+              {/* Captions Table - Full lines displayed without truncation */}
+              <div className="space-y-2 max-h-[36rem] overflow-y-auto pr-1 divide-y divide-slate-100 border border-slate-200 rounded-xl p-3 bg-slate-50/50">
+                {captions.map((cap) => {
+                  const isEditing = editingCapId === cap.id;
 
-                    <button
-                      type="button"
-                      onClick={() => handleSelectWordFromTranscript(cap.text.split(' ')[0] || '')}
-                      className="text-[11px] text-amber-700 hover:underline px-2 py-0.5"
-                      title="Add vocabulary from this line"
-                    >
-                      + Vocab
-                    </button>
+                  if (isEditing) {
+                    return (
+                      <div key={cap.id} className="pt-2 p-3 bg-amber-50/80 border border-amber-300 rounded-xl space-y-2 text-xs">
+                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                          <div className="sm:col-span-3">
+                            <label className="block text-slate-600 text-[11px] font-semibold mb-0.5">Start (mm:ss)</label>
+                            <input
+                              type="text"
+                              value={editingCapStartStr}
+                              onChange={(e) => setEditingCapStartStr(e.target.value)}
+                              className="w-full p-1.5 bg-white border border-amber-300 rounded-lg font-mono text-xs"
+                            />
+                          </div>
+                          <div className="sm:col-span-3">
+                            <label className="block text-slate-600 text-[11px] font-semibold mb-0.5">End (mm:ss)</label>
+                            <input
+                              type="text"
+                              value={editingCapEndStr}
+                              onChange={(e) => setEditingCapEndStr(e.target.value)}
+                              className="w-full p-1.5 bg-white border border-amber-300 rounded-lg font-mono text-xs"
+                            />
+                          </div>
+                          <div className="sm:col-span-6">
+                            <label className="block text-slate-600 text-[11px] font-semibold mb-0.5">Speaker</label>
+                            <input
+                              type="text"
+                              value={editingCapSpeaker}
+                              onChange={(e) => setEditingCapSpeaker(e.target.value)}
+                              className="w-full p-1.5 bg-white border border-amber-300 rounded-lg text-xs"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-slate-600 text-[11px] font-semibold mb-0.5">Full Spoken Line</label>
+                          <textarea
+                            rows={2}
+                            value={editingCapText}
+                            onChange={(e) => setEditingCapText(e.target.value)}
+                            className="w-full p-2 bg-white border border-amber-300 rounded-lg text-xs break-words"
+                          />
+                        </div>
+                        <div className="flex items-center justify-end gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={handleCancelEditCaption}
+                            className="px-2.5 py-1 text-slate-600 hover:text-slate-900 text-xs font-semibold"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSaveEditCaption(cap.id)}
+                            className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold"
+                          >
+                            Save Line
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
 
-                    <button
-                      type="button"
-                      onClick={() => setCaptions(captions.filter((c) => c.id !== cap.id))}
-                      className="text-slate-400 hover:text-rose-600 p-1 rounded"
+                  return (
+                    <div
+                      key={cap.id}
+                      className="pt-2.5 flex items-start justify-between gap-3 text-xs p-2 hover:bg-white rounded-xl transition-colors group"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))}
+                      <span className="font-mono font-bold text-amber-900 bg-amber-100/70 px-2 py-0.5 rounded text-[11px] shrink-0 mt-0.5">
+                        {formatSec(cap.start)} - {formatSec(cap.end)}
+                      </span>
+
+                      <div className="flex-1 min-w-0 flex items-start gap-2">
+                        <span className="font-bold text-slate-900 shrink-0">
+                          {cap.speaker}:
+                        </span>
+                        {/* Display full caption line with zero truncation or abbreviation */}
+                        <span className="text-slate-800 break-words whitespace-normal leading-relaxed text-xs">
+                          {cap.text}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => handleStartEditCaption(cap)}
+                          className="text-slate-400 hover:text-amber-700 p-1 rounded hover:bg-slate-100 transition-colors cursor-pointer"
+                          title="Edit this caption line and timestamps"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleSelectWordFromTranscript(cap.text.split(' ')[0] || '')}
+                          className="text-[11px] font-semibold text-amber-700 hover:text-amber-900 hover:underline px-1.5 py-0.5"
+                          title="Add vocabulary from this line"
+                        >
+                          + Vocab
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setCaptions(captions.filter((c) => c.id !== cap.id))}
+                          className="text-slate-400 hover:text-rose-600 p-1 rounded hover:bg-slate-100 transition-colors cursor-pointer"
+                          title="Delete caption line"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -1223,13 +1445,25 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                     {!newQIsGeneral ? (
                       <div className="grid grid-cols-2 gap-3 text-xs pt-1 border-t border-slate-100">
                         <div>
-                          <label className="text-slate-700 block mb-1 font-semibold">Pause Timestamp (seconds)</label>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-slate-700 font-semibold">Pause Timestamp (mm:ss or sec)</label>
+                            <span className="text-[11px] font-mono text-amber-900 font-bold">
+                              {formatSec(newQTimestamp)}
+                            </span>
+                          </div>
                           <input
-                            type="number"
-                            value={newQTimestamp}
-                            onChange={(e) => setNewQTimestamp(parseInt(e.target.value) || 0)}
-                            className="w-full p-2 bg-white border border-slate-200 rounded-lg font-mono text-xs"
+                            type="text"
+                            value={newQTimestampStr}
+                            onChange={(e) => {
+                              setNewQTimestampStr(e.target.value);
+                              setNewQTimestamp(parseTimeToSeconds(e.target.value));
+                            }}
+                            placeholder="e.g. 01:30 or 90"
+                            className="w-full p-2 bg-white border border-slate-200 rounded-lg font-mono text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"
                           />
+                          <span className="text-[10px] text-slate-400 mt-0.5 block font-mono">
+                            Pauses at {formatSec(newQTimestamp)} ({newQTimestamp}s)
+                          </span>
                         </div>
                         <div>
                           <label className="text-slate-700 block mb-1 font-semibold">Question Type</label>
@@ -1369,14 +1603,49 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                   >
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        {typeof q.timestamp === 'number' && q.timestamp >= 0 ? (
-                          <span className="font-mono font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 text-[11px]">
-                            At {formatSec(q.timestamp)}
-                          </span>
+                        {editingQTimestampId === q.id ? (
+                          <div className="flex items-center gap-1.5 p-1 bg-amber-50 border border-amber-300 rounded-lg">
+                            <span className="text-[10px] font-semibold text-slate-600">Timestamp:</span>
+                            <input
+                              type="text"
+                              value={editingQTimestampStr}
+                              onChange={(e) => setEditingQTimestampStr(e.target.value)}
+                              placeholder="01:30"
+                              className="w-20 p-1 bg-white border border-amber-300 rounded font-mono text-xs"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleSaveEditQTimestamp(q.id)}
+                              className="px-2 py-0.5 bg-amber-600 text-white rounded text-[10px] font-bold"
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleCancelEditQTimestamp}
+                              className="px-1.5 py-0.5 text-slate-500 hover:text-slate-800 text-[10px]"
+                            >
+                              ✕
+                            </button>
+                          </div>
                         ) : (
-                          <span className="font-semibold px-2 py-0.5 rounded bg-indigo-100 text-indigo-900 text-[11px] border border-indigo-200">
-                            Whole Video / General (No Pause)
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            {typeof q.timestamp === 'number' && q.timestamp >= 0 ? (
+                              <button
+                                type="button"
+                                onClick={() => handleStartEditQTimestamp(q)}
+                                className="font-mono font-bold px-2 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 text-[11px] flex items-center gap-1 cursor-pointer"
+                                title="Click to edit pause timestamp in mm:ss"
+                              >
+                                <span>At {formatSec(q.timestamp)}</span>
+                                <Edit3 className="w-2.5 h-2.5 text-amber-700 opacity-60" />
+                              </button>
+                            ) : (
+                              <span className="font-semibold px-2 py-0.5 rounded bg-indigo-100 text-indigo-900 text-[11px] border border-indigo-200">
+                                Whole Video / General (No Pause)
+                              </span>
+                            )}
+                          </div>
                         )}
                         <span className="font-bold text-slate-700 uppercase text-[10px]">
                           {q.type.replace('_', ' ')}
@@ -1478,6 +1747,8 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                         onChange={(e) => setVocabLevel(e.target.value as any)}
                         className="w-full p-2 bg-white border border-slate-200 rounded-lg"
                       >
+                        <option value="A1">A1 Beginner</option>
+                        <option value="A2">A2 Elementary</option>
                         <option value="B1">B1 Intermediate</option>
                         <option value="B2">B2 Upper Intermediate</option>
                         <option value="C1">C1 Advanced</option>
@@ -1551,6 +1822,38 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                     />
                   </div>
 
+                  {/* Online Illustration Image URL */}
+                  <div>
+                    <label className="text-slate-600 block mb-1 font-semibold flex items-center gap-1.5">
+                      <ImageIcon className="w-3.5 h-3.5 text-amber-600" />
+                      <span>Illustration Image URL (optional)</span>
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="url"
+                        value={vocabImageUrl}
+                        onChange={(e) => setVocabImageUrl(e.target.value)}
+                        placeholder="https://images.unsplash.com/... (link to an image on the internet)"
+                        className="flex-1 p-2 bg-white border border-slate-200 rounded-lg text-xs font-mono"
+                      />
+                      {vocabImageUrl && (
+                        <div className="w-10 h-10 rounded-lg overflow-hidden border border-slate-200 bg-slate-100 shrink-0">
+                          <img
+                            src={vocabImageUrl}
+                            alt="Preview"
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = 'none';
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Paste a direct image link (.jpg, .png, .webp) from any website to visually illustrate this word or phrase to learners.
+                    </p>
+                  </div>
+
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -1591,6 +1894,20 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                     <div className="font-mono text-[11px] text-slate-500">{v.phonetic}</div>
                     <p className="text-slate-700 line-clamp-2 leading-relaxed">{v.definition}</p>
                     <p className="text-[11px] text-slate-500 italic truncate">"{v.example}"</p>
+
+                    {/* Illustration Image thumbnail */}
+                    {v.imageUrl && (
+                      <div className="mt-2 w-full h-32 rounded-lg overflow-hidden border border-slate-200 bg-slate-100 shadow-inner">
+                        <img
+                          src={v.imageUrl}
+                          alt={v.word}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLElement).style.display = 'none';
+                          }}
+                        />
+                      </div>
+                    )}
 
                     <div className="absolute top-2.5 right-2.5 flex items-center gap-1">
                       <button

@@ -183,8 +183,8 @@ export const LiveClassroomProjector: React.FC<LiveClassroomProjectorProps> = ({
           </div>
         </div>
 
-        {/* Player Container with built-in controls */}
-        <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-slate-800">
+        {/* Player Container with built-in controls (unclipped toolbar) */}
+        <div className="relative w-full rounded-2xl overflow-hidden shadow-2xl border border-slate-800">
           <UnifiedPlayer
             mediaType={activeLesson.mediaType}
             mediaUrl={activeLesson.mediaUrl}
@@ -227,6 +227,18 @@ export const LiveClassroomProjector: React.FC<LiveClassroomProjectorProps> = ({
                 <p className="text-[11px] text-amber-300/90 italic mt-1.5 border-t border-slate-800 pt-1.5">
                   "{session.activeVocabWord.example}"
                 </p>
+              )}
+              {session.activeVocabWord.imageUrl && (
+                <div className="mt-2.5 w-full h-36 rounded-xl overflow-hidden border border-slate-700 bg-black">
+                  <img
+                    src={session.activeVocabWord.imageUrl}
+                    alt={session.activeVocabWord.word}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLElement).style.display = 'none';
+                    }}
+                  />
+                </div>
               )}
             </div>
           )}

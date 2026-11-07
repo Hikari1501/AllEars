@@ -875,7 +875,7 @@ export default function App() {
             {/* Controls Bar: Search, CEFR Level Filter Tabs & Import Button */}
             <div className="flex items-center justify-between flex-wrap gap-4 pt-2">
               <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl overflow-x-auto max-w-full">
-                {['all', 'A2', 'B1', 'B2', 'C1'].map((lvl) => (
+                {['all', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2'].map((lvl) => (
                   <button
                     key={lvl}
                     onClick={() => setLevelFilter(lvl)}

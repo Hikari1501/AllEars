@@ -89,16 +89,20 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
         if (next) {
           if (typeof ytPlayerRef.current.loadModule === 'function') {
             ytPlayerRef.current.loadModule('captions');
+            ytPlayerRef.current.loadModule('cc');
           }
           if (typeof ytPlayerRef.current.setOption === 'function') {
             ytPlayerRef.current.setOption('captions', 'track', { languageCode: 'en' });
+            ytPlayerRef.current.setOption('cc', 'track', { languageCode: 'en' });
           }
         } else {
           if (typeof ytPlayerRef.current.unloadModule === 'function') {
             ytPlayerRef.current.unloadModule('captions');
+            ytPlayerRef.current.unloadModule('cc');
           }
           if (typeof ytPlayerRef.current.setOption === 'function') {
             ytPlayerRef.current.setOption('captions', 'track', {});
+            ytPlayerRef.current.setOption('cc', 'track', {});
           }
         }
       } catch (err) {
@@ -324,6 +328,10 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
 
   const getVocabHighlightClass = (level: string) => {
     switch (level) {
+      case 'A1':
+        return 'bg-sky-500/30 text-sky-300 border-b-2 border-sky-400 hover:bg-sky-500/50';
+      case 'A2':
+        return 'bg-teal-500/30 text-teal-300 border-b-2 border-teal-400 hover:bg-teal-500/50';
       case 'B1':
         return 'bg-emerald-500/30 text-emerald-300 border-b-2 border-emerald-400 hover:bg-emerald-500/50';
       case 'B2':
@@ -649,9 +657,22 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
             </button>
 
             <button
+              onClick={() => {
+                if (isControlledExternally) return;
+                seekTo(currentTime - 10);
+              }}
+              disabled={isControlledExternally}
+              className="px-1.5 py-1 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-colors font-mono text-[11px] flex items-center gap-0.5 cursor-pointer"
+              title="Rewind 10s"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>10s</span>
+            </button>
+
+            <button
               onClick={rewind5s}
               disabled={isControlledExternally}
-              className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
+              className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
               title="Rewind 5s (Left Arrow)"
             >
               <RotateCcw className="w-4 h-4" />
@@ -660,10 +681,23 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
             <button
               onClick={forward5s}
               disabled={isControlledExternally}
-              className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
+              className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
               title="Forward 5s (Right Arrow)"
             >
               <RotateCw className="w-4 h-4" />
+            </button>
+
+            <button
+              onClick={() => {
+                if (isControlledExternally) return;
+                seekTo(currentTime + 10);
+              }}
+              disabled={isControlledExternally}
+              className="px-1.5 py-1 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-colors font-mono text-[11px] flex items-center gap-0.5 cursor-pointer"
+              title="Forward 10s"
+            >
+              <span>10s</span>
+              <RotateCw className="w-3.5 h-3.5" />
             </button>
 
             {/* Time Indicator */}

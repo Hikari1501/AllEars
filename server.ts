@@ -702,11 +702,11 @@ app.post('/api/ai/vocab-enrich', async (req: Request, res: Response) => {
 ${transcriptText}
 """
 Identify 4 to 8 challenging or notable vocabulary words, phrasal verbs, or idioms suitable for English learners.
-Assign accurate CEFR levels (B1, B2, C1, or C2).
+Assign accurate CEFR levels (A1, A2, B1, B2, C1, or C2).
 For each word:
 - word: the target word or phrase in root form
 - phonetic: IPA phonetic spelling e.g. "/ˌkɑːm.prəˈhen.ʃən/"
-- cefrLevel: "B1", "B2", "C1", or "C2"
+- cefrLevel: "A1", "A2", "B1", "B2", "C1", or "C2"
 - partOfSpeech: "noun", "verb", "adjective", "adverb", "idiom", "phrasal verb", "pronoun", "preposition", "conjunction", "determiner", or "interjection"
 - definition: learner-friendly clear definition
 - example: an illustrative example sentence highlighting how to use it

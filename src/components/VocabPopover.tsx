@@ -30,6 +30,10 @@ export const VocabPopover: React.FC<VocabPopoverProps> = ({
 
   const getCefrBadgeStyle = (level: string) => {
     switch (level) {
+      case 'A1':
+        return 'bg-sky-50 text-sky-800 border-sky-300';
+      case 'A2':
+        return 'bg-teal-50 text-teal-800 border-teal-300';
       case 'B1':
         return 'bg-emerald-50 text-emerald-800 border-emerald-300';
       case 'B2':
@@ -101,6 +105,20 @@ export const VocabPopover: React.FC<VocabPopoverProps> = ({
             <div className="text-xs font-medium text-slate-500 mb-0.5">Illustrative Example</div>
             <p className="text-sm italic text-slate-700">"{vocab.example}"</p>
           </div>
+
+          {/* Online Illustration Image if available */}
+          {vocab.imageUrl && (
+            <div className="w-full h-44 rounded-xl overflow-hidden border border-slate-200 bg-slate-100 shadow-inner">
+              <img
+                src={vocab.imageUrl}
+                alt={vocab.word}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = 'none';
+                }}
+              />
+            </div>
+          )}
 
           {/* External Cambridge Dictionary Link & Teacher Broadcast */}
           <div className="pt-2 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2">

@@ -378,7 +378,7 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
             </span>
           </div>
 
-          <div className="w-full aspect-video bg-black rounded-xl overflow-hidden shadow-2xl">
+          <div className="w-full rounded-xl overflow-hidden shadow-2xl">
             <UnifiedPlayer
               mediaType={lesson.mediaType}
               mediaUrl={lesson.mediaUrl}

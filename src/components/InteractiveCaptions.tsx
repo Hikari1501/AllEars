@@ -36,6 +36,10 @@ export const InteractiveCaptions: React.FC<InteractiveCaptionsProps> = ({
   // Helper to color-code words
   const getVocabHighlightClass = (level: string) => {
     switch (level) {
+      case 'A1':
+        return 'bg-sky-100 text-sky-900 border-b-2 border-sky-500 hover:bg-sky-200';
+      case 'A2':
+        return 'bg-teal-100 text-teal-900 border-b-2 border-teal-500 hover:bg-teal-200';
       case 'B1':
         return 'bg-emerald-100 text-emerald-900 border-b-2 border-emerald-500 hover:bg-emerald-200';
       case 'B2':

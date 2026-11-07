@@ -17,7 +17,7 @@ export type QuestionType =
   | 'close_ended'
   | 'open_ended';
 
-export type CEFRLevel = 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
+export type CEFRLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
 
 export interface QuestionOption {
   id: string;
@@ -67,7 +67,7 @@ export type PartOfSpeech =
 export interface VocabEntry {
   word: string;
   phonetic: string;
-  cefrLevel: 'B1' | 'B2' | 'C1' | 'C2';
+  cefrLevel: 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
   partOfSpeech: PartOfSpeech;
   definition: string;
   example: string;
