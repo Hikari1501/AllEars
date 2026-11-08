@@ -540,6 +540,21 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
                         <p className="text-xs text-slate-700 font-medium line-clamp-2 leading-relaxed">
                           {q.prompt}
                         </p>
+
+                        {/* Options & Answer Key Snapshot */}
+                        <div className="pt-1.5 flex items-center justify-between text-[10px] text-slate-500 border-t border-slate-100 flex-wrap gap-1">
+                          <span className="uppercase font-semibold text-slate-400">
+                            {q.type.replace('_', ' ')}
+                            {q.options ? ` (${q.options.length} options)` : ''}
+                          </span>
+                          <span className="font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 truncate max-w-[170px]">
+                            Key: {q.type === 'multiple_choice'
+                              ? `Option ${(q.correctAnswer || (q.correctAnswers ? q.correctAnswers.join(', ') : 'a')).toUpperCase()}`
+                              : q.type === 'true_false'
+                              ? String(q.correctAnswer || 'true').toUpperCase()
+                              : q.correctAnswer || 'Answer key'}
+                          </span>
+                        </div>
                       </div>
                     );
                   })}
@@ -664,14 +679,132 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
                       {inspectingQuestion.prompt}
                     </h3>
 
-                    {/* Explanation / Correct Answer key for teacher reference */}
-                    {inspectingQuestion.explanation && (
-                      <div className="p-3 bg-emerald-50/70 border border-emerald-200/80 rounded-xl text-xs text-emerald-900 space-y-1">
-                        <div className="font-bold flex items-center gap-1.5">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>Correct Answer & Explanation:</span>
+                    {/* Options & Correct Answer Key for Teacher Inspection */}
+                    {inspectingQuestion.type === 'multiple_choice' && inspectingQuestion.options && (
+                      <div className="space-y-1.5 pt-1">
+                        <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                          <span>Question Options & Answer Key:</span>
+                          {inspectingQuestion.allowMultipleAnswers && (
+                            <span className="text-indigo-600 font-semibold lowercase">
+                              (multi-select allowed)
+                            </span>
+                          )}
                         </div>
-                        <p className="text-emerald-800 leading-relaxed font-normal">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {inspectingQuestion.options.map((opt) => {
+                            const isCorrect =
+                              inspectingQuestion.correctAnswers?.includes(opt.id) ||
+                              inspectingQuestion.correctAnswer === opt.id ||
+                              inspectingQuestion.correctAnswer === opt.text;
+
+                            return (
+                              <div
+                                key={opt.id}
+                                className={`p-2.5 rounded-xl border text-xs flex items-start gap-2.5 transition-colors ${
+                                  isCorrect
+                                    ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950 font-semibold ring-1 ring-emerald-400/40 shadow-2xs'
+                                    : 'bg-slate-50 border-slate-200 text-slate-700'
+                                }`}
+                              >
+                                <span
+                                  className={`w-5 h-5 rounded-md flex items-center justify-center font-mono font-bold text-[11px] shrink-0 uppercase ${
+                                    isCorrect
+                                      ? 'bg-emerald-600 text-white'
+                                      : 'bg-slate-200 text-slate-700'
+                                  }`}
+                                >
+                                  {opt.id}
+                                </span>
+                                <span className="flex-1 leading-snug">{opt.text}</span>
+                                {isCorrect && (
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-200 text-emerald-900 font-bold shrink-0 flex items-center gap-0.5">
+                                    <Check className="w-3 h-3 stroke-[2.5]" />
+                                    <span>Correct</span>
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* True / False Question Options */}
+                    {inspectingQuestion.type === 'true_false' && (
+                      <div className="space-y-1.5 pt-1">
+                        <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                          Answer Key:
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {['true', 'false'].map((tf) => {
+                            const isCorrect =
+                              (inspectingQuestion.correctAnswer || '').toLowerCase() === tf;
+
+                            return (
+                              <div
+                                key={tf}
+                                className={`p-2.5 rounded-xl border text-xs flex items-center justify-between capitalize ${
+                                  isCorrect
+                                    ? 'bg-emerald-50 border-emerald-300 text-emerald-950 font-bold ring-1 ring-emerald-400/40'
+                                    : 'bg-slate-50 border-slate-200 text-slate-600'
+                                }`}
+                              >
+                                <span>{tf}</span>
+                                {isCorrect && (
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-200 text-emerald-900 font-bold flex items-center gap-0.5">
+                                    <Check className="w-3 h-3 stroke-[2.5]" />
+                                    <span>Correct</span>
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Fill in the Blank Expected Answer */}
+                    {inspectingQuestion.type === 'close_ended' && (
+                      <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-xl text-xs space-y-1">
+                        <div className="font-bold text-emerald-900 flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Expected Correct Answer:</span>
+                        </div>
+                        <div className="font-mono text-sm font-bold text-emerald-950 bg-white/90 p-2 rounded-lg border border-emerald-200">
+                          "{inspectingQuestion.correctAnswer}"
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Matching Pairs Key */}
+                    {inspectingQuestion.type === 'matching' && inspectingQuestion.matchingPairs && inspectingQuestion.matchingPairs.length > 0 && (
+                      <div className="space-y-1.5 pt-1">
+                        <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                          Correct Matching Key:
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                          {inspectingQuestion.matchingPairs.map((pair, pIdx) => (
+                            <div
+                              key={pIdx}
+                              className="p-2 rounded-lg bg-emerald-50/80 border border-emerald-200 text-xs flex items-center justify-between gap-2"
+                            >
+                              <span className="font-semibold text-emerald-950">{pair.left}</span>
+                              <span className="text-emerald-600 font-bold">➔</span>
+                              <span className="font-medium text-emerald-900">{pair.right}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Explanation for teacher reference */}
+                    {inspectingQuestion.explanation && (
+                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1">
+                        <div className="font-bold text-slate-600 uppercase text-[10px] flex items-center gap-1.5">
+                          <BookOpen className="w-3.5 h-3.5 text-slate-500" />
+                          <span>Teacher Explanation & Learning Notes:</span>
+                        </div>
+                        <p className="text-slate-800 leading-relaxed font-normal">
                           {inspectingQuestion.explanation}
                         </p>
                       </div>

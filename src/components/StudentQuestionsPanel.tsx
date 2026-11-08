@@ -14,6 +14,8 @@ import {
   Check,
   Lock,
   Unlock,
+  X,
+  BookOpen,
 } from 'lucide-react';
 
 interface StudentQuestionsPanelProps {
@@ -192,6 +194,29 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
   const generalQuestions = questions.filter(
     (q) => q.timestamp === null || q.timestamp === undefined || q.timestamp < 0
   );
+
+  const getFormattedCorrectAnswer = (q: Question) => {
+    if (q.type === 'multiple_choice' && q.options) {
+      const expectedList = q.correctAnswers || (q.correctAnswer ? [q.correctAnswer] : []);
+      const matched = q.options.filter(
+        (o) => expectedList.includes(o.id) || expectedList.includes(o.text)
+      );
+      if (matched.length > 0) {
+        return matched.map((m) => `Option ${m.id.toUpperCase()}: "${m.text}"`).join(' and ');
+      }
+      return `Option ${(q.correctAnswer || 'A').toUpperCase()}`;
+    }
+    if (q.type === 'true_false') {
+      return String(q.correctAnswer || 'true').toUpperCase();
+    }
+    if (q.type === 'close_ended') {
+      return `"${q.correctAnswer || ''}"`;
+    }
+    if (q.type === 'matching' && q.matchingPairs) {
+      return q.matchingPairs.map((p) => `${p.left} ➔ ${p.right}`).join(' | ');
+    }
+    return q.correctAnswer || 'Model response';
+  };
 
   return (
     <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden flex flex-col h-full max-h-[calc(100vh-140px)]">
@@ -404,6 +429,24 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                             : existingAnswer?.answer === opt.id ||
                               selectedChoices[q.id]?.has(opt.id);
 
+                          const expectedList = q.correctAnswers || (q.correctAnswer ? [q.correctAnswer] : []);
+                          const isOptCorrect = expectedList.includes(opt.id) || expectedList.includes(opt.text);
+
+                          let buttonStyle = 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50';
+                          if (isSelected) {
+                            buttonStyle = 'bg-amber-500/15 border-amber-500 text-slate-950 font-semibold';
+                          }
+
+                          if (isFeedbackVisible) {
+                            if (isOptCorrect) {
+                              buttonStyle = 'bg-emerald-50 border-2 border-emerald-500 text-emerald-950 font-semibold ring-1 ring-emerald-400/40 shadow-2xs';
+                            } else if (isSelected && !isOptCorrect) {
+                              buttonStyle = 'bg-rose-50 border-2 border-rose-400 text-rose-950 font-medium';
+                            } else {
+                              buttonStyle = 'bg-slate-50 border-slate-200 text-slate-400 opacity-60';
+                            }
+                          }
+
                           return (
                             <button
                               key={opt.id}
@@ -411,21 +454,41 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                               disabled={isAnswered && !allowEditAnswer}
                               onClick={() => handleChoiceClick(q, opt.id)}
                               className={`w-full text-left p-2.5 rounded-lg border transition-all flex items-center justify-between gap-2 ${
-                                isAnswered && !allowEditAnswer ? 'cursor-not-allowed opacity-85' : 'cursor-pointer'
-                              } ${
-                                isSelected
-                                  ? 'bg-amber-500/15 border-amber-500 text-slate-950 font-semibold'
-                                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                              }`}
+                                isAnswered && !allowEditAnswer ? 'cursor-not-allowed' : 'cursor-pointer'
+                              } ${buttonStyle}`}
                             >
-                              <div className="flex items-center gap-2">
-                                <span className="w-5 h-5 rounded-md flex items-center justify-center font-mono font-bold text-[11px] bg-slate-100 text-slate-700 uppercase">
+                              <div className="flex items-center gap-2 flex-1">
+                                <span
+                                  className={`w-5 h-5 rounded-md flex items-center justify-center font-mono font-bold text-[11px] shrink-0 uppercase ${
+                                    isFeedbackVisible && isOptCorrect
+                                      ? 'bg-emerald-600 text-white'
+                                      : isFeedbackVisible && isSelected && !isOptCorrect
+                                      ? 'bg-rose-600 text-white'
+                                      : isSelected
+                                      ? 'bg-amber-600 text-white'
+                                      : 'bg-slate-100 text-slate-700'
+                                  }`}
+                                >
                                   {opt.id}
                                 </span>
-                                <span>{opt.text}</span>
+                                <span className="leading-snug">{opt.text}</span>
                               </div>
-                              {isSelected && (
-                                <Check className="w-4 h-4 text-amber-700 shrink-0" />
+
+                              {/* Right Feedback / Selection Status Badge */}
+                              {isFeedbackVisible ? (
+                                isOptCorrect ? (
+                                  <span className="px-2 py-0.5 rounded bg-emerald-200 text-emerald-950 text-[10px] font-bold flex items-center gap-1 shrink-0">
+                                    <Check className="w-3.5 h-3.5 text-emerald-800 stroke-[3]" />
+                                    <span>{isSelected ? 'Your Answer (Correct!)' : 'Correct Answer'}</span>
+                                  </span>
+                                ) : isSelected ? (
+                                  <span className="px-2 py-0.5 rounded bg-rose-200 text-rose-950 text-[10px] font-bold flex items-center gap-1 shrink-0">
+                                    <X className="w-3.5 h-3.5 text-rose-800 stroke-[3]" />
+                                    <span>Your Answer (Incorrect)</span>
+                                  </span>
+                                ) : null
+                              ) : (
+                                isSelected && <Check className="w-4 h-4 text-amber-700 shrink-0" />
                               )}
                             </button>
                           );
@@ -451,23 +514,49 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                           const isSelected =
                             existingAnswer?.answer === val ||
                             selectedChoices[q.id]?.has(val);
+                          const correctVal = (q.correctAnswer || 'true').toLowerCase();
+                          const isThisCorrect = correctVal === val;
+
+                          let tfStyle = 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50';
+                          if (isSelected) {
+                            tfStyle = val === 'true'
+                              ? 'bg-emerald-600 text-white border-emerald-700'
+                              : 'bg-rose-600 text-white border-rose-700';
+                          }
+
+                          if (isFeedbackVisible) {
+                            if (isThisCorrect) {
+                              tfStyle = 'bg-emerald-50 border-2 border-emerald-500 text-emerald-950 font-bold ring-1 ring-emerald-400/40 shadow-2xs';
+                            } else if (isSelected && !isThisCorrect) {
+                              tfStyle = 'bg-rose-50 border-2 border-rose-400 text-rose-950 font-medium';
+                            } else {
+                              tfStyle = 'bg-slate-50 border-slate-200 text-slate-400 opacity-60';
+                            }
+                          }
+
                           return (
                             <button
                               key={val}
                               type="button"
                               disabled={isAnswered && !allowEditAnswer}
                               onClick={() => handleChoiceClick(q, val)}
-                              className={`py-2 px-3 rounded-lg border font-bold capitalize transition-all ${
-                                isAnswered && !allowEditAnswer ? 'cursor-not-allowed opacity-85' : 'cursor-pointer'
-                              } ${
-                                isSelected
-                                  ? val === 'true'
-                                    ? 'bg-emerald-600 text-white border-emerald-700'
-                                    : 'bg-rose-600 text-white border-rose-700'
-                                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                              }`}
+                              className={`py-2 px-3 rounded-lg border font-bold capitalize transition-all flex items-center justify-between ${
+                                isAnswered && !allowEditAnswer ? 'cursor-not-allowed' : 'cursor-pointer'
+                              } ${tfStyle}`}
                             >
-                              {val}
+                              <span>{val}</span>
+                              {isFeedbackVisible && isThisCorrect && (
+                                <span className="px-1.5 py-0.5 rounded bg-emerald-200 text-emerald-950 text-[10px] font-bold flex items-center gap-0.5">
+                                  <Check className="w-3 h-3 stroke-[2.5]" />
+                                  <span>{isSelected ? 'Correct!' : 'Key'}</span>
+                                </span>
+                              )}
+                              {isFeedbackVisible && isSelected && !isThisCorrect && (
+                                <span className="px-1.5 py-0.5 rounded bg-rose-200 text-rose-950 text-[10px] font-bold flex items-center gap-0.5">
+                                  <X className="w-3 h-3 stroke-[2.5]" />
+                                  <span>Your Choice</span>
+                                </span>
+                              )}
                             </button>
                           );
                         })}
@@ -476,31 +565,48 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
 
                     {/* CLOSE-ENDED / FILL IN THE BLANK */}
                     {q.type === 'close_ended' && (
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          disabled={isAnswered && !allowEditAnswer}
-                          value={textAnswers[q.id] !== undefined ? textAnswers[q.id] : (existingAnswer?.answer || '')}
-                          onChange={(e) =>
-                            setTextAnswers((prev) => ({
-                              ...prev,
-                              [q.id]: e.target.value,
-                            }))
-                          }
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleTextSubmit(q);
-                          }}
-                          placeholder="Type your answer here..."
-                          className="flex-1 p-2 bg-white border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none disabled:bg-slate-100 disabled:cursor-not-allowed"
-                        />
-                        <button
-                          type="button"
-                          disabled={isAnswered && !allowEditAnswer}
-                          onClick={() => handleTextSubmit(q)}
-                          className="px-3 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-bold rounded-lg text-xs transition-colors shrink-0 cursor-pointer disabled:cursor-not-allowed"
-                        >
-                          {isAnswered ? 'Update' : 'Submit'}
-                        </button>
+                      <div className="space-y-2">
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            disabled={isAnswered && !allowEditAnswer}
+                            value={textAnswers[q.id] !== undefined ? textAnswers[q.id] : (existingAnswer?.answer || '')}
+                            onChange={(e) =>
+                              setTextAnswers((prev) => ({
+                                ...prev,
+                                [q.id]: e.target.value,
+                              }))
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleTextSubmit(q);
+                            }}
+                            placeholder="Type your answer here..."
+                            className="flex-1 p-2 bg-white border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none disabled:bg-slate-100 disabled:cursor-not-allowed"
+                          />
+                          <button
+                            type="button"
+                            disabled={isAnswered && !allowEditAnswer}
+                            onClick={() => handleTextSubmit(q)}
+                            className="px-3 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-bold rounded-lg text-xs transition-colors shrink-0 cursor-pointer disabled:cursor-not-allowed"
+                          >
+                            {isAnswered ? 'Update' : 'Submit'}
+                          </button>
+                        </div>
+
+                        {/* When feedback is visible, show correct expected text */}
+                        {isFeedbackVisible && (
+                          <div className="p-2.5 rounded-lg bg-emerald-50 border-2 border-emerald-400 text-xs text-emerald-950 flex items-center justify-between gap-2 shadow-2xs">
+                            <div className="flex items-center gap-2">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                              <span>Correct Answer: <strong className="font-mono text-sm underline decoration-emerald-500 font-bold">{q.correctAnswer}</strong></span>
+                            </div>
+                            {existingAnswer && !existingAnswer.isCorrect && (
+                              <span className="text-[11px] text-rose-800 font-mono bg-rose-100 px-2 py-0.5 rounded border border-rose-200">
+                                You typed: "{String(existingAnswer.answer)}"
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -562,6 +668,28 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                             ))}
                           </div>
                         </div>
+
+                        {/* When feedback is visible, display correct matching key */}
+                        {isFeedbackVisible && (
+                          <div className="mt-2.5 p-2.5 rounded-lg bg-emerald-50 border-2 border-emerald-400 text-xs text-emerald-950 space-y-1.5 shadow-2xs">
+                            <div className="font-bold flex items-center gap-1.5 text-emerald-900">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                              <span>Correct Matching Pairs:</span>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                              {q.matchingPairs.map((pair, pIdx) => (
+                                <div
+                                  key={pIdx}
+                                  className="p-1.5 bg-white rounded border border-emerald-200 text-[11px] flex items-center justify-between gap-1 shadow-2xs"
+                                >
+                                  <span className="font-semibold text-slate-800">{pair.left}</span>
+                                  <span className="text-emerald-600 font-bold">➔</span>
+                                  <span className="font-bold text-emerald-900">{pair.right}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -596,30 +724,62 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                   {/* Feedback Explanation Banner (shown when answered or revealed by teacher) */}
                   {isFeedbackVisible && (
                     <div
-                      className={`mt-3 p-2.5 rounded-lg border text-xs space-y-1 animate-in fade-in ${
+                      className={`mt-3 p-3.5 rounded-xl border text-xs space-y-2.5 animate-in fade-in shadow-2xs ${
                         existingAnswer.isCorrect
-                          ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
-                          : 'bg-amber-50/80 border-amber-200 text-amber-950'
+                          ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
+                          : 'bg-amber-50/90 border-amber-300 text-amber-950'
                       }`}
                     >
-                      <div className="font-bold flex items-center gap-1.5">
-                        {existingAnswer.isCorrect ? (
-                          <>
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>Correct answer! (+{existingAnswer.pointsEarned} pts)</span>
-                          </>
-                        ) : (
-                          <>
-                            <XCircle className="w-3.5 h-3.5 text-rose-600" />
-                            <span>Needs review</span>
-                          </>
-                        )}
+                      <div className="font-bold flex items-center justify-between gap-2 border-b border-black/5 pb-2">
+                        <div className="flex items-center gap-1.5 text-sm">
+                          {existingAnswer.isCorrect ? (
+                            <>
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600 stroke-[2.5]" />
+                              <span className="text-emerald-900 font-extrabold">Correct Answer!</span>
+                            </>
+                          ) : (
+                            <>
+                              <XCircle className="w-4 h-4 text-rose-600 stroke-[2.5]" />
+                              <span className="text-rose-900 font-extrabold">Needs Review</span>
+                            </>
+                          )}
+                        </div>
+                        <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-white/80 border border-slate-200 text-slate-800">
+                          +{existingAnswer.pointsEarned} pts
+                        </span>
                       </div>
 
+                      {/* Prominent Correct Answer Display */}
+                      <div className="p-2.5 rounded-lg bg-white/90 border border-emerald-300 space-y-1">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-900 flex items-center gap-1">
+                          <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" />
+                          <span>Correct Answer:</span>
+                        </div>
+                        <div className="text-xs font-bold text-emerald-950 leading-relaxed">
+                          {getFormattedCorrectAnswer(q)}
+                        </div>
+                      </div>
+
+                      {/* Explanation */}
                       {q.explanation && (
-                        <p className="text-[11px] text-slate-700 italic">
-                          Explanation: {q.explanation}
-                        </p>
+                        <div className="space-y-0.5 pt-0.5">
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                            Teacher Explanation:
+                          </div>
+                          <p className="text-xs text-slate-800 leading-relaxed font-normal">
+                            {q.explanation}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Optional AI Feedback for open-ended reflections */}
+                      {existingAnswer.aiFeedback && (
+                        <div className="p-2 bg-amber-100/60 border border-amber-300 rounded-lg text-xs space-y-0.5">
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-amber-900">
+                            Teacher / AI Feedback:
+                          </div>
+                          <p className="text-amber-950 leading-relaxed">{existingAnswer.aiFeedback}</p>
+                        </div>
                       )}
                     </div>
                   )}

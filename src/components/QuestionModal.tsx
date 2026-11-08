@@ -252,6 +252,29 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
     );
   }
 
+  const getFormattedCorrectAnswer = () => {
+    if (question.type === 'multiple_choice' && question.options) {
+      const expectedList = question.correctAnswers || (question.correctAnswer ? [question.correctAnswer] : []);
+      const matched = question.options.filter(
+        (o) => expectedList.includes(o.id) || expectedList.includes(o.text)
+      );
+      if (matched.length > 0) {
+        return matched.map((m) => `Option ${m.id.toUpperCase()}: "${m.text}"`).join(' and ');
+      }
+      return `Option ${(question.correctAnswer || 'A').toUpperCase()}`;
+    }
+    if (question.type === 'true_false') {
+      return String(question.correctAnswer || 'true').toUpperCase();
+    }
+    if (question.type === 'close_ended') {
+      return `"${question.correctAnswer || ''}"`;
+    }
+    if (question.type === 'matching' && question.matchingPairs) {
+      return question.matchingPairs.map((p) => `${p.left} ➔ ${p.right}`).join(' | ');
+    }
+    return question.correctAnswer || 'Model response';
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="w-full max-w-xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
@@ -534,13 +557,28 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
             </div>
           )}
 
-          {/* Explanation section once feedback is active */}
-          {canShowFeedback && question.explanation && (
-            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-              <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                Teacher Explanation
+          {/* Feedback & Explanation section once feedback is active */}
+          {canShowFeedback && (
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+              {/* Prominent Correct Answer Card */}
+              <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-lg text-xs space-y-1">
+                <div className="font-bold text-emerald-900 uppercase tracking-wider text-[10px] flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Correct Answer:</span>
+                </div>
+                <div className="text-sm font-bold text-emerald-950 leading-relaxed">
+                  {getFormattedCorrectAnswer()}
+                </div>
               </div>
-              <p className="text-sm text-slate-700 leading-relaxed">{question.explanation}</p>
+
+              {question.explanation && (
+                <div className="space-y-1">
+                  <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Teacher Explanation
+                  </div>
+                  <p className="text-sm text-slate-700 leading-relaxed">{question.explanation}</p>
+                </div>
+              )}
             </div>
           )}
 
