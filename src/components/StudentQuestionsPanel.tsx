@@ -17,6 +17,7 @@ import {
   X,
   BookOpen,
 } from 'lucide-react';
+import { MatchingPairsCanvas } from './MatchingPairsCanvas';
 
 interface StudentQuestionsPanelProps {
   questions: Question[];
@@ -115,7 +116,15 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
   const handleMatchingPair = (question: Question, left: string, right: string) => {
     if (answers[question.id] && !allowEditAnswer) return;
     const current = { ...(matchingSelections[question.id] || {}) };
-    current[left] = right;
+    if (!right) {
+      delete current[left];
+    } else {
+      // If another left item was already mapped to this right item, remove the previous mapping
+      Object.keys(current).forEach((k) => {
+        if (current[k] === right) delete current[k];
+      });
+      current[left] = right;
+    }
     setMatchingSelections((prev) => ({
       ...prev,
       [question.id]: current,
@@ -612,62 +621,15 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
 
                     {/* MATCHING PAIRS */}
                     {q.type === 'matching' && q.matchingPairs && (
-                      <div className="space-y-2 p-2.5 bg-slate-50 rounded-lg border border-slate-200">
-                        <div className="text-[10px] text-slate-500 font-semibold">
-                          Click a term on the left, then click its match on the right:
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="space-y-1.5">
-                            {q.matchingPairs.map((p) => {
-                              const paired = matchingSelections[q.id]?.[p.left];
-                              const isSelectedLeft = activeMatchingLeft[q.id] === p.left;
-                              return (
-                                <button
-                                  key={p.left}
-                                  type="button"
-                                  disabled={isAnswered && !allowEditAnswer}
-                                  onClick={() =>
-                                    setActiveMatchingLeft((prev) => ({
-                                      ...prev,
-                                      [q.id]: p.left,
-                                    }))
-                                  }
-                                  className={`w-full text-left p-1.5 rounded border text-[11px] transition-colors ${
-                                    isAnswered && !allowEditAnswer ? 'cursor-not-allowed opacity-85' : 'cursor-pointer'
-                                  } ${
-                                    isSelectedLeft
-                                      ? 'bg-amber-200 border-amber-400 font-bold'
-                                      : paired
-                                      ? 'bg-slate-200/80 border-slate-300'
-                                      : 'bg-white border-slate-200 hover:bg-slate-100'
-                                  }`}
-                                >
-                                  {p.left} {paired && `→ ${paired}`}
-                                </button>
-                              );
-                            })}
-                          </div>
-                          <div className="space-y-1.5">
-                            {q.matchingPairs.map((p) => (
-                              <button
-                                key={p.right}
-                                type="button"
-                                disabled={isAnswered && !allowEditAnswer}
-                                onClick={() => {
-                                  const currentLeft = activeMatchingLeft[q.id];
-                                  if (currentLeft) {
-                                    handleMatchingPair(q, currentLeft, p.right);
-                                  }
-                                }}
-                                className={`w-full text-left p-1.5 rounded border text-[11px] bg-white border-slate-200 hover:bg-amber-50 ${
-                                  isAnswered && !allowEditAnswer ? 'cursor-not-allowed opacity-85' : 'cursor-pointer'
-                                }`}
-                              >
-                                {p.right}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
+                      <div className="space-y-3">
+                        <MatchingPairsCanvas
+                          questionId={q.id}
+                          pairs={q.matchingPairs}
+                          currentSelections={matchingSelections[q.id] || {}}
+                          onPairMatch={(left, right) => handleMatchingPair(q, left, right)}
+                          disabled={isAnswered && !allowEditAnswer}
+                          isFeedbackVisible={isFeedbackVisible}
+                        />
 
                         {/* When feedback is visible, display correct matching key */}
                         {isFeedbackVisible && (

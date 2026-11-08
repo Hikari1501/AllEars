@@ -78,12 +78,13 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
         if (res.ok) {
           const data = await res.json();
           setSession(data.session);
-          if (data.session.currentQuestionId && !activeQuestion) {
+          if (data.session.currentQuestionId) {
             const found = lesson.questions.find((q) => q.id === data.session.currentQuestionId);
-            if (found) {
+            if (found && activeQuestion?.id !== found.id) {
               setActiveQuestion(found);
-              setSelectedQuestionId(found.id);
             }
+          } else if (!data.session.currentQuestionId && activeQuestion) {
+            setActiveQuestion(null);
           }
         }
       } catch (e) {
@@ -127,9 +128,21 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
   };
 
   const handleSeekToQuestion = (q: Question) => {
+    setActiveQuestion(q);
+    setSelectedQuestionId(q.id);
+    setSession((prev) =>
+      prev
+        ? {
+            ...prev,
+            currentQuestionId: q.id,
+            currentTime: typeof q.timestamp === 'number' ? q.timestamp : prev.currentTime,
+            isPlaying: false,
+          }
+        : null
+    );
+
     if (typeof q.timestamp === 'number') {
       setCurrentTime(q.timestamp);
-      setSelectedQuestionId(q.id);
       updateServerState({
         currentTime: q.timestamp,
         currentQuestionId: q.id,
@@ -137,7 +150,6 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
       });
       setPauseTrigger(Date.now());
     } else {
-      setSelectedQuestionId(q.id);
       updateServerState({
         currentQuestionId: q.id,
         isPlaying: false,
@@ -492,7 +504,8 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
                 <div className="space-y-2 max-h-[550px] overflow-y-auto pr-1">
                   {lesson.questions.map((q, idx) => {
                     const isSelected = inspectingQuestion?.id === q.id;
-                    const isActive = activeQuestion?.id === q.id;
+                    const currentActiveId = session?.currentQuestionId !== undefined ? session.currentQuestionId : activeQuestion?.id;
+                    const isActive = Boolean(currentActiveId && currentActiveId === q.id);
                     const answeredCount = studentsList.filter((s) => s.answers[q.id]).length;
 
                     return (
@@ -635,13 +648,21 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
 
                       <div className="flex items-center gap-2">
                         {typeof inspectingQuestion.timestamp === 'number' && (
-                          <button
-                            type="button"
-                            onClick={() => handleSeekToQuestion(inspectingQuestion)}
-                            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl text-xs transition-colors cursor-pointer"
-                          >
-                            Jump Video Here
-                          </button>
+                          (session?.currentQuestionId || activeQuestion?.id) === inspectingQuestion.id ? (
+                            <span className="px-3 py-1.5 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-2xs">
+                              <span className="w-2 h-2 rounded-full bg-slate-950 animate-ping" />
+                              Active Now on Student Screens
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleSeekToQuestion(inspectingQuestion)}
+                              className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-xs flex items-center gap-1.5"
+                            >
+                              <Play className="w-3.5 h-3.5 fill-current" />
+                              Jump Video Here
+                            </button>
+                          )
                         )}
 
                         <button

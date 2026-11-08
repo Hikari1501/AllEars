@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Question, StudentAnswer } from '../types';
+import { MatchingPairsCanvas } from './MatchingPairsCanvas';
 import {
   CheckCircle2,
   XCircle,
@@ -442,82 +443,43 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
           {/* Type: Matching Pairs */}
           {question.type === 'matching' && question.matchingPairs && (
             <div className="space-y-4">
-              <p className="text-xs text-slate-500">
-                Click an item on the left, then click its corresponding match on the right.
-              </p>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <div className="text-xs font-bold uppercase tracking-wider text-slate-400">Items</div>
-                  {question.matchingPairs.map((pair) => {
-                    const isSelected = selectedLeftItem === pair.left;
-                    const isPaired = !!matchingSelections[pair.left];
-
-                    return (
-                      <button
-                        key={pair.left}
-                        disabled={hasSubmitted}
-                        onClick={() => handleMatchLeftClick(pair.left)}
-                        className={`w-full p-3 rounded-xl border text-left text-xs font-medium transition-all ${
-                          isSelected
-                            ? 'border-amber-500 bg-amber-50 ring-2 ring-amber-400'
-                            : isPaired
-                            ? 'border-emerald-300 bg-emerald-50/60 text-slate-800'
-                            : 'border-slate-200 hover:border-slate-300 bg-white text-slate-800'
-                        }`}
-                      >
-                        <div>{pair.left}</div>
-                        {isPaired && (
-                          <div className="text-[11px] text-emerald-700 mt-1 flex items-center gap-1">
-                            <Check className="w-3 h-3" />
-                            <span>Matched</span>
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="space-y-2">
-                  <div className="text-xs font-bold uppercase tracking-wider text-slate-400">Matches</div>
-                  {question.matchingPairs.map((pair) => {
-                    const matchedLeft = Object.keys(matchingSelections).find(
-                      (k) => matchingSelections[k] === pair.right
-                    );
-
-                    return (
-                      <button
-                        key={pair.right}
-                        disabled={hasSubmitted}
-                        onClick={() => handleMatchRightClick(pair.right)}
-                        className={`w-full p-3 rounded-xl border text-left text-xs transition-all ${
-                          selectedLeftItem
-                            ? 'border-amber-300 hover:border-amber-500 hover:bg-amber-50/40 cursor-pointer'
-                            : matchedLeft
-                            ? 'border-emerald-300 bg-emerald-50/60 text-slate-800 font-medium'
-                            : 'border-slate-200 bg-slate-50 text-slate-700'
-                        }`}
-                      >
-                        <div>{pair.right}</div>
-                        {matchedLeft && (
-                          <div className="text-[10px] text-emerald-800 mt-1 font-bold">
-                            Linked to: {matchedLeft}
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+              <MatchingPairsCanvas
+                questionId={question.id}
+                pairs={question.matchingPairs}
+                currentSelections={matchingSelections}
+                onPairMatch={(left, right) =>
+                  setMatchingSelections((prev) => {
+                    const next = { ...prev };
+                    if (!right) {
+                      delete next[left];
+                    } else {
+                      Object.keys(next).forEach((k) => {
+                        if (next[k] === right) delete next[k];
+                      });
+                      next[left] = right;
+                    }
+                    return next;
+                  })
+                }
+                disabled={hasSubmitted}
+                isFeedbackVisible={canShowFeedback}
+              />
 
               {canShowFeedback && (
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-1">
-                  <div className="font-bold text-slate-800">Correct Pairs:</div>
-                  {question.matchingPairs.map((p) => (
-                    <div key={p.left} className="text-slate-600">
-                      • <span className="font-medium text-slate-900">{p.left}</span> ➔ {p.right}
-                    </div>
-                  ))}
+                <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-lg text-xs space-y-1.5 text-emerald-950">
+                  <div className="font-bold flex items-center gap-1.5 text-emerald-900">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Correct Matching Pairs:</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    {question.matchingPairs.map((p) => (
+                      <div key={p.left} className="p-2 rounded bg-white border border-emerald-200">
+                        <span className="font-bold text-slate-900">{p.left}</span>
+                        <span className="text-emerald-700 mx-1.5">➔</span>
+                        <span className="text-slate-700">{p.right}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
