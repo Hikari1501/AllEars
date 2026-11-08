@@ -242,6 +242,42 @@ export const LiveClassroomProjector: React.FC<LiveClassroomProjectorProps> = ({
               )}
             </div>
           )}
+
+          {/* Active Student Response Spotlight Overlay (Anonymous) */}
+          {session?.activeStudentResponse && (
+            <div className="absolute top-4 left-4 max-w-md bg-slate-900/95 backdrop-blur-md border-2 border-indigo-500 rounded-2xl p-4 shadow-2xl text-left animate-in fade-in slide-in-from-top-2 z-30 space-y-2">
+              <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                <div className="flex items-center gap-1.5 text-indigo-400 text-xs font-bold uppercase tracking-wider">
+                  <Radio className="w-3.5 h-3.5 animate-pulse" />
+                  <span>Student Response Spotlight</span>
+                </div>
+                <span className="text-[10px] px-2 py-0.5 rounded font-mono font-bold bg-indigo-950 text-indigo-300 border border-indigo-700">
+                  Anonymous
+                </span>
+              </div>
+
+              <div>
+                <div className="text-[10px] uppercase font-bold text-slate-400">Question</div>
+                <p className="text-xs text-white font-semibold leading-snug">
+                  {session.activeStudentResponse.questionPrompt}
+                </p>
+              </div>
+
+              <div className="p-2.5 bg-slate-950/80 rounded-xl border border-slate-800">
+                <div className="text-[10px] text-slate-400 uppercase font-bold mb-0.5">Submitted Answer</div>
+                <p className="text-sm font-mono font-bold text-amber-300">
+                  "{session.activeStudentResponse.answerText}"
+                </p>
+              </div>
+
+              {session.activeStudentResponse.explanation && (
+                <div className="p-2 bg-slate-800/80 rounded-lg text-[11px] text-slate-300">
+                  <span className="font-bold text-amber-400">Note: </span>
+                  {session.activeStudentResponse.explanation}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Live Synchronized Timed Captions */}

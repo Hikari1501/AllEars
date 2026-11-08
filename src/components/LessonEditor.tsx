@@ -968,7 +968,6 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                     placeholder="00:00"
                     className="w-full p-2 bg-white border border-amber-300 rounded-lg font-mono text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"
                   />
-                  <span className="text-[10px] text-slate-400 mt-0.5 block font-mono">Raw: {trimStart}s</span>
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1">
@@ -986,7 +985,6 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                     placeholder="03:00"
                     className="w-full p-2 bg-white border border-amber-300 rounded-lg font-mono text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"
                   />
-                  <span className="text-[10px] text-slate-400 mt-0.5 block font-mono">Raw: {trimEnd}s</span>
                 </div>
               </div>
             </div>
@@ -1086,12 +1084,12 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                     onChange={(e) => setLevel(e.target.value as CEFRLevel)}
                     className="w-full p-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl"
                   >
-                    <option value="A1">A1 Beginner</option>
-                    <option value="A2">A2 Elementary</option>
-                    <option value="B1">B1 Intermediate</option>
-                    <option value="B2">B2 Upper Intermediate</option>
-                    <option value="C1">C1 Advanced</option>
-                    <option value="C2">C2 Mastery</option>
+                    <option value="A1">A1</option>
+                    <option value="A2">A2</option>
+                    <option value="B1">B1</option>
+                    <option value="B2">B2</option>
+                    <option value="C1">C1</option>
+                    <option value="C2">C2</option>
                   </select>
                 </div>
 
@@ -1669,6 +1667,31 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                     </div>
                   )}
 
+                  {newQType === 'true_false' && (
+                    <div className="space-y-1.5 text-xs">
+                      <label className="font-semibold text-slate-700">Correct Answer</label>
+                      <div className="flex items-center gap-3">
+                        {['true', 'false'].map((tf) => {
+                          const isSelected = Array.from(newQCorrectAnswers)[0] === tf;
+                          return (
+                            <button
+                              key={tf}
+                              type="button"
+                              onClick={() => setNewQCorrectAnswers(new Set([tf]))}
+                              className={`px-4 py-2 rounded-xl text-xs font-bold capitalize border transition-all cursor-pointer ${
+                                isSelected
+                                  ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
+                                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                              }`}
+                            >
+                              {isSelected ? `✓ ${tf}` : tf}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   {newQType === 'close_ended' && (
                     <div className="space-y-1 text-xs">
                       <label className="font-semibold text-slate-700">Expected Answer</label>
@@ -1679,6 +1702,87 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                         placeholder="Expected exact word or phrase"
                         className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs"
                       />
+                    </div>
+                  )}
+
+                  {newQType === 'matching' && (
+                    <div className="space-y-3 text-xs bg-white p-3.5 border border-slate-200 rounded-xl">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-bold text-slate-800">Matching Pairs Setup</div>
+                          <div className="text-[11px] text-slate-500">
+                            Set pairs for students to connect (e.g. Vocabulary & Meaning, Sentence Halves)
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewQMatchingPairs([
+                              ...newQMatchingPairs,
+                              { left: `Item ${newQMatchingPairs.length + 1}`, right: `Match ${newQMatchingPairs.length + 1}` },
+                            ]);
+                          }}
+                          className="px-2.5 py-1 bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-300 rounded-lg font-bold text-[11px] flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>Add Pair</span>
+                        </button>
+                      </div>
+
+                      <div className="space-y-2">
+                        {newQMatchingPairs.map((pair, pIdx) => (
+                          <div key={pIdx} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5">
+                            <div className="flex items-center justify-between text-[11px] font-bold text-slate-600">
+                              <span>Pair #{pIdx + 1}</span>
+                              {newQMatchingPairs.length > 2 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setNewQMatchingPairs(newQMatchingPairs.filter((_, idx) => idx !== pIdx));
+                                  }}
+                                  className="text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                                  title="Delete pair"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                              <div className="sm:col-span-5">
+                                <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">Left Item (Prompt / Term)</label>
+                                <input
+                                  type="text"
+                                  value={pair.left}
+                                  onChange={(e) => {
+                                    const copy = [...newQMatchingPairs];
+                                    copy[pIdx] = { ...copy[pIdx], left: e.target.value };
+                                    setNewQMatchingPairs(copy);
+                                  }}
+                                  placeholder="e.g. Word or clause..."
+                                  className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs"
+                                />
+                              </div>
+                              <div className="hidden sm:flex sm:col-span-2 items-center justify-center text-slate-400 font-bold">
+                                ➔
+                              </div>
+                              <div className="sm:col-span-5">
+                                <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">Right Item (Target Match)</label>
+                                <input
+                                  type="text"
+                                  value={pair.right}
+                                  onChange={(e) => {
+                                    const copy = [...newQMatchingPairs];
+                                    copy[pIdx] = { ...copy[pIdx], right: e.target.value };
+                                    setNewQMatchingPairs(copy);
+                                  }}
+                                  placeholder="e.g. Definition or match..."
+                                  className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
 
@@ -1935,12 +2039,12 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                         onChange={(e) => setVocabLevel(e.target.value as any)}
                         className="w-full p-2 bg-white border border-slate-200 rounded-lg"
                       >
-                        <option value="A1">A1 Beginner</option>
-                        <option value="A2">A2 Elementary</option>
-                        <option value="B1">B1 Intermediate</option>
-                        <option value="B2">B2 Upper Intermediate</option>
-                        <option value="C1">C1 Advanced</option>
-                        <option value="C2">C2 Mastery</option>
+                        <option value="A1">A1</option>
+                        <option value="A2">A2</option>
+                        <option value="B1">B1</option>
+                        <option value="B2">B2</option>
+                        <option value="C1">C1</option>
+                        <option value="C2">C2</option>
                       </select>
                     </div>
                     <div>

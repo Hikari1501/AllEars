@@ -618,6 +618,60 @@ export async function addStudent(student: StudentRecord): Promise<StudentRecord>
   return student;
 }
 
+export async function getAllStudents(): Promise<{ id: string; name: string; email: string; createdAt?: string }[]> {
+  if (isPostgresActive && pool) {
+    try {
+      const res = await pool.query('SELECT id, name, email, created_at FROM students ORDER BY created_at DESC');
+      return res.rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        email: r.email,
+        createdAt: r.created_at,
+      }));
+    } catch (e) {
+      console.error('[DB] Error fetching all students from PostgreSQL:', e);
+    }
+  }
+
+  // Fallback memory / JSON
+  const list = Object.values(memoryStudents);
+  const seen = new Set<string>();
+  return list.filter((s) => {
+    const key = s.id || s.email.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).map((s) => ({
+    id: s.id,
+    name: s.name,
+    email: s.email,
+    createdAt: s.createdAt || new Date().toISOString(),
+  }));
+}
+
+export async function deleteStudent(studentId: string): Promise<boolean> {
+  if (isPostgresActive && pool) {
+    try {
+      await pool.query('DELETE FROM student_lessons WHERE student_id = $1', [studentId]);
+      await pool.query('DELETE FROM students WHERE id = $1', [studentId]);
+      return true;
+    } catch (e) {
+      console.error('[DB] Error deleting student from PostgreSQL:', e);
+    }
+  }
+
+  // Fallback memory / JSON
+  delete memoryStudentLessons[studentId];
+  for (const k of Object.keys(memoryStudents)) {
+    if (memoryStudents[k].id === studentId) {
+      delete memoryStudents[k];
+    }
+  }
+  writeJsonSafe(STUDENTS_FILE, memoryStudents);
+  writeJsonSafe(STUDENT_LESSONS_FILE, memoryStudentLessons);
+  return true;
+}
+
 export async function getStudentLessons(studentId: string): Promise<Lesson[]> {
   if (isPostgresActive && pool) {
     try {

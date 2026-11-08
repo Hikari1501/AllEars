@@ -1,6 +1,6 @@
 import React from 'react';
 import { UserAccount } from '../types';
-import { Headphones, Radio, Shield, LogIn, LogOut, User, FileUp } from 'lucide-react';
+import { Headphones, Radio, Shield, LogIn, LogOut, User, FileUp, Users } from 'lucide-react';
 
 interface NavbarProps {
   currentTab: 'lessons' | 'live' | 'create' | 'reports';
@@ -8,6 +8,7 @@ interface NavbarProps {
   currentUser: UserAccount;
   onOpenTeacherLogin: () => void;
   onOpenTeacherManagement: () => void;
+  onOpenStudentManagement?: () => void;
   onOpenStudentAuth: () => void;
   onSignOut: () => void;
   onOpenJoinModal: () => void;
@@ -20,6 +21,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   currentUser,
   onOpenTeacherLogin,
   onOpenTeacherManagement,
+  onOpenStudentManagement,
   onOpenStudentAuth,
   onSignOut,
   onOpenJoinModal,
@@ -126,6 +128,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                   title="Manage Authorized Teachers"
                 >
                   <Shield className="w-4 h-4 text-amber-600" />
+                </button>
+              )}
+
+              {onOpenStudentManagement && (
+                <button
+                  onClick={onOpenStudentManagement}
+                  className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition-colors cursor-pointer shadow-2xs"
+                  title="Manage Student Accounts"
+                >
+                  <Users className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Students</span>
                 </button>
               )}
 

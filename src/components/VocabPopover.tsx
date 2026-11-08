@@ -106,13 +106,13 @@ export const VocabPopover: React.FC<VocabPopoverProps> = ({
             <p className="text-sm italic text-slate-700">"{vocab.example}"</p>
           </div>
 
-          {/* Online Illustration Image if available - scales to fit without cropping */}
+          {/* Online Illustration Image if available - resized and scaled to fit so entire popup and image are visible */}
           {vocab.imageUrl && (
             <div className="w-full rounded-xl overflow-hidden border border-slate-200 bg-slate-900/5 flex items-center justify-center p-2 shadow-inner">
               <img
                 src={vocab.imageUrl}
                 alt={vocab.word}
-                className="max-h-72 w-auto max-w-full rounded-lg object-contain shadow-xs"
+                className="max-h-36 sm:max-h-40 w-auto max-w-full rounded-lg object-contain shadow-xs"
                 onError={(e) => {
                   (e.target as HTMLElement).style.display = 'none';
                 }}

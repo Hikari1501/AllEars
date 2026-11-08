@@ -23,6 +23,8 @@ import {
   StudentRecord,
   findStudent,
   addStudent,
+  getAllStudents,
+  deleteStudent,
   getStudentLessons,
   saveStudentLesson,
   deleteStudentLesson,
@@ -78,6 +80,7 @@ interface LiveSession {
   currentQuestionId: string | null;
   revealedFeedbackForQuestionId: string | null;
   activeVocabWord: any | null;
+  activeStudentResponse: any | null;
   allowEditAnswer?: boolean;
   allowStudentCaptions?: boolean;
   isCompleted: boolean;
@@ -149,11 +152,29 @@ app.get('/api/auth/teachers', async (_req: Request, res: Response) => {
   res.json({ teachers });
 });
 
-// Student Registration API (Backed by PostgreSQL / DB)
-app.post('/api/auth/student-register', async (req: Request, res: Response) => {
+// Public student registration is disabled (student accounts are managed by teachers)
+app.post('/api/auth/student-register', async (_req: Request, res: Response) => {
+  return res.status(403).json({
+    error: 'Student self-registration is disabled. Student accounts must be created by an authorized teacher.',
+  });
+});
+
+// Teacher: Get all registered student accounts
+app.get('/api/teacher/students', async (_req: Request, res: Response) => {
+  try {
+    const students = await getAllStudents();
+    res.json({ students });
+  } catch (e) {
+    console.error('[API] Error fetching student accounts:', e);
+    res.status(500).json({ error: 'Failed to retrieve students' });
+  }
+});
+
+// Teacher: Create a new student account
+app.post('/api/teacher/students', async (req: Request, res: Response) => {
   const { name, email, password } = req.body;
   if (!name || !email || !password) {
-    return res.status(400).json({ error: 'Name, email, and password required' });
+    return res.status(400).json({ error: 'Name, email/username, and password required' });
   }
 
   const existing = await findStudent(email);
@@ -166,19 +187,36 @@ app.post('/api/auth/student-register', async (req: Request, res: Response) => {
     name: name.trim(),
     email: email.trim(),
     password: password.trim(),
+    createdAt: new Date().toISOString(),
   };
 
   await addStudent(newStudent);
 
   res.json({
     success: true,
-    user: {
+    student: {
       id: newStudent.id,
       name: newStudent.name,
       email: newStudent.email,
-      role: 'student',
+      createdAt: newStudent.createdAt,
     },
   });
+});
+
+// Teacher: Delete a student account
+app.delete('/api/teacher/students/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  if (!id) {
+    return res.status(400).json({ error: 'Student ID required' });
+  }
+
+  try {
+    await deleteStudent(id);
+    res.json({ success: true, id });
+  } catch (e) {
+    console.error('[API] Error deleting student account:', e);
+    res.status(500).json({ error: 'Failed to delete student account' });
+  }
 });
 
 // Student Login API (Backed by PostgreSQL / DB)
@@ -432,6 +470,7 @@ app.post('/api/live/create', async (req: Request, res: Response) => {
     currentQuestionId: null,
     revealedFeedbackForQuestionId: null,
     activeVocabWord: null,
+    activeStudentResponse: null,
     allowEditAnswer: false,
     allowStudentCaptions: true,
     isCompleted: false,
@@ -499,7 +538,7 @@ app.post('/api/live/join', (req: Request, res: Response) => {
 
 // Update live session state (supported via /api/live/update-state and /api/live/update alias)
 const handleUpdateSessionState = (req: Request, res: Response) => {
-  const { pin, currentTime, isPlaying, playbackSpeed, currentQuestionId, isCompleted, activeVocabWord, allowEditAnswer, allowStudentCaptions } = req.body;
+  const { pin, currentTime, isPlaying, playbackSpeed, currentQuestionId, isCompleted, activeVocabWord, activeStudentResponse, allowEditAnswer, allowStudentCaptions } = req.body;
   const session = liveSessions[pin];
   if (!session) {
     return res.status(404).json({ error: 'Session not found' });
@@ -517,6 +556,9 @@ const handleUpdateSessionState = (req: Request, res: Response) => {
     if (activeVocabWord) {
       session.isPlaying = false;
     }
+  }
+  if (activeStudentResponse !== undefined) {
+    session.activeStudentResponse = activeStudentResponse;
   }
   session.lastUpdated = Date.now();
 

@@ -127,6 +127,15 @@ export interface LiveStudentData {
   joinedAt: number;
 }
 
+export interface AnonymousStudentResponse {
+  questionId: string;
+  questionPrompt: string;
+  questionType?: string;
+  answerText: string;
+  isCorrect?: boolean;
+  explanation?: string;
+}
+
 export interface LiveSessionState {
   pin: string;
   lessonId: string;
@@ -138,6 +147,7 @@ export interface LiveSessionState {
   currentQuestionId: string | null;
   revealedFeedbackForQuestionId: string | null;
   activeVocabWord?: VocabEntry | null;
+  activeStudentResponse?: AnonymousStudentResponse | null;
   allowEditAnswer?: boolean;
   allowStudentCaptions?: boolean;
   isCompleted: boolean;

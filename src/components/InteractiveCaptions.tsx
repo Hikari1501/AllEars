@@ -165,22 +165,30 @@ export const InteractiveCaptions: React.FC<InteractiveCaptionsProps> = ({
 
         {/* Vocabulary Color Legend */}
         <div className="mt-3 pt-2 border-t border-slate-800/80 flex items-center justify-center gap-3 sm:gap-4 text-[11px] flex-wrap text-slate-400">
-          <span className="text-slate-500">CEFR Vocabulary:</span>
+          <span className="text-slate-500">Vocabulary:</span>
+          <span className="flex items-center gap-1">
+            <span className="w-2.5 h-2.5 rounded-sm bg-sky-400"></span>
+            <span>A1</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="w-2.5 h-2.5 rounded-sm bg-teal-400"></span>
+            <span>A2</span>
+          </span>
           <span className="flex items-center gap-1">
             <span className="w-2.5 h-2.5 rounded-sm bg-emerald-400"></span>
-            <span>B1 Intermediate</span>
+            <span>B1</span>
           </span>
           <span className="flex items-center gap-1">
             <span className="w-2.5 h-2.5 rounded-sm bg-amber-400"></span>
-            <span>B2 Upper-Int</span>
+            <span>B2</span>
           </span>
           <span className="flex items-center gap-1">
             <span className="w-2.5 h-2.5 rounded-sm bg-indigo-400"></span>
-            <span>C1 Advanced</span>
+            <span>C1</span>
           </span>
           <span className="flex items-center gap-1">
             <span className="w-2.5 h-2.5 rounded-sm bg-rose-400"></span>
-            <span>C2 Mastery</span>
+            <span>C2</span>
           </span>
         </div>
       </div>

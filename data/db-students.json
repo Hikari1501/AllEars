@@ -1,14 +1,1 @@
-{
-  "alice@test.edu": {
-    "id": "student-1794015669627",
-    "name": "Alice Student",
-    "email": "alice@test.edu",
-    "password": "password123"
-  },
-  "alice student": {
-    "id": "student-1794015669627",
-    "name": "Alice Student",
-    "email": "alice@test.edu",
-    "password": "password123"
-  }
-}
+{}

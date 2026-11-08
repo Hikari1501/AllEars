@@ -16,6 +16,7 @@ import { JoinModal } from './components/JoinModal';
 import { TeacherLoginModal } from './components/TeacherLoginModal';
 import { TeacherManagementModal } from './components/TeacherManagementModal';
 import { StudentAccountModal } from './components/StudentAccountModal';
+import { StudentManagementModal } from './components/StudentManagementModal';
 import { LiveClassroomProjector } from './components/LiveClassroomProjector';
 import { ImportLessonModal } from './components/ImportLessonModal';
 import { ExportLessonModal } from './components/ExportLessonModal';
@@ -147,10 +148,18 @@ export default function App() {
   const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
   const [isTeacherLoginOpen, setIsTeacherLoginOpen] = useState(false);
   const [isTeacherManagementOpen, setIsTeacherManagementOpen] = useState(false);
+  const [isStudentManagementOpen, setIsStudentManagementOpen] = useState(false);
   const [isStudentAccountOpen, setIsStudentAccountOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [exportingLesson, setExportingLesson] = useState<Lesson | null>(null);
   const [importNotification, setImportNotification] = useState<string | null>(null);
+
+  const handlePracticeRandomLesson = () => {
+    const pool = lessons.filter((l) => currentUser.role === 'teacher' || l.isPublished !== false);
+    if (pool.length === 0) return;
+    const randomIndex = Math.floor(Math.random() * pool.length);
+    setActiveHomeworkLesson(pool[randomIndex]);
+  };
 
   // Standalone Screen Share / Projector Tab Mode
   const projectorPin = useMemo(() => {
@@ -627,6 +636,7 @@ export default function App() {
         currentUser={currentUser}
         onOpenTeacherLogin={() => setIsTeacherLoginOpen(true)}
         onOpenTeacherManagement={() => setIsTeacherManagementOpen(true)}
+        onOpenStudentManagement={() => setIsStudentManagementOpen(true)}
         onOpenStudentAuth={() => setIsStudentAccountOpen(true)}
         onSignOut={handleSignOut}
         onOpenJoinModal={() => setIsJoinModalOpen(true)}
@@ -830,11 +840,11 @@ export default function App() {
 
                   <div className="flex items-center gap-3 pt-2 flex-wrap">
                     <button
-                      onClick={() => setActiveHomeworkLesson(lessons[0])}
+                      onClick={handlePracticeRandomLesson}
                       className="flex items-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs tracking-wide transition-all shadow-md cursor-pointer"
                     >
                       <Play className="w-4 h-4 fill-current" />
-                      <span>Practice Lesson (TED-Ed Curiosity)</span>
+                      <span>Practice Random Lesson</span>
                     </button>
 
                     {isTeacher ? (
@@ -872,7 +882,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Controls Bar: Search, CEFR Level Filter Tabs & Import Button */}
+            {/* Controls Bar: Search, Level Filter Tabs & Import Button */}
             <div className="flex items-center justify-between flex-wrap gap-4 pt-2">
               <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl overflow-x-auto max-w-full">
                 {['all', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2'].map((lvl) => (
@@ -885,7 +895,7 @@ export default function App() {
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    {lvl === 'all' ? 'All Levels' : `CEFR ${lvl}`}
+                    {lvl === 'all' ? 'All Levels' : lvl}
                   </button>
                 ))}
               </div>
@@ -1175,6 +1185,13 @@ export default function App() {
       {isTeacherManagementOpen && (
         <TeacherManagementModal
           onClose={() => setIsTeacherManagementOpen(false)}
+        />
+      )}
+
+      {/* Student Account Management Modal for Teachers */}
+      {isStudentManagementOpen && (
+        <StudentManagementModal
+          onClose={() => setIsStudentManagementOpen(false)}
         />
       )}
 

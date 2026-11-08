@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, User, Lock, Mail, ArrowRight, AlertCircle, Sparkles, ShieldCheck } from 'lucide-react';
+import { X, User, Lock, Mail, ArrowRight, AlertCircle, ShieldCheck, Info } from 'lucide-react';
 import { UserAccount } from '../types';
 
 interface StudentAccountModalProps {
@@ -13,8 +13,6 @@ export const StudentAccountModal: React.FC<StudentAccountModalProps> = ({
   onClose,
   onSuccess,
 }) => {
-  const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -28,58 +26,30 @@ export const StudentAccountModal: React.FC<StudentAccountModalProps> = ({
     setIsLoading(true);
 
     try {
-      if (mode === 'register') {
-        if (!name.trim() || !email.trim() || !password.trim()) {
-          setError('Please fill in your name, email/username, and password.');
-          setIsLoading(false);
-          return;
-        }
-
-        const res = await fetch('/api/auth/student-register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: name.trim(),
-            email: email.trim(),
-            password: password.trim(),
-          }),
-        });
-
-        const data = await res.json();
-        if (!res.ok || !data.success) {
-          setError(data.error || 'Failed to create student account.');
-          setIsLoading(false);
-          return;
-        }
-
-        onSuccess(data.user);
-        onClose();
-      } else {
-        if (!email.trim() || !password.trim()) {
-          setError('Please enter your email or username and password.');
-          setIsLoading(false);
-          return;
-        }
-
-        const res = await fetch('/api/auth/student-login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            username: email.trim(),
-            password: password.trim(),
-          }),
-        });
-
-        const data = await res.json();
-        if (!res.ok || !data.success) {
-          setError(data.error || 'Invalid student username or password.');
-          setIsLoading(false);
-          return;
-        }
-
-        onSuccess(data.user);
-        onClose();
+      if (!email.trim() || !password.trim()) {
+        setError('Please enter your student email or username and password.');
+        setIsLoading(false);
+        return;
       }
+
+      const res = await fetch('/api/auth/student-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: email.trim(),
+          password: password.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setError(data.error || 'Invalid student username or password.');
+        setIsLoading(false);
+        return;
+      }
+
+      onSuccess(data.user);
+      onClose();
     } catch (err) {
       console.error(err);
       setError('Network connection error. Please try again.');
@@ -98,10 +68,10 @@ export const StudentAccountModal: React.FC<StudentAccountModalProps> = ({
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-900">
-                {mode === 'login' ? 'Student Sign In' : 'Create Student Account'}
+                Student Sign In
               </h3>
               <p className="text-[11px] text-slate-500">
-                Save your private self-study lessons across all your devices
+                Sign in with the student account provided by your teacher
               </p>
             </div>
           </div>
@@ -113,60 +83,19 @@ export const StudentAccountModal: React.FC<StudentAccountModalProps> = ({
           </button>
         </div>
 
-        {/* Tab Switcher */}
-        <div className="flex items-center p-1 bg-slate-100 rounded-xl text-xs font-semibold">
-          <button
-            type="button"
-            onClick={() => {
-              setMode('login');
-              setError(null);
-            }}
-            className={`flex-1 py-1.5 rounded-lg transition-colors cursor-pointer ${
-              mode === 'login'
-                ? 'bg-white text-slate-900 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            Sign In
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setMode('register');
-              setError(null);
-            }}
-            className={`flex-1 py-1.5 rounded-lg transition-colors cursor-pointer ${
-              mode === 'register'
-                ? 'bg-white text-slate-900 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            Create Account
-          </button>
+        {/* Notice for Students */}
+        <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2.5">
+          <Info className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+          <span className="leading-relaxed">
+            Student accounts are issued directly by your teacher. If you do not have an account yet, please contact your instructor.
+          </span>
         </div>
 
-        {/* Form */}
+        {/* Login Form */}
         <form onSubmit={handleSubmit} className="space-y-3.5">
-          {mode === 'register' && (
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-700">Full Name</label>
-              <div className="relative">
-                <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Alex Johnson"
-                  required
-                  className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:border-amber-500 focus:outline-hidden"
-                />
-              </div>
-            </div>
-          )}
-
           <div className="space-y-1">
             <label className="text-xs font-semibold text-slate-700">
-              {mode === 'register' ? 'Email Address or Username' : 'Email or Username'}
+              Email or Username
             </label>
             <div className="relative">
               <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -174,7 +103,7 @@ export const StudentAccountModal: React.FC<StudentAccountModalProps> = ({
                 type="text"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="e.g. student@example.com"
+                placeholder="e.g. alex.johnson or student@school.edu"
                 required
                 className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:border-amber-500 focus:outline-hidden"
               />
@@ -203,10 +132,10 @@ export const StudentAccountModal: React.FC<StudentAccountModalProps> = ({
             </div>
           )}
 
-          <div className="p-2.5 bg-amber-50/70 border border-amber-200/80 rounded-xl text-[11px] text-amber-900 flex items-start gap-2">
-            <ShieldCheck className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+          <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-600 flex items-start gap-2">
+            <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
             <span>
-              <strong>Private & Secure:</strong> Lessons you import or create with this account are saved in your personal vault. Only you can access them — they are never shared with other students or teachers.
+              <strong>Private Student Vault:</strong> Custom lessons and self-study progress remain private to your personal student account across all your devices.
             </span>
           </div>
 
@@ -215,7 +144,7 @@ export const StudentAccountModal: React.FC<StudentAccountModalProps> = ({
             disabled={isLoading}
             className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
           >
-            <span>{isLoading ? 'Processing...' : mode === 'login' ? 'Sign In to My Account' : 'Register & Start Studying'}</span>
+            <span>{isLoading ? 'Signing In...' : 'Sign In to Student Account'}</span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </form>

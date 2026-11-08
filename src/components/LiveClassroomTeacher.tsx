@@ -447,45 +447,35 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
       {/* VIEW MODE 2: Teacher Control Console (Questions, Student Responses, Difficult Words) */}
       {teacherViewMode === 'console' && (
         <div className="space-y-6">
-          {/* Playback Control Bar for Teacher */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex items-center justify-between flex-wrap gap-4">
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  const nextPlay = !session?.isPlaying;
-                  updateServerState({ isPlaying: nextPlay });
-                }}
-                className="w-10 h-10 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 flex items-center justify-center font-bold transition-colors cursor-pointer shadow-xs"
-              >
-                {session?.isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
-              </button>
-
-              <div>
-                <div className="text-xs font-bold text-slate-800 flex items-center gap-2">
-                  <span>Playback: {session?.isPlaying ? 'Playing' : 'Paused'}</span>
-                  <span className="font-mono text-amber-700">
-                    {formatSeconds(currentTime)} / {formatSeconds(lesson.duration)}
-                  </span>
+          {/* Active Anonymous Response Spotlight Banner */}
+          {session?.activeStudentResponse && (
+            <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 shadow-xs flex items-center justify-between flex-wrap gap-3 text-xs animate-in fade-in">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold">
+                  <Radio className="w-4 h-4 animate-pulse" />
                 </div>
-                <div className="text-[11px] text-slate-500">
-                  Controls both student checkpoint triggers and the video projection screen
+                <div>
+                  <div className="font-bold text-indigo-950 flex items-center gap-2">
+                    <span>Spotlighting Anonymous Response to Class</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 font-mono">
+                      100% Anonymous
+                    </span>
+                  </div>
+                  <div className="text-indigo-800/80 font-mono truncate max-w-md">
+                    "{session.activeStudentResponse.answerText}"
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="flex items-center gap-2">
-              {activeQuestion && (
-                <button
-                  type="button"
-                  onClick={handleResumePlayback}
-                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-2xs"
-                >
-                  Resume Video Playback
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => updateServerState({ activeStudentResponse: null })}
+                className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-2xs"
+              >
+                Unshow from Class
+              </button>
             </div>
-          </div>
+          )}
 
           {/* Main 2-Column Inspector: Questions List (Left 4 cols) vs Live Student Responses (Right 8 cols) */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -882,23 +872,71 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
                                 )}
                               </div>
 
-                              {/* Score & Status Badge */}
-                              <div className="text-right min-w-[90px] shrink-0">
-                                {hasAnswered ? (
-                                  record.isCorrect ? (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-lg font-bold text-[11px]">
-                                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                                      <span>+{record.points} pts</span>
+                              {/* Score & Show to Class Button */}
+                              <div className="flex items-center justify-end gap-2 shrink-0">
+                                {hasAnswered && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const isSpotlighted =
+                                        session?.activeStudentResponse?.questionId === inspectingQuestion.id &&
+                                        session?.activeStudentResponse?.answerText === formattedResponse;
+
+                                      if (isSpotlighted) {
+                                        updateServerState({ activeStudentResponse: null });
+                                      } else {
+                                        updateServerState({
+                                          activeStudentResponse: {
+                                            questionId: inspectingQuestion.id,
+                                            questionPrompt: inspectingQuestion.prompt,
+                                            questionType: inspectingQuestion.type,
+                                            answerText: formattedResponse,
+                                            isCorrect: record.isCorrect,
+                                            explanation: inspectingQuestion.explanation,
+                                          },
+                                        });
+                                      }
+                                    }}
+                                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer shadow-2xs ${
+                                      session?.activeStudentResponse?.questionId === inspectingQuestion.id &&
+                                      session?.activeStudentResponse?.answerText === formattedResponse
+                                        ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                                        : 'bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300'
+                                    }`}
+                                    title={
+                                      session?.activeStudentResponse?.questionId === inspectingQuestion.id &&
+                                      session?.activeStudentResponse?.answerText === formattedResponse
+                                        ? 'Unshow this response from the class'
+                                        : 'Show this student answer to the whole class anonymously'
+                                    }
+                                  >
+                                    <Radio className="w-3 h-3" />
+                                    <span>
+                                      {session?.activeStudentResponse?.questionId === inspectingQuestion.id &&
+                                      session?.activeStudentResponse?.answerText === formattedResponse
+                                        ? 'Unshow'
+                                        : 'Show to Class'}
                                     </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-100 text-rose-800 rounded-lg font-bold text-[11px]">
-                                      <XCircle className="w-3.5 h-3.5 text-rose-600" />
-                                      <span>0 pts</span>
-                                    </span>
-                                  )
-                                ) : (
-                                  <span className="text-slate-400 text-[11px]">Pending</span>
+                                  </button>
                                 )}
+
+                                <div className="text-right min-w-[75px]">
+                                  {hasAnswered ? (
+                                    record.isCorrect ? (
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-lg font-bold text-[11px]">
+                                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                        <span>+{record.points} pts</span>
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-100 text-rose-800 rounded-lg font-bold text-[11px]">
+                                        <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                                        <span>0 pts</span>
+                                      </span>
+                                    )
+                                  ) : (
+                                    <span className="text-slate-400 text-[11px]">Pending</span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           );

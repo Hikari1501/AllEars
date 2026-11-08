@@ -346,7 +346,7 @@ export const LiveClassroomStudent: React.FC<LiveClassroomStudentProps> = ({
                   <img
                     src={session.activeVocabWord.imageUrl}
                     alt={session.activeVocabWord.word}
-                    className="max-h-64 w-auto max-w-full rounded-lg object-contain"
+                    className="max-h-36 sm:max-h-40 w-auto max-w-full rounded-lg object-contain"
                     onError={(e) => {
                       (e.target as HTMLElement).style.display = 'none';
                     }}
@@ -370,6 +370,74 @@ export const LiveClassroomStudent: React.FC<LiveClassroomStudentProps> = ({
                   Teacher will resume video when ready
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Teacher Anonymous Student Response Spotlight Modal */}
+      {session?.activeStudentResponse && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="w-full max-w-lg bg-white border-2 border-indigo-500 rounded-3xl shadow-2xl p-6 space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2 text-indigo-700">
+                <Radio className="w-4 h-4 animate-pulse" />
+                <span className="text-xs font-bold tracking-wider uppercase">Class Spotlight • Student Response</span>
+              </div>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">
+                Anonymous
+              </span>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  Question Prompt
+                </div>
+                <h3 className="text-base font-bold text-slate-900 leading-snug">
+                  {session.activeStudentResponse?.questionPrompt}
+                </h3>
+              </div>
+
+              {/* Student's Answer (No Name) */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-1">
+                <div className="flex items-center justify-between">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    Shared Student Answer:
+                  </div>
+                  {session.activeStudentResponse?.isCorrect !== undefined && (
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        session.activeStudentResponse.isCorrect
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-rose-100 text-rose-800'
+                      }`}
+                    >
+                      {session.activeStudentResponse.isCorrect ? 'Correct Answer' : 'Submitted Answer'}
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm font-mono text-slate-900 font-semibold pt-1 leading-relaxed">
+                  "{session.activeStudentResponse?.answerText}"
+                </p>
+              </div>
+
+              {/* Teacher Explanation if available */}
+              {session.activeStudentResponse?.explanation && (
+                <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-xl text-xs text-amber-950 space-y-1">
+                  <div className="font-bold text-amber-900 flex items-center gap-1.5 text-[11px] uppercase">
+                    <BookOpen className="w-3.5 h-3.5 text-amber-700" />
+                    <span>Learning Note & Explanation:</span>
+                  </div>
+                  <p className="leading-relaxed">
+                    {session.activeStudentResponse.explanation}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-slate-100 text-right text-xs text-slate-400 italic">
+              Shared by teacher with the whole class
             </div>
           </div>
         </div>
