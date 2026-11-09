@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Question, StudentAnswer } from '../types';
 import { MatchingPairsCanvas } from './MatchingPairsCanvas';
+import { playSuccessChime } from '../utils/soundEffects';
 import {
   CheckCircle2,
   XCircle,
@@ -109,20 +110,12 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
       if (isMultiSelect) {
         finalAnswer = Array.from(selectedOptions);
         const expected = question.correctAnswers || [question.correctAnswer || 'a'];
-        // Check if sets match
+        // Check if sets match strictly (no points if wrong option selected or any missed)
         const matchesAll =
           expected.length === selectedOptions.size &&
           expected.every((id) => selectedOptions.has(id));
         correct = matchesAll;
-
-        // Partial scoring calculation
-        let matchedCount = 0;
-        selectedOptions.forEach((id) => {
-          if (expected.includes(id)) matchedCount++;
-          else matchedCount = Math.max(0, matchedCount - 0.5);
-        });
-        const ratio = Math.max(0, Math.min(1, matchedCount / expected.length));
-        earned = Math.round(ratio * question.points);
+        earned = correct ? question.points : 0;
       } else {
         finalAnswer = selectedOption;
         correct = selectedOption === question.correctAnswer;
@@ -147,6 +140,7 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
           }
         });
         correct = matchCount === question.matchingPairs.length;
+        // Award points for each line matched right
         earned = Math.round((matchCount / question.matchingPairs.length) * question.points);
       }
     } else if (question.type === 'open_ended') {
@@ -163,21 +157,26 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
         });
         const data = await response.json();
         if (data.success && data.result) {
-          earned = Math.round((data.result.score / 100) * question.points);
+          earned = 0; // Open-ended questions do not award points
           correct = data.result.isPassing;
           setAiFeedback(data.result.feedback);
         } else {
-          earned = Math.round(question.points * 0.8);
+          earned = 0;
           correct = true;
           setAiFeedback('Thoughtful response! You captured the essential listening cues.');
         }
       } catch (err) {
-        earned = Math.round(question.points * 0.8);
+        earned = 0;
         correct = true;
         setAiFeedback('Good job expressing your thoughts clearly based on the audio.');
       } finally {
         setIsGradingAi(false);
       }
+    }
+
+    // Play a short sound on students' device whenever they get all correct answers for a question
+    if (correct && question.type !== 'open_ended') {
+      playSuccessChime();
     }
 
     setIsAnswerCorrect(correct);

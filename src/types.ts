@@ -150,6 +150,7 @@ export interface LiveSessionState {
   activeStudentResponse?: AnonymousStudentResponse | null;
   allowEditAnswer?: boolean;
   allowStudentCaptions?: boolean;
+  autoPauseAtCheckpoints?: boolean;
   isCompleted: boolean;
   students: Record<string, LiveStudentData>;
   lastUpdated: number;

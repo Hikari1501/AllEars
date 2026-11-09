@@ -100,11 +100,13 @@ export const VocabPopover: React.FC<VocabPopoverProps> = ({
             <p className="text-sm text-slate-800 leading-relaxed">{vocab.definition}</p>
           </div>
 
-          {/* Example in Context */}
-          <div className="border-l-2 border-amber-500 pl-3 py-1">
-            <div className="text-xs font-medium text-slate-500 mb-0.5">Illustrative Example</div>
-            <p className="text-sm italic text-slate-700">"{vocab.example}"</p>
-          </div>
+          {/* Example in Context (if provided) */}
+          {vocab.example && vocab.example.trim().length > 0 && (
+            <div className="border-l-2 border-amber-500 pl-3 py-1">
+              <div className="text-xs font-medium text-slate-500 mb-0.5">Illustrative Example</div>
+              <p className="text-sm italic text-slate-700">"{vocab.example}"</p>
+            </div>
+          )}
 
           {/* Online Illustration Image if available - resized and scaled to fit so entire popup and image are visible */}
           {vocab.imageUrl && (

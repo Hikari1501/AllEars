@@ -37,6 +37,7 @@ interface UnifiedPlayerProps {
   captions?: CaptionSegment[];
   difficultWords?: VocabEntry[];
   showCaptions?: boolean;
+  autoPauseAtCheckpoints?: boolean;
   onToggleCaptions?: () => void;
   onWordClick?: (vocab: VocabEntry) => void;
 }
@@ -57,6 +58,7 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
   externalCurrentTime,
   externalIsPlaying,
   externalPlaybackSpeed,
+  autoPauseAtCheckpoints = true,
   pauseTrigger,
   seekTriggerTime,
   captions = [],
@@ -243,23 +245,25 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
           setMaxWatchedTime(t);
         }
 
-        // Check if any unanswered timestamped question falls on or before current time
-        questions.forEach((q) => {
-          if (typeof q.timestamp !== 'number' || q.timestamp < 0) return;
-          const isTriggered = triggeredQuestionIds.current.has(q.id);
-          const isAnswered = answeredQuestionIds.has(q.id);
+        // Check if any unanswered timestamped question falls on or before current time (if autoPauseAtCheckpoints is enabled)
+        if (autoPauseAtCheckpoints) {
+          questions.forEach((q) => {
+            if (typeof q.timestamp !== 'number' || q.timestamp < 0) return;
+            const isTriggered = triggeredQuestionIds.current.has(q.id);
+            const isAnswered = answeredQuestionIds.has(q.id);
 
-          if (!isTriggered && !isAnswered && Math.abs(t - q.timestamp) <= 0.6) {
-            triggeredQuestionIds.current.add(q.id);
-            handlePause();
-            onQuestionTrigger(q);
-          }
-        });
+            if (!isTriggered && !isAnswered && Math.abs(t - q.timestamp) <= 0.6) {
+              triggeredQuestionIds.current.add(q.id);
+              handlePause();
+              onQuestionTrigger(q);
+            }
+          });
+        }
       }
     }, 250);
 
     return () => clearInterval(timer);
-  }, [currentTime, maxWatchedTime, questions, answeredQuestionIds, mediaType, useFallbackPlayer, effectiveStart, effectiveEnd]);
+  }, [currentTime, maxWatchedTime, questions, answeredQuestionIds, mediaType, useFallbackPlayer, effectiveStart, effectiveEnd, autoPauseAtCheckpoints]);
 
   // External sync controls for live classroom
   useEffect(() => {

@@ -85,6 +85,7 @@ export const LiveClassroomProjector: React.FC<LiveClassroomProjectorProps> = ({
 
   // Checkpoint trigger
   const handleQuestionTrigger = (question: Question) => {
+    if (session?.autoPauseAtCheckpoints === false) return;
     setPauseTrigger(Date.now());
     setIsPlaying(false);
     updateServerState({
@@ -200,6 +201,7 @@ export const LiveClassroomProjector: React.FC<LiveClassroomProjectorProps> = ({
             captions={activeLesson.captions}
             difficultWords={activeLesson.difficultWords}
             showCaptions={showCaptions}
+            autoPauseAtCheckpoints={session?.autoPauseAtCheckpoints !== false}
             onToggleCaptions={() => setShowCaptions(!showCaptions)}
             onWordClick={() => {}}
             onTimeUpdate={handleTimeUpdate}
@@ -223,7 +225,7 @@ export const LiveClassroomProjector: React.FC<LiveClassroomProjectorProps> = ({
               <p className="text-xs text-slate-200 mt-1 leading-relaxed">
                 {session.activeVocabWord.definition}
               </p>
-              {session.activeVocabWord.example && (
+              {session.activeVocabWord.example && session.activeVocabWord.example.trim().length > 0 && (
                 <p className="text-[11px] text-amber-300/90 italic mt-1.5 border-t border-slate-800 pt-1.5">
                   "{session.activeVocabWord.example}"
                 </p>

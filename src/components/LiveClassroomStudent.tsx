@@ -272,7 +272,7 @@ export const LiveClassroomStudent: React.FC<LiveClassroomStudentProps> = ({
         <div className="lg:col-span-7">
           <StudentQuestionsPanel
             questions={lesson.questions}
-            currentActiveQuestionId={session?.currentQuestionId || null}
+            currentActiveQuestionId={session?.autoPauseAtCheckpoints !== false ? (session?.currentQuestionId || null) : null}
             answers={myAnswers}
             onAnswerSubmit={handleStudentSubmit}
             isLiveMode={true}
@@ -330,15 +330,17 @@ export const LiveClassroomStudent: React.FC<LiveClassroomStudentProps> = ({
                 </p>
               </div>
 
-              {/* Example */}
-              <div className="border-l-3 border-amber-500 pl-3.5 py-1">
-                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">
-                  Illustrative Example
+              {/* Example if provided */}
+              {session.activeVocabWord.example && session.activeVocabWord.example.trim().length > 0 && (
+                <div className="border-l-3 border-amber-500 pl-3.5 py-1">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">
+                    Illustrative Example
+                  </div>
+                  <p className="text-sm italic text-slate-700">
+                    "{session.activeVocabWord.example}"
+                  </p>
                 </div>
-                <p className="text-sm italic text-slate-700">
-                  "{session.activeVocabWord.example}"
-                </p>
-              </div>
+              )}
 
               {/* Illustration Image if available */}
               {session.activeVocabWord.imageUrl && (

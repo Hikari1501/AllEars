@@ -31,6 +31,7 @@ import {
   Lock,
   Unlock,
   Subtitles,
+  PauseCircle,
 } from 'lucide-react';
 
 interface LiveClassroomTeacherProps {
@@ -118,6 +119,7 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
   };
 
   const handleQuestionTrigger = (question: Question) => {
+    if (session?.autoPauseAtCheckpoints === false) return;
     setActiveQuestion(question);
     setSelectedQuestionId(question.id);
     setPauseTrigger(Date.now());
@@ -233,6 +235,28 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
     const nextVal = !current;
     setSession((prev) => (prev ? { ...prev, allowStudentCaptions: nextVal } : null));
     updateServerState({ allowStudentCaptions: nextVal });
+  };
+
+  // Toggle whether to auto-pause the video when reaching a question checkpoint
+  const handleToggleAutoPause = async () => {
+    const current = session?.autoPauseAtCheckpoints !== false; // defaults to true
+    const nextVal = !current;
+    setSession((prev) =>
+      prev
+        ? {
+            ...prev,
+            autoPauseAtCheckpoints: nextVal,
+            ...(nextVal === false && prev.currentQuestionId ? { currentQuestionId: null } : {}),
+          }
+        : null
+    );
+    if (nextVal === false) {
+      setActiveQuestion(null);
+    }
+    updateServerState({
+      autoPauseAtCheckpoints: nextVal,
+      ...(nextVal === false ? { currentQuestionId: null } : {}),
+    });
   };
 
   const copyRoomLink = () => {
@@ -377,6 +401,25 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
             <span>Student Captions: {session?.allowStudentCaptions !== false ? 'Allowed' : 'Disallowed'}</span>
           </button>
 
+          {/* Teacher Option: Auto-Pause Video at Questions */}
+          <button
+            type="button"
+            onClick={handleToggleAutoPause}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+              session?.autoPauseAtCheckpoints !== false
+                ? 'bg-amber-50 border-amber-300 text-amber-900 shadow-2xs'
+                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+            }`}
+            title={
+              session?.autoPauseAtCheckpoints !== false
+                ? 'Video auto-pauses at each question checkpoint & draws attention with "Active Now" (Click to turn OFF)'
+                : 'Video plays continuously without pausing at checkpoints (Click to turn ON)'
+            }
+          >
+            <PauseCircle className={`w-3.5 h-3.5 ${session?.autoPauseAtCheckpoints !== false ? 'text-amber-600' : 'text-slate-400'}`} />
+            <span>Auto-Pause at Questions: {session?.autoPauseAtCheckpoints !== false ? 'ON' : 'OFF'}</span>
+          </button>
+
           {totalStudents < 3 && (
             <button
               onClick={handleAddBots}
@@ -432,6 +475,7 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
               captions={lesson.captions}
               difficultWords={lesson.difficultWords}
               showCaptions={showCaptions}
+              autoPauseAtCheckpoints={session?.autoPauseAtCheckpoints !== false}
               onToggleCaptions={() => setShowCaptions(!showCaptions)}
               onWordClick={handleBroadcastVocab}
               onTimeUpdate={handleTimeUpdate}
@@ -504,7 +548,10 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
                 <div className="space-y-2 max-h-[550px] overflow-y-auto pr-1">
                   {lesson.questions.map((q, idx) => {
                     const isSelected = inspectingQuestion?.id === q.id;
-                    const currentActiveId = session?.currentQuestionId !== undefined ? session.currentQuestionId : activeQuestion?.id;
+                    const isAutoPauseActive = session?.autoPauseAtCheckpoints !== false;
+                    const currentActiveId = isAutoPauseActive
+                      ? (session?.currentQuestionId !== undefined ? session.currentQuestionId : activeQuestion?.id)
+                      : null;
                     const isActive = Boolean(currentActiveId && currentActiveId === q.id);
                     const answeredCount = studentsList.filter((s) => s.answers[q.id]).length;
 

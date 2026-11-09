@@ -88,6 +88,7 @@ interface LiveSession {
   activeStudentResponse: any | null;
   allowEditAnswer?: boolean;
   allowStudentCaptions?: boolean;
+  autoPauseAtCheckpoints?: boolean;
   isCompleted: boolean;
   students: Record<string, LiveStudent>;
   lastUpdated: number;
@@ -564,7 +565,7 @@ if (!sessionReports || sessionReports.length === 0) {
 async function archiveLiveSession(session: LiveSession) {
   const lesson = await getLessonById(session.lessonId);
   const questions: any[] = lesson?.questions || [];
-  const maxPossiblePoints = questions.reduce((sum: number, q: any) => sum + (q.points || 10), 0) || 10;
+  const maxPossiblePoints = questions.reduce((sum: number, q: any) => sum + (q.type === 'open_ended' ? 0 : (q.points || 10)), 0) || 10;
 
   const studentsList = Object.values(session.students);
   const questionStats: Record<string, any> = {};
@@ -663,6 +664,7 @@ app.post('/api/live/create', async (req: Request, res: Response) => {
     activeStudentResponse: null,
     allowEditAnswer: false,
     allowStudentCaptions: true,
+    autoPauseAtCheckpoints: true,
     isCompleted: false,
     students: {},
     lastUpdated: Date.now(),
@@ -728,7 +730,7 @@ app.post('/api/live/join', (req: Request, res: Response) => {
 
 // Update live session state (supported via /api/live/update-state and /api/live/update alias)
 const handleUpdateSessionState = (req: Request, res: Response) => {
-  const { pin, currentTime, isPlaying, playbackSpeed, currentQuestionId, isCompleted, activeVocabWord, activeStudentResponse, allowEditAnswer, allowStudentCaptions } = req.body;
+  const { pin, currentTime, isPlaying, playbackSpeed, currentQuestionId, isCompleted, activeVocabWord, activeStudentResponse, allowEditAnswer, allowStudentCaptions, autoPauseAtCheckpoints } = req.body;
   const session = liveSessions[pin];
   if (!session) {
     return res.status(404).json({ error: 'Session not found' });
@@ -741,6 +743,7 @@ const handleUpdateSessionState = (req: Request, res: Response) => {
   if (isCompleted !== undefined) session.isCompleted = isCompleted;
   if (allowEditAnswer !== undefined) session.allowEditAnswer = Boolean(allowEditAnswer);
   if (allowStudentCaptions !== undefined) session.allowStudentCaptions = Boolean(allowStudentCaptions);
+  if (autoPauseAtCheckpoints !== undefined) session.autoPauseAtCheckpoints = Boolean(autoPauseAtCheckpoints);
   if (activeVocabWord !== undefined) {
     session.activeVocabWord = activeVocabWord;
     if (activeVocabWord) {
@@ -786,8 +789,8 @@ app.post('/api/live/submit-answer', (req: Request, res: Response) => {
   }
 
   // Adjust score if updating an existing answer
-  if (existingAnswer && existingAnswer.isCorrect) {
-    session.students[studentId].score = Math.max(0, session.students[studentId].score - existingAnswer.points);
+  if (existingAnswer) {
+    session.students[studentId].score = Math.max(0, session.students[studentId].score - (existingAnswer.points || 0));
   }
 
   session.students[studentId].answers[questionId] = {
@@ -796,9 +799,7 @@ app.post('/api/live/submit-answer', (req: Request, res: Response) => {
     points,
     submittedAt: Date.now(),
   };
-  if (isCorrect) {
-    session.students[studentId].score += points;
-  }
+  session.students[studentId].score += (points || 0);
   session.lastUpdated = Date.now();
 
   res.json({ success: true, session });

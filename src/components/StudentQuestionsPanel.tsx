@@ -18,6 +18,7 @@ import {
   BookOpen,
 } from 'lucide-react';
 import { MatchingPairsCanvas } from './MatchingPairsCanvas';
+import { playSuccessChime } from '../utils/soundEffects';
 
 interface StudentQuestionsPanelProps {
   questions: Question[];
@@ -149,36 +150,46 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
       if (question.allowMultipleAnswers) {
         const correctList = question.correctAnswers || [question.correctAnswer || 'a'];
         const chosenList = Array.isArray(rawAnswer) ? rawAnswer : [rawAnswer];
+        // Multi-choice: award points only when students choose all correct options (0 points if wrong or missing)
         const isMatch =
           correctList.length === chosenList.length &&
           correctList.every((id) => chosenList.includes(id));
         isCorrect = isMatch;
+        pointsEarned = isCorrect ? question.points || 10 : 0;
       } else {
         const correct = question.correctAnswer || 'a';
         isCorrect = String(rawAnswer).toLowerCase() === correct.toLowerCase();
+        pointsEarned = isCorrect ? question.points || 10 : 0;
       }
     } else if (question.type === 'true_false') {
       const correct = question.correctAnswer || 'true';
       isCorrect = String(rawAnswer).toLowerCase() === correct.toLowerCase();
+      pointsEarned = isCorrect ? question.points || 10 : 0;
     } else if (question.type === 'close_ended') {
       const expected = (question.correctAnswer || '').trim().toLowerCase();
       const actual = String(rawAnswer).trim().toLowerCase();
       isCorrect = actual === expected;
+      pointsEarned = isCorrect ? question.points || 10 : 0;
     } else if (question.type === 'matching') {
       const pairs = question.matchingPairs || [];
       const userPairs = rawAnswer || {};
       const correctCount = pairs.filter((p) => userPairs[p.left] === p.right).length;
-      isCorrect = correctCount === pairs.length;
+      isCorrect = pairs.length > 0 && correctCount === pairs.length;
+      // Matching: award points for each line students match right
       if (pairs.length > 0) {
         pointsEarned = Math.round((correctCount / pairs.length) * (question.points || 10));
+      } else {
+        pointsEarned = 0;
       }
     } else if (question.type === 'open_ended') {
       isCorrect = true;
-      pointsEarned = question.points || 10;
+      // Open-ended questions: do not award students with points
+      pointsEarned = 0;
     }
 
-    if (question.type !== 'matching') {
-      pointsEarned = isCorrect ? question.points || 10 : 0;
+    // Play a short sound on students' device whenever they get all correct answers for a question
+    if (isCorrect && question.type !== 'open_ended') {
+      playSuccessChime();
     }
 
     const submission: StudentAnswer = {
@@ -194,7 +205,7 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
 
   const answeredCount = Object.keys(answers).length;
   const totalScore = Object.values(answers).reduce((sum, a) => sum + (a.pointsEarned || 0), 0);
-  const maxScore = questions.reduce((sum, q) => sum + q.points, 0);
+  const maxScore = questions.reduce((sum, q) => sum + (q.type === 'open_ended' ? 0 : q.points), 0);
 
   // Group questions: Timed checkpoints and General questions
   const timedQuestions = questions.filter(
@@ -332,12 +343,19 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                       {isAnswered && (
                         <span
                           className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${
-                            existingAnswer.isCorrect
+                            q.type === 'open_ended'
+                              ? 'bg-indigo-100 text-indigo-800'
+                              : (existingAnswer.pointsEarned || 0) > 0
                               ? 'bg-emerald-100 text-emerald-800'
                               : 'bg-rose-100 text-rose-800'
                           }`}
                         >
-                          {existingAnswer.isCorrect ? (
+                          {q.type === 'open_ended' ? (
+                            <>
+                              <CheckCircle2 className="w-3 h-3 text-indigo-600" />
+                              <span>Submitted</span>
+                            </>
+                          ) : (existingAnswer.pointsEarned || 0) > 0 ? (
                             <>
                               <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                               <span>+{existingAnswer.pointsEarned} pts</span>

@@ -33,6 +33,7 @@ import {
   Image as ImageIcon,
   Edit3,
   Download,
+  X,
 } from 'lucide-react';
 
 interface LessonEditorProps {
@@ -479,7 +480,7 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
       cefrLevel: vocabLevel,
       partOfSpeech: vocabPos,
       definition: vocabDefinition.trim() || 'A key term used in this context.',
-      example: vocabExample.trim() || `The speaker emphasized the importance of ${vocabWord.trim()}.`,
+      example: vocabExample.trim(),
       cambridgeSlug: vocabCambridge.trim() || vocabWord.trim().toLowerCase().replace(/\s+/g, '-'),
       imageUrl: vocabImageUrl.trim() || undefined,
     };
@@ -523,6 +524,40 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
       } else {
         next.clear();
         next.add(optId);
+      }
+      return next;
+    });
+  };
+
+  // Add new option to multiple choice (min 2, max 8)
+  const handleAddOption = () => {
+    if (newQOptions.length >= 8) return;
+    const nextIdx = newQOptions.length;
+    const nextLetter = String.fromCharCode(65 + nextIdx);
+    setNewQOptions((prev) => [...prev, `Option ${nextLetter}`]);
+  };
+
+  // Remove option from multiple choice (min 2, max 8)
+  const handleRemoveOption = (indexToRemove: number) => {
+    if (newQOptions.length <= 2) return;
+    const updated = newQOptions.filter((_, idx) => idx !== indexToRemove);
+    setNewQOptions(updated);
+
+    // Re-index correct answers so IDs remain contiguous 'a', 'b', ...
+    setNewQCorrectAnswers((prev) => {
+      const next = new Set<string>();
+      let newIdx = 0;
+      for (let i = 0; i < newQOptions.length; i++) {
+        if (i === indexToRemove) continue;
+        const oldId = String.fromCharCode(97 + i);
+        const newId = String.fromCharCode(97 + newIdx);
+        if (prev.has(oldId)) {
+          next.add(newId);
+        }
+        newIdx++;
+      }
+      if (next.size === 0) {
+        next.add('a');
       }
       return next;
     });
@@ -1617,9 +1652,14 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                   </div>
 
                   {newQType === 'multiple_choice' && (
-                    <div className="space-y-2 text-xs">
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold text-slate-700">Options (Select Correct Answers)</span>
+                    <div className="space-y-2.5 text-xs">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-slate-700">Options</span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                            {newQOptions.length} of 8 (Min 2, Max 8)
+                          </span>
+                        </div>
                         <label className="flex items-center gap-1.5 cursor-pointer text-indigo-700 font-bold">
                           <input
                             type="checkbox"
@@ -1631,7 +1671,7 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                         </label>
                       </div>
 
-                      <div className="space-y-1.5">
+                      <div className="space-y-2">
                         {newQOptions.map((opt, idx) => {
                           const optId = String.fromCharCode(97 + idx);
                           const isCorrect = newQCorrectAnswers.has(optId);
@@ -1641,15 +1681,18 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleToggleMultiCorrect(optId)}
-                                className={`px-2 py-1 rounded text-[11px] font-bold border transition-colors cursor-pointer ${
+                                className={`px-2 py-1 rounded text-[11px] font-bold border transition-colors cursor-pointer shrink-0 ${
                                   isCorrect
                                     ? 'bg-emerald-600 text-white border-emerald-700'
-                                    : 'bg-white text-slate-600 border-slate-300'
+                                    : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
                                 }`}
+                                title={isCorrect ? 'Click to deselect as correct' : 'Click to mark as correct answer'}
                               >
                                 {isCorrect ? '✓ Correct' : 'Mark Correct'}
                               </button>
-                              <span className="font-mono uppercase font-bold text-slate-700">{optId}.</span>
+                              <span className="font-mono uppercase font-bold text-slate-700 w-5 shrink-0 text-center">
+                                {optId}.
+                              </span>
                               <input
                                 type="text"
                                 value={opt}
@@ -1658,12 +1701,33 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                                   copy[idx] = e.target.value;
                                   setNewQOptions(copy);
                                 }}
-                                className="flex-1 p-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                                className="flex-1 p-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"
                               />
+                              {newQOptions.length > 2 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveOption(idx)}
+                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer shrink-0"
+                                  title="Delete this option"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                             </div>
                           );
                         })}
                       </div>
+
+                      {newQOptions.length < 8 && (
+                        <button
+                          type="button"
+                          onClick={handleAddOption}
+                          className="w-full py-1.5 px-3 border border-dashed border-amber-300 bg-amber-50/50 hover:bg-amber-100/60 text-amber-900 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5 text-amber-600" />
+                          <span>+ Add Option ({String.fromCharCode(65 + newQOptions.length)})</span>
+                        </button>
+                      )}
                     </div>
                   )}
 
