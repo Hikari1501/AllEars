@@ -1,0 +1,16 @@
+{
+  "chuck": {
+    "id": "teacher-chuck",
+    "name": "Chuck",
+    "email": "ChuckACR1501@gmail.com",
+    "password": "password123",
+    "isAdmin": true
+  },
+  "chuckacr1501@gmail.com": {
+    "id": "teacher-chuck",
+    "name": "Chuck",
+    "email": "ChuckACR1501@gmail.com",
+    "password": "password123",
+    "isAdmin": true
+  }
+}

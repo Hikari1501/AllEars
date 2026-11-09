@@ -57,7 +57,7 @@ export const TeacherLoginModal: React.FC<TeacherLoginModalProps> = ({
                 name: found.name,
                 email: found.email,
                 role: 'teacher',
-                isAdmin: !!found.isAdmin,
+                isAdmin: found.email?.toLowerCase() === 'chuckacr1501@gmail.com' ? true : !!found.isAdmin,
               };
             }
           }

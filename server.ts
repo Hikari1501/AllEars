@@ -9,7 +9,10 @@ import { INITIAL_LESSONS } from './src/data/mockLessons.ts';
 import {
   initDatabase,
   findTeacher,
+  getTeacherById,
   addTeacher,
+  updateTeacher,
+  deleteTeacher,
   getAllTeachers,
   getAllLessons,
   getLessonById,
@@ -22,7 +25,9 @@ import {
   TeacherRecord,
   StudentRecord,
   findStudent,
+  getStudentById,
   addStudent,
+  updateStudent,
   getAllStudents,
   deleteStudent,
   getStudentLessons,
@@ -93,6 +98,26 @@ const liveSessions: Record<string, LiveSession> = {};
 // Track ended sessions so students cannot join and active viewers are told the session ended
 const endedSessionPins: Record<string, number> = {};
 
+// Helper to extract authenticated teacher / admin identity from headers or body
+function getRequester(req: Request) {
+  const role = (req.headers['x-user-role'] || req.headers['role'] || req.body?.userRole || '').toString().toLowerCase();
+  const userId = (req.headers['x-user-id'] || req.headers['x-teacher-id'] || req.body?.userId || req.body?.teacherId || '').toString();
+  const userEmail = (req.headers['x-user-email'] || req.headers['x-teacher-email'] || req.body?.userEmail || req.body?.teacherEmail || '').toString().toLowerCase();
+  const userName = (req.headers['x-user-name'] || req.headers['x-teacher-name'] || req.body?.userName || req.body?.teacherName || '').toString();
+  const isAdminHeader = (req.headers['x-is-admin'] || req.headers['x-user-is-admin'] || '').toString().toLowerCase() === 'true';
+
+  const isChuck = userEmail === 'chuckacr1501@gmail.com' || userId === 'teacher-chuck';
+  const isAdmin = isChuck || isAdminHeader;
+
+  return {
+    role,
+    userId,
+    userEmail,
+    userName,
+    isAdmin,
+  };
+}
+
 // Teacher Login API (Backed by PostgreSQL / DB)
 app.post('/api/auth/teacher-login', async (req: Request, res: Response) => {
   const username = req.body.username || req.body.email;
@@ -107,6 +132,9 @@ app.post('/api/auth/teacher-login', async (req: Request, res: Response) => {
     return res.status(401).json({ error: 'Invalid teacher account name or password.' });
   }
 
+  const isChuck = found.email.toLowerCase() === 'chuckacr1501@gmail.com';
+  const isAdmin = isChuck ? true : !!found.isAdmin;
+
   res.json({
     success: true,
     user: {
@@ -114,42 +142,120 @@ app.post('/api/auth/teacher-login', async (req: Request, res: Response) => {
       name: found.name,
       email: found.email,
       role: 'teacher',
-      isAdmin: found.isAdmin,
+      isAdmin,
     },
   });
 });
 
-// Admin adds a new teacher (Saved to PostgreSQL / DB)
+// Admin: Get all registered teachers (includes passwords if caller is Admin)
+app.get('/api/auth/teachers', async (req: Request, res: Response) => {
+  try {
+    const requester = getRequester(req);
+    const teachers = await getAllTeachers();
+
+    if (requester.isAdmin) {
+      return res.json({ teachers, isCallerAdmin: true });
+    }
+
+    res.json({
+      teachers: teachers.map((t) => ({
+        id: t.id,
+        name: t.name,
+        email: t.email,
+        isAdmin: t.isAdmin,
+      })),
+      isCallerAdmin: false,
+    });
+  } catch (e) {
+    console.error('[API] Error fetching teachers:', e);
+    res.status(500).json({ error: 'Failed to retrieve teachers' });
+  }
+});
+
+// Admin: Authorize / create a new teacher account
 app.post('/api/auth/add-teacher', async (req: Request, res: Response) => {
-  const { name, email, password } = req.body;
+  const requester = getRequester(req);
+  if (!requester.isAdmin) {
+    return res.status(403).json({
+      error: 'Permission denied: Only administrators can create teacher accounts.',
+    });
+  }
+
+  const { name, email, password, isAdmin } = req.body;
   if (!name || !email || !password) {
     return res.status(400).json({ error: 'Name, email, and password required' });
   }
 
+  const isChuck = email.trim().toLowerCase() === 'chuckacr1501@gmail.com';
   const id = `teacher-${Date.now()}`;
   const newTeacher: TeacherRecord = {
     id,
     name: name.trim(),
     email: email.trim(),
     password: password.trim(),
-    isAdmin: false,
+    isAdmin: isChuck ? true : Boolean(isAdmin),
   };
 
   await addTeacher(newTeacher);
 
   res.json({
     success: true,
-    teacher: {
-      id: newTeacher.id,
-      name: newTeacher.name,
-      email: newTeacher.email,
-    },
+    teacher: newTeacher,
   });
 });
 
-app.get('/api/auth/teachers', async (_req: Request, res: Response) => {
-  const teachers = await getAllTeachers();
-  res.json({ teachers });
+// Admin: Edit teacher account details (name, email, password, role)
+app.put('/api/auth/teachers/:id', async (req: Request, res: Response) => {
+  const requester = getRequester(req);
+  if (!requester.isAdmin) {
+    return res.status(403).json({
+      error: 'Teachers cannot edit information of admins and other teachers. Administrator permission is required.',
+    });
+  }
+
+  const { id } = req.params;
+  const { name, email, password, isAdmin } = req.body;
+
+  const existing = await getTeacherById(id);
+  if (!existing) {
+    return res.status(404).json({ error: 'Teacher account not found.' });
+  }
+
+  const isChuck = (email || existing.email).toLowerCase() === 'chuckacr1501@gmail.com' || existing.id === 'teacher-chuck';
+
+  const updated = await updateTeacher(id, {
+    name: name?.trim(),
+    email: email?.trim(),
+    password: password?.trim(),
+    isAdmin: isChuck ? true : isAdmin !== undefined ? Boolean(isAdmin) : existing.isAdmin,
+  });
+
+  res.json({ success: true, teacher: updated });
+});
+
+// Admin: Delete a teacher account
+app.delete('/api/auth/teachers/:id', async (req: Request, res: Response) => {
+  const requester = getRequester(req);
+  if (!requester.isAdmin) {
+    return res.status(403).json({
+      error: 'Permission denied: Only administrators can delete teacher accounts.',
+    });
+  }
+
+  const { id } = req.params;
+  const existing = await getTeacherById(id);
+  if (!existing) {
+    return res.status(404).json({ error: 'Teacher account not found.' });
+  }
+
+  if (existing.email.toLowerCase() === 'chuckacr1501@gmail.com' || existing.id === 'teacher-chuck') {
+    return res.status(403).json({
+      error: 'Cannot delete the primary administrator account (chuckacr1501@gmail.com).',
+    });
+  }
+
+  await deleteTeacher(id);
+  res.json({ success: true, id });
 });
 
 // Public student registration is disabled (student accounts are managed by teachers)
@@ -159,23 +265,46 @@ app.post('/api/auth/student-register', async (_req: Request, res: Response) => {
   });
 });
 
-// Teacher: Get all registered student accounts
-app.get('/api/teacher/students', async (_req: Request, res: Response) => {
+// Teacher / Admin: Get registered student accounts
+// - If caller is Admin: gets all students across all classes
+// - If caller is Teacher: gets only students assigned to their class
+app.get('/api/teacher/students', async (req: Request, res: Response) => {
   try {
-    const students = await getAllStudents();
-    res.json({ students });
+    const requester = getRequester(req);
+    let students: StudentRecord[] = [];
+
+    if (requester.isAdmin) {
+      students = await getAllStudents();
+    } else if (requester.userId) {
+      students = await getAllStudents(requester.userId);
+    } else {
+      students = await getAllStudents();
+    }
+
+    res.json({
+      students,
+      isCallerAdmin: requester.isAdmin,
+      callerTeacherId: requester.userId,
+    });
   } catch (e) {
     console.error('[API] Error fetching student accounts:', e);
     res.status(500).json({ error: 'Failed to retrieve students' });
   }
 });
 
-// Teacher: Create a new student account
+// Teacher / Admin: Create a new student account (automatically assigned to teacher's class)
 app.post('/api/teacher/students', async (req: Request, res: Response) => {
-  const { name, email, password } = req.body;
+  const { name, email, password, teacherId, teacherName, className } = req.body;
   if (!name || !email || !password) {
     return res.status(400).json({ error: 'Name, email/username, and password required' });
   }
+
+  const requester = getRequester(req);
+
+  // If admin specified a specific teacher, use it; otherwise assign to the logged-in teacher
+  const assignedTeacherId = (requester.isAdmin && teacherId) ? teacherId : (requester.userId || 'teacher-chuck');
+  const assignedTeacherName = (requester.isAdmin && teacherName) ? teacherName : (requester.userName || 'Chuck');
+  const assignedClassName = className || `${assignedTeacherName}'s Class`;
 
   const existing = await findStudent(email);
   if (existing) {
@@ -187,6 +316,9 @@ app.post('/api/teacher/students', async (req: Request, res: Response) => {
     name: name.trim(),
     email: email.trim(),
     password: password.trim(),
+    teacherId: assignedTeacherId,
+    teacherName: assignedTeacherName,
+    className: assignedClassName,
     createdAt: new Date().toISOString(),
   };
 
@@ -194,20 +326,78 @@ app.post('/api/teacher/students', async (req: Request, res: Response) => {
 
   res.json({
     success: true,
-    student: {
-      id: newStudent.id,
-      name: newStudent.name,
-      email: newStudent.email,
-      createdAt: newStudent.createdAt,
-    },
+    student: newStudent,
   });
 });
 
-// Teacher: Delete a student account
+// Teacher / Admin: Edit student username, display name, password
+// - Teacher can ONLY edit students in their class
+// - Admin can edit any student
+app.put('/api/teacher/students/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { name, email, password, teacherId, teacherName, className } = req.body;
+  if (!id) {
+    return res.status(400).json({ error: 'Student ID required' });
+  }
+
+  const existing = await getStudentById(id);
+  if (!existing) {
+    return res.status(404).json({ error: 'Student account not found.' });
+  }
+
+  const requester = getRequester(req);
+
+  // Requirement: "Only the teacher of that class can delete, edit username, display name, password of students in that class. Admins can edit any student"
+  const isClassTeacher = requester.userId && existing.teacherId === requester.userId;
+  const isEmailMatch = requester.userEmail && existing.teacherId === requester.userEmail;
+
+  if (!requester.isAdmin && !isClassTeacher && !isEmailMatch) {
+    return res.status(403).json({
+      error: 'Permission denied: Only the teacher of this class or an administrator can edit this student account.',
+    });
+  }
+
+  if (email && email.trim().toLowerCase() !== existing.email.toLowerCase()) {
+    const collision = await findStudent(email.trim());
+    if (collision && collision.id !== id) {
+      return res.status(409).json({ error: 'An account with this email or username already exists.' });
+    }
+  }
+
+  const updated = await updateStudent(id, {
+    name: name?.trim(),
+    email: email?.trim(),
+    password: password?.trim(),
+    teacherId: requester.isAdmin && teacherId ? teacherId : existing.teacherId,
+    teacherName: requester.isAdmin && teacherName ? teacherName : existing.teacherName,
+    className: requester.isAdmin && className ? className : existing.className,
+  });
+
+  res.json({ success: true, student: updated });
+});
+
+// Teacher / Admin: Delete a student account
+// - Teacher can ONLY delete students in their class
+// - Admin can delete any student
 app.delete('/api/teacher/students/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   if (!id) {
     return res.status(400).json({ error: 'Student ID required' });
+  }
+
+  const existing = await getStudentById(id);
+  if (!existing) {
+    return res.status(404).json({ error: 'Student account not found' });
+  }
+
+  const requester = getRequester(req);
+  const isClassTeacher = requester.userId && existing.teacherId === requester.userId;
+  const isEmailMatch = requester.userEmail && existing.teacherId === requester.userEmail;
+
+  if (!requester.isAdmin && !isClassTeacher && !isEmailMatch) {
+    return res.status(403).json({
+      error: 'Permission denied: Only the teacher of this class or an administrator can delete this student account.',
+    });
   }
 
   try {

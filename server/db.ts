@@ -22,6 +22,9 @@ export interface StudentRecord {
   email: string;
   password: string;
   createdAt?: string;
+  teacherId?: string;
+  teacherName?: string;
+  className?: string;
 }
 
 // Fallback JSON data directories
@@ -113,6 +116,9 @@ export async function initDatabase(initialLessons: Lesson[]) {
           name TEXT NOT NULL,
           email VARCHAR(255) UNIQUE NOT NULL,
           password TEXT NOT NULL,
+          teacher_id VARCHAR(128),
+          teacher_name TEXT,
+          class_name TEXT,
           created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         );
 
@@ -160,6 +166,14 @@ export async function initDatabase(initialLessons: Lesson[]) {
         );
 
         -- Self-healing schema migrations for existing Render tables
+        ALTER TABLE students ADD COLUMN IF NOT EXISTS teacher_id VARCHAR(128);
+        ALTER TABLE students ADD COLUMN IF NOT EXISTS teacher_name TEXT;
+        ALTER TABLE students ADD COLUMN IF NOT EXISTS class_name TEXT;
+        UPDATE students SET teacher_id = 'teacher-chuck', teacher_name = 'Chuck', class_name = 'Chuck''s Class' WHERE teacher_id IS NULL;
+
+        ALTER TABLE teachers ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE;
+        UPDATE teachers SET is_admin = TRUE WHERE LOWER(email) = 'chuckacr1501@gmail.com';
+
         ALTER TABLE lessons ADD COLUMN IF NOT EXISTS description TEXT DEFAULT '';
         ALTER TABLE lessons ADD COLUMN IF NOT EXISTS trim_start NUMERIC DEFAULT 0;
         ALTER TABLE lessons ADD COLUMN IF NOT EXISTS trim_end NUMERIC DEFAULT 180;
@@ -173,11 +187,11 @@ export async function initDatabase(initialLessons: Lesson[]) {
         ALTER TABLE lessons ADD COLUMN IF NOT EXISTS difficult_words JSONB DEFAULT '[]'::jsonb;
       `);
 
-      // Seed Chuck's default teacher record
+      // Seed Chuck's default teacher record with Admin permission
       await client.query(`
         INSERT INTO teachers (id, name, email, password, is_admin)
         VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT (email) DO UPDATE SET password = EXCLUDED.password;
+        ON CONFLICT (email) DO UPDATE SET password = EXCLUDED.password, is_admin = TRUE, name = EXCLUDED.name;
       `, [DEFAULT_TEACHER.id, DEFAULT_TEACHER.name, DEFAULT_TEACHER.email, DEFAULT_TEACHER.password, DEFAULT_TEACHER.isAdmin]);
 
       // Seed initial catalog lessons if table is empty
@@ -230,6 +244,24 @@ export async function initDatabase(initialLessons: Lesson[]) {
   // Local JSON fallback initialization
   const savedTeachers = readJsonSafe<Record<string, TeacherRecord>>(TEACHERS_FILE, {});
   memoryTeachers = { ...memoryTeachers, ...savedTeachers };
+  // Guarantee Chuck is always marked Admin
+  if (memoryTeachers['chuckacr1501@gmail.com']) {
+    memoryTeachers['chuckacr1501@gmail.com'].isAdmin = true;
+  }
+  if (memoryTeachers['chuck']) {
+    memoryTeachers['chuck'].isAdmin = true;
+  }
+
+  const savedStudents = readJsonSafe<Record<string, StudentRecord>>(STUDENTS_FILE, {});
+  memoryStudents = { ...memoryStudents, ...savedStudents };
+  // Ensure default teacher on legacy student records
+  Object.values(memoryStudents).forEach((s) => {
+    if (!s.teacherId) {
+      s.teacherId = 'teacher-chuck';
+      s.teacherName = 'Chuck';
+      s.className = "Chuck's Class";
+    }
+  });
 
   const savedLessons = readJsonSafe<Lesson[]>(LESSONS_FILE, []);
   if (savedLessons && savedLessons.length > 0) {
@@ -257,12 +289,13 @@ export async function findTeacher(identifier: string): Promise<TeacherRecord | n
       );
       if (res.rows.length > 0) {
         const row = res.rows[0];
+        const isChuck = row.email.toLowerCase() === 'chuckacr1501@gmail.com';
         return {
           id: row.id,
           name: row.name,
           email: row.email,
           password: row.password,
-          isAdmin: !!row.is_admin,
+          isAdmin: isChuck ? true : !!row.is_admin,
         };
       }
       return null;
@@ -272,43 +305,143 @@ export async function findTeacher(identifier: string): Promise<TeacherRecord | n
   }
 
   // Fallback
-  return memoryTeachers[norm] ||
+  const found = memoryTeachers[norm] ||
     Object.values(memoryTeachers).find((t) => t.email.toLowerCase() === norm || t.name.toLowerCase() === norm) ||
     null;
+  if (found && found.email.toLowerCase() === 'chuckacr1501@gmail.com') {
+    found.isAdmin = true;
+  }
+  return found;
+}
+
+export async function getTeacherById(id: string): Promise<TeacherRecord | null> {
+  if (isPostgresActive && pool) {
+    try {
+      const res = await pool.query('SELECT * FROM teachers WHERE id = $1 LIMIT 1', [id]);
+      if (res.rows.length > 0) {
+        const row = res.rows[0];
+        const isChuck = row.email.toLowerCase() === 'chuckacr1501@gmail.com';
+        return {
+          id: row.id,
+          name: row.name,
+          email: row.email,
+          password: row.password,
+          isAdmin: isChuck ? true : !!row.is_admin,
+        };
+      }
+      return null;
+    } catch (e) {
+      console.error('[DB] Error querying teacher by id:', e);
+    }
+  }
+
+  const found = Object.values(memoryTeachers).find((t) => t.id === id) || null;
+  if (found && found.email.toLowerCase() === 'chuckacr1501@gmail.com') {
+    found.isAdmin = true;
+  }
+  return found;
 }
 
 export async function addTeacher(newTeacher: TeacherRecord): Promise<TeacherRecord> {
+  const isChuck = newTeacher.email.toLowerCase() === 'chuckacr1501@gmail.com';
+  const teacherToAdd: TeacherRecord = {
+    ...newTeacher,
+    isAdmin: isChuck ? true : newTeacher.isAdmin,
+  };
+
   if (isPostgresActive && pool) {
     try {
       await pool.query(
         `INSERT INTO teachers (id, name, email, password, is_admin)
          VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (email) DO UPDATE SET password = EXCLUDED.password, name = EXCLUDED.name`,
-        [newTeacher.id, newTeacher.name, newTeacher.email, newTeacher.password, newTeacher.isAdmin]
+         ON CONFLICT (email) DO UPDATE SET password = EXCLUDED.password, name = EXCLUDED.name, is_admin = EXCLUDED.is_admin`,
+        [teacherToAdd.id, teacherToAdd.name, teacherToAdd.email, teacherToAdd.password, teacherToAdd.isAdmin]
       );
-      return newTeacher;
+      return teacherToAdd;
     } catch (e) {
       console.error('[DB] Error inserting teacher into PostgreSQL:', e);
     }
   }
 
   // Fallback
-  memoryTeachers[newTeacher.email.toLowerCase()] = newTeacher;
-  memoryTeachers[newTeacher.name.toLowerCase()] = newTeacher;
+  memoryTeachers[teacherToAdd.email.toLowerCase()] = teacherToAdd;
+  memoryTeachers[teacherToAdd.name.toLowerCase()] = teacherToAdd;
+  memoryTeachers[teacherToAdd.id] = teacherToAdd;
   writeJsonSafe(TEACHERS_FILE, memoryTeachers);
-  return newTeacher;
+  return teacherToAdd;
 }
 
-export async function getAllTeachers(): Promise<{ id: string; name: string; email: string; isAdmin: boolean }[]> {
+export async function updateTeacher(id: string, updates: { name?: string; email?: string; password?: string; isAdmin?: boolean }): Promise<TeacherRecord | null> {
+  const existing = await getTeacherById(id);
+  if (!existing) return null;
+
+  const isChuck = (updates.email || existing.email).toLowerCase() === 'chuckacr1501@gmail.com' || existing.id === 'teacher-chuck';
+  const updated: TeacherRecord = {
+    id: existing.id,
+    name: updates.name ? updates.name.trim() : existing.name,
+    email: updates.email ? updates.email.trim() : existing.email,
+    password: updates.password ? updates.password.trim() : existing.password,
+    isAdmin: isChuck ? true : updates.isAdmin !== undefined ? updates.isAdmin : existing.isAdmin,
+  };
+
   if (isPostgresActive && pool) {
     try {
-      const res = await pool.query('SELECT id, name, email, is_admin FROM teachers ORDER BY created_at ASC');
-      return res.rows.map((r) => ({
-        id: r.id,
-        name: r.name,
-        email: r.email,
-        isAdmin: !!r.is_admin,
-      }));
+      await pool.query(
+        `UPDATE teachers
+         SET name = $1, email = $2, password = $3, is_admin = $4
+         WHERE id = $5`,
+        [updated.name, updated.email, updated.password, updated.isAdmin, id]
+      );
+      return updated;
+    } catch (e) {
+      console.error('[DB] Error updating teacher in PostgreSQL:', e);
+    }
+  }
+
+  // Fallback memory / JSON
+  delete memoryTeachers[existing.email.toLowerCase()];
+  delete memoryTeachers[existing.name.toLowerCase()];
+  memoryTeachers[updated.email.toLowerCase()] = updated;
+  memoryTeachers[updated.name.toLowerCase()] = updated;
+  memoryTeachers[updated.id] = updated;
+  writeJsonSafe(TEACHERS_FILE, memoryTeachers);
+  return updated;
+}
+
+export async function deleteTeacher(id: string): Promise<boolean> {
+  if (isPostgresActive && pool) {
+    try {
+      await pool.query('DELETE FROM teachers WHERE id = $1', [id]);
+      return true;
+    } catch (e) {
+      console.error('[DB] Error deleting teacher in PostgreSQL:', e);
+    }
+  }
+
+  const existing = Object.values(memoryTeachers).find((t) => t.id === id);
+  if (existing) {
+    delete memoryTeachers[existing.email.toLowerCase()];
+    delete memoryTeachers[existing.name.toLowerCase()];
+    delete memoryTeachers[existing.id];
+    writeJsonSafe(TEACHERS_FILE, memoryTeachers);
+  }
+  return true;
+}
+
+export async function getAllTeachers(): Promise<{ id: string; name: string; email: string; isAdmin: boolean; password?: string }[]> {
+  if (isPostgresActive && pool) {
+    try {
+      const res = await pool.query('SELECT id, name, email, password, is_admin FROM teachers ORDER BY created_at ASC');
+      return res.rows.map((r) => {
+        const isChuck = r.email.toLowerCase() === 'chuckacr1501@gmail.com';
+        return {
+          id: r.id,
+          name: r.name,
+          email: r.email,
+          password: r.password,
+          isAdmin: isChuck ? true : !!r.is_admin,
+        };
+      });
     } catch (e) {
       console.error('[DB] Error fetching teachers:', e);
     }
@@ -322,7 +455,16 @@ export async function getAllTeachers(): Promise<{ id: string; name: string; emai
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
-  }).map((t) => ({ id: t.id, name: t.name, email: t.email, isAdmin: t.isAdmin }));
+  }).map((t) => {
+    const isChuck = t.email.toLowerCase() === 'chuckacr1501@gmail.com';
+    return {
+      id: t.id,
+      name: t.name,
+      email: t.email,
+      password: t.password,
+      isAdmin: isChuck ? true : t.isAdmin,
+    };
+  });
 }
 
 // -------------------------------------------------------------
@@ -584,6 +726,9 @@ export async function findStudent(identifier: string): Promise<StudentRecord | n
           email: r.email,
           password: r.password,
           createdAt: r.created_at,
+          teacherId: r.teacher_id || 'teacher-chuck',
+          teacherName: r.teacher_name || 'Chuck',
+          className: r.class_name || (r.teacher_name ? `${r.teacher_name}'s Class` : "Chuck's Class"),
         };
       }
       return null;
@@ -593,40 +738,132 @@ export async function findStudent(identifier: string): Promise<StudentRecord | n
   }
 
   // Fallback
-  return memoryStudents[norm] || null;
+  return memoryStudents[norm] ||
+    Object.values(memoryStudents).find((s) => s.email.toLowerCase() === norm || s.name.toLowerCase() === norm) ||
+    null;
+}
+
+export async function getStudentById(id: string): Promise<StudentRecord | null> {
+  if (isPostgresActive && pool) {
+    try {
+      const res = await pool.query('SELECT * FROM students WHERE id = $1 LIMIT 1', [id]);
+      if (res.rows.length > 0) {
+        const r = res.rows[0];
+        return {
+          id: r.id,
+          name: r.name,
+          email: r.email,
+          password: r.password,
+          createdAt: r.created_at,
+          teacherId: r.teacher_id || 'teacher-chuck',
+          teacherName: r.teacher_name || 'Chuck',
+          className: r.class_name || (r.teacher_name ? `${r.teacher_name}'s Class` : "Chuck's Class"),
+        };
+      }
+      return null;
+    } catch (e) {
+      console.error('[DB] Error finding student by id:', e);
+    }
+  }
+
+  return Object.values(memoryStudents).find((s) => s.id === id) || null;
 }
 
 export async function addStudent(student: StudentRecord): Promise<StudentRecord> {
+  const teacherId = student.teacherId || 'teacher-chuck';
+  const teacherName = student.teacherName || 'Chuck';
+  const className = student.className || `${teacherName}'s Class`;
+
+  const record: StudentRecord = {
+    ...student,
+    teacherId,
+    teacherName,
+    className,
+  };
+
   if (isPostgresActive && pool) {
     try {
       await pool.query(
-        `INSERT INTO students (id, name, email, password)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (email) DO UPDATE SET password = EXCLUDED.password, name = EXCLUDED.name`,
-        [student.id, student.name, student.email, student.password]
+        `INSERT INTO students (id, name, email, password, teacher_id, teacher_name, class_name)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (email) DO UPDATE SET
+           password = EXCLUDED.password,
+           name = EXCLUDED.name,
+           teacher_id = EXCLUDED.teacher_id,
+           teacher_name = EXCLUDED.teacher_name,
+           class_name = EXCLUDED.class_name`,
+        [record.id, record.name, record.email, record.password, record.teacherId, record.teacherName, record.className]
       );
-      return student;
+      return record;
     } catch (e) {
       console.error('[DB] Error adding student to PostgreSQL:', e);
     }
   }
 
   // Fallback
-  memoryStudents[student.email.toLowerCase()] = student;
-  memoryStudents[student.name.toLowerCase()] = student;
+  memoryStudents[record.email.toLowerCase()] = record;
+  memoryStudents[record.name.toLowerCase()] = record;
+  memoryStudents[record.id] = record;
   writeJsonSafe(STUDENTS_FILE, memoryStudents);
-  return student;
+  return record;
 }
 
-export async function getAllStudents(): Promise<{ id: string; name: string; email: string; createdAt?: string }[]> {
+export async function updateStudent(id: string, updates: { name?: string; email?: string; password?: string; teacherId?: string; teacherName?: string; className?: string }): Promise<StudentRecord | null> {
+  const existing = await getStudentById(id);
+  if (!existing) return null;
+
+  const updated: StudentRecord = {
+    id: existing.id,
+    name: updates.name ? updates.name.trim() : existing.name,
+    email: updates.email ? updates.email.trim() : existing.email,
+    password: updates.password ? updates.password.trim() : existing.password,
+    createdAt: existing.createdAt,
+    teacherId: updates.teacherId !== undefined ? updates.teacherId : existing.teacherId,
+    teacherName: updates.teacherName !== undefined ? updates.teacherName : existing.teacherName,
+    className: updates.className !== undefined ? updates.className : existing.className,
+  };
+
   if (isPostgresActive && pool) {
     try {
-      const res = await pool.query('SELECT id, name, email, created_at FROM students ORDER BY created_at DESC');
+      await pool.query(
+        `UPDATE students
+         SET name = $1, email = $2, password = $3, teacher_id = $4, teacher_name = $5, class_name = $6
+         WHERE id = $7`,
+        [updated.name, updated.email, updated.password, updated.teacherId, updated.teacherName, updated.className, id]
+      );
+      return updated;
+    } catch (e) {
+      console.error('[DB] Error updating student in PostgreSQL:', e);
+    }
+  }
+
+  // Fallback memory / JSON
+  delete memoryStudents[existing.email.toLowerCase()];
+  delete memoryStudents[existing.name.toLowerCase()];
+  memoryStudents[updated.email.toLowerCase()] = updated;
+  memoryStudents[updated.name.toLowerCase()] = updated;
+  memoryStudents[updated.id] = updated;
+  writeJsonSafe(STUDENTS_FILE, memoryStudents);
+  return updated;
+}
+
+export async function getAllStudents(filterTeacherId?: string): Promise<StudentRecord[]> {
+  if (isPostgresActive && pool) {
+    try {
+      const query = filterTeacherId
+        ? 'SELECT id, name, email, password, created_at, teacher_id, teacher_name, class_name FROM students WHERE teacher_id = $1 ORDER BY created_at DESC'
+        : 'SELECT id, name, email, password, created_at, teacher_id, teacher_name, class_name FROM students ORDER BY created_at DESC';
+      const params = filterTeacherId ? [filterTeacherId] : [];
+      const res = await pool.query(query, params);
       return res.rows.map((r) => ({
         id: r.id,
         name: r.name,
         email: r.email,
+        password: r.password,
         createdAt: r.created_at,
+        teacherId: r.teacher_id || 'teacher-chuck',
+        teacherName: r.teacher_name || 'Chuck',
+        className: r.class_name || (r.teacher_name ? `${r.teacher_name}'s Class` : "Chuck's Class"),
       }));
     } catch (e) {
       console.error('[DB] Error fetching all students from PostgreSQL:', e);
@@ -636,7 +873,7 @@ export async function getAllStudents(): Promise<{ id: string; name: string; emai
   // Fallback memory / JSON
   const list = Object.values(memoryStudents);
   const seen = new Set<string>();
-  return list.filter((s) => {
+  const unique = list.filter((s) => {
     const key = s.id || s.email.toLowerCase();
     if (seen.has(key)) return false;
     seen.add(key);
@@ -645,8 +882,17 @@ export async function getAllStudents(): Promise<{ id: string; name: string; emai
     id: s.id,
     name: s.name,
     email: s.email,
+    password: s.password,
     createdAt: s.createdAt || new Date().toISOString(),
+    teacherId: s.teacherId || 'teacher-chuck',
+    teacherName: s.teacherName || 'Chuck',
+    className: s.className || (s.teacherName ? `${s.teacherName}'s Class` : "Chuck's Class"),
   }));
+
+  if (filterTeacherId) {
+    return unique.filter((s) => s.teacherId === filterTeacherId);
+  }
+  return unique;
 }
 
 export async function deleteStudent(studentId: string): Promise<boolean> {

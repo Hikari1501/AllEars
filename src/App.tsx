@@ -76,7 +76,14 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<UserAccount>(() => {
     try {
       const saved = localStorage.getItem('allears_user');
-      return saved ? JSON.parse(saved) : defaultStudentUser;
+      if (saved) {
+        const u = JSON.parse(saved);
+        if (u.email && u.email.toLowerCase() === 'chuckacr1501@gmail.com') {
+          return { ...u, role: 'teacher' as const, isAdmin: true };
+        }
+        return u;
+      }
+      return defaultStudentUser;
     } catch {
       return defaultStudentUser;
     }
@@ -333,7 +340,14 @@ export default function App() {
 
   // Handle successful teacher login
   const handleTeacherLoginSuccess = (teacherUser: UserAccount) => {
-    setCurrentUser(teacherUser);
+    const isChuck = teacherUser.email.toLowerCase() === 'chuckacr1501@gmail.com';
+    const user = {
+      ...teacherUser,
+      role: 'teacher' as const,
+      isAdmin: isChuck ? true : Boolean(teacherUser.isAdmin),
+    };
+    setCurrentUser(user);
+    localStorage.setItem('allears_user', JSON.stringify(user));
   };
 
   // Handle successful student login / registration
@@ -1184,13 +1198,16 @@ export default function App() {
       {/* Teacher Permission Management Modal */}
       {isTeacherManagementOpen && (
         <TeacherManagementModal
+          currentUser={currentUser}
           onClose={() => setIsTeacherManagementOpen(false)}
+          onUserUpdated={(updated) => setCurrentUser(updated)}
         />
       )}
 
       {/* Student Account Management Modal for Teachers */}
       {isStudentManagementOpen && (
         <StudentManagementModal
+          currentUser={currentUser}
           onClose={() => setIsStudentManagementOpen(false)}
         />
       )}

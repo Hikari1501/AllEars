@@ -28,6 +28,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenImportModal,
 }) => {
   const isTeacher = currentUser.role === 'teacher';
+  const isAdmin = Boolean(currentUser.isAdmin || currentUser.email.toLowerCase() === 'chuckacr1501@gmail.com');
   const isRegisteredStudent = currentUser.role === 'student' && currentUser.id !== 'student-guest';
 
   return (
@@ -121,13 +122,14 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Teacher account pill */}
           {isTeacher && (
             <div className="flex items-center gap-2">
-              {currentUser.isAdmin && (
+              {isAdmin && (
                 <button
                   onClick={onOpenTeacherManagement}
-                  className="p-1.5 text-slate-500 hover:text-amber-800 hover:bg-amber-50 rounded-lg transition-colors"
-                  title="Manage Authorized Teachers"
+                  className="flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-amber-900 bg-amber-100/80 hover:bg-amber-200 border border-amber-300 rounded-xl transition-colors cursor-pointer shadow-2xs"
+                  title="Manage Authorized Teachers & Staff (Administrator Control)"
                 >
-                  <Shield className="w-4 h-4 text-amber-600" />
+                  <Shield className="w-3.5 h-3.5 text-amber-700 stroke-[2.5]" />
+                  <span>Teachers</span>
                 </button>
               )}
 
@@ -147,8 +149,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="font-bold text-slate-800 truncate max-w-[100px]">
                   {currentUser.name}
                 </span>
-                <span className="text-[10px] text-amber-800 font-semibold uppercase">
-                  Teacher
+                <span className="text-[10px] text-amber-900 font-bold uppercase tracking-tight">
+                  {isAdmin ? 'Teacher • Admin' : 'Teacher'}
                 </span>
               </div>
 
