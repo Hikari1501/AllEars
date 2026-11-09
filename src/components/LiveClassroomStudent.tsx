@@ -227,7 +227,7 @@ export const LiveClassroomStudent: React.FC<LiveClassroomStudentProps> = ({
                 <BookOpen className="w-4 h-4 text-amber-600" />
                 <span>Live Interactive Captions</span>
               </div>
-              {session?.allowStudentCaptions !== false ? (
+              {session?.allowStudentCaptions ? (
                 <button
                   onClick={() => setShowCaptions(!showCaptions)}
                   className="text-[11px] font-semibold text-amber-800 hover:underline cursor-pointer"
@@ -242,7 +242,7 @@ export const LiveClassroomStudent: React.FC<LiveClassroomStudentProps> = ({
               )}
             </div>
 
-            {session?.allowStudentCaptions === false ? (
+            {!session?.allowStudentCaptions ? (
               <div className="py-8 px-4 text-center space-y-2.5 bg-slate-50 border border-dashed border-slate-200 rounded-xl animate-in fade-in">
                 <div className="w-10 h-10 rounded-full bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center mx-auto">
                   <Lock className="w-5 h-5" />
@@ -314,21 +314,25 @@ export const LiveClassroomStudent: React.FC<LiveClassroomStudentProps> = ({
                       {session.activeVocabWord.partOfSpeech}
                     </span>
                   </div>
-                  <div className="text-sm font-mono text-slate-500 mt-1">
-                    {session.activeVocabWord.phonetic}
-                  </div>
+                  {session.activeVocabWord.phonetic && (
+                    <div className="text-sm font-mono text-slate-500 mt-1">
+                      {session.activeVocabWord.phonetic}
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Definition */}
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                  Learner Meaning
+              {/* Definition if provided */}
+              {session.activeVocabWord.definition && session.activeVocabWord.definition.trim().length > 0 && (
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                    Learner Meaning
+                  </div>
+                  <p className="text-sm text-slate-800 leading-relaxed font-medium">
+                    {session.activeVocabWord.definition}
+                  </p>
                 </div>
-                <p className="text-sm text-slate-800 leading-relaxed font-medium">
-                  {session.activeVocabWord.definition}
-                </p>
-              </div>
+              )}
 
               {/* Example if provided */}
               {session.activeVocabWord.example && session.activeVocabWord.example.trim().length > 0 && (

@@ -18,7 +18,7 @@ import {
   BookOpen,
 } from 'lucide-react';
 import { MatchingPairsCanvas } from './MatchingPairsCanvas';
-import { playSuccessChime } from '../utils/soundEffects';
+import { playSuccessChime, playWrongAnswerSound } from '../utils/soundEffects';
 
 interface StudentQuestionsPanelProps {
   questions: Question[];
@@ -187,9 +187,11 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
       pointsEarned = 0;
     }
 
-    // Play a short sound on students' device whenever they get all correct answers for a question
+    // Play sound on students' device: chime for all correct, gentle cue for wrong answer
     if (isCorrect && question.type !== 'open_ended') {
       playSuccessChime();
+    } else if (!isCorrect && question.type !== 'open_ended') {
+      playWrongAnswerSound();
     }
 
     const submission: StudentAnswer = {

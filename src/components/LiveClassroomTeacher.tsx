@@ -229,9 +229,9 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
     updateServerState({ allowEditAnswer: nextVal });
   };
 
-  // Toggle allowing students to toggle captions on their screens
+  // Toggle allowing students to toggle captions on their screens (Off by default)
   const handleToggleAllowStudentCaptions = async () => {
-    const current = session?.allowStudentCaptions !== false; // defaults to true
+    const current = Boolean(session?.allowStudentCaptions); // defaults to false
     const nextVal = !current;
     setSession((prev) => (prev ? { ...prev, allowStudentCaptions: nextVal } : null));
     updateServerState({ allowStudentCaptions: nextVal });
@@ -382,23 +382,23 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
             <span>Edit Answers: {session?.allowEditAnswer ? 'Allowed' : 'Locked'}</span>
           </button>
 
-          {/* Teacher Option: Allow or Disallow Student Captions */}
+          {/* Teacher Option: Allow or Disallow Student Captions (Off by default) */}
           <button
             type="button"
             onClick={handleToggleAllowStudentCaptions}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
-              session?.allowStudentCaptions !== false
+              session?.allowStudentCaptions
                 ? 'bg-amber-50 border-amber-300 text-amber-900 shadow-2xs'
-                : 'bg-rose-50 border-rose-300 text-rose-800 shadow-2xs'
+                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
             }`}
             title={
-              session?.allowStudentCaptions !== false
-                ? 'Students CAN toggle interactive captions on their screen (Click to disallow)'
-                : 'Students CANNOT view or toggle captions on their screen (Click to allow)'
+              session?.allowStudentCaptions
+                ? 'Students CAN toggle interactive captions on their screen (Click to turn off)'
+                : 'Student captions are currently OFF (Click to allow students to view subtitles)'
             }
           >
-            <Subtitles className="w-3.5 h-3.5" />
-            <span>Student Captions: {session?.allowStudentCaptions !== false ? 'Allowed' : 'Disallowed'}</span>
+            <Subtitles className={`w-3.5 h-3.5 ${session?.allowStudentCaptions ? 'text-amber-600' : 'text-slate-400'}`} />
+            <span>Student Captions: {session?.allowStudentCaptions ? 'Allowed' : 'Off'}</span>
           </button>
 
           {/* Teacher Option: Auto-Pause Video at Questions */}

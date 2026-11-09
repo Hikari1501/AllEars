@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Question, StudentAnswer } from '../types';
 import { MatchingPairsCanvas } from './MatchingPairsCanvas';
-import { playSuccessChime } from '../utils/soundEffects';
+import { playSuccessChime, playWrongAnswerSound } from '../utils/soundEffects';
 import {
   CheckCircle2,
   XCircle,
@@ -174,9 +174,11 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
       }
     }
 
-    // Play a short sound on students' device whenever they get all correct answers for a question
+    // Play sound on students' device: chime for all correct, gentle cue for wrong answer
     if (correct && question.type !== 'open_ended') {
       playSuccessChime();
+    } else if (!correct && question.type !== 'open_ended') {
+      playWrongAnswerSound();
     }
 
     setIsAnswerCorrect(correct);

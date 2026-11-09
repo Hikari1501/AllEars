@@ -217,14 +217,18 @@ export const LiveClassroomProjector: React.FC<LiveClassroomProjectorProps> = ({
               </div>
               <div className="flex items-center gap-2">
                 <h3 className="text-lg font-extrabold text-white">{session.activeVocabWord.word}</h3>
-                <span className="text-xs font-mono text-slate-400">{session.activeVocabWord.phonetic}</span>
+                {session.activeVocabWord.phonetic && (
+                  <span className="text-xs font-mono text-slate-400">{session.activeVocabWord.phonetic}</span>
+                )}
                 <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-amber-400 text-slate-950">
                   {session.activeVocabWord.cefrLevel}
                 </span>
               </div>
-              <p className="text-xs text-slate-200 mt-1 leading-relaxed">
-                {session.activeVocabWord.definition}
-              </p>
+              {session.activeVocabWord.definition && session.activeVocabWord.definition.trim().length > 0 && (
+                <p className="text-xs text-slate-200 mt-1 leading-relaxed">
+                  {session.activeVocabWord.definition}
+                </p>
+              )}
               {session.activeVocabWord.example && session.activeVocabWord.example.trim().length > 0 && (
                 <p className="text-[11px] text-amber-300/90 italic mt-1.5 border-t border-slate-800 pt-1.5">
                   "{session.activeVocabWord.example}"

@@ -663,7 +663,7 @@ app.post('/api/live/create', async (req: Request, res: Response) => {
     activeVocabWord: null,
     activeStudentResponse: null,
     allowEditAnswer: false,
-    allowStudentCaptions: true,
+    allowStudentCaptions: false,
     autoPauseAtCheckpoints: true,
     isCompleted: false,
     students: {},

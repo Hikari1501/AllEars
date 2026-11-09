@@ -476,10 +476,10 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
 
     const newEntry: VocabEntry = {
       word: vocabWord.trim(),
-      phonetic: vocabPhonetic.trim() || `/${vocabWord.trim().toLowerCase()}/`,
+      phonetic: vocabPhonetic.trim(),
       cefrLevel: vocabLevel,
       partOfSpeech: vocabPos,
-      definition: vocabDefinition.trim() || 'A key term used in this context.',
+      definition: vocabDefinition.trim(),
       example: vocabExample.trim(),
       cambridgeSlug: vocabCambridge.trim() || vocabWord.trim().toLowerCase().replace(/\s+/g, '-'),
       imageUrl: vocabImageUrl.trim() || undefined,
@@ -2247,9 +2247,9 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                         <span className="text-[10px] text-slate-500 italic">{v.partOfSpeech}</span>
                       </div>
                     </div>
-                    <div className="font-mono text-[11px] text-slate-500">{v.phonetic}</div>
-                    <p className="text-slate-700 line-clamp-2 leading-relaxed">{v.definition}</p>
-                    <p className="text-[11px] text-slate-500 italic truncate">"{v.example}"</p>
+                    {v.phonetic && <div className="font-mono text-[11px] text-slate-500">{v.phonetic}</div>}
+                    {v.definition && <p className="text-slate-700 line-clamp-2 leading-relaxed">{v.definition}</p>}
+                    {v.example && <p className="text-[11px] text-slate-500 italic truncate">"{v.example}"</p>}
 
                     {/* Illustration Image thumbnail */}
                     {v.imageUrl && (

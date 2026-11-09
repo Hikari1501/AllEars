@@ -82,7 +82,7 @@ export const VocabPopover: React.FC<VocabPopoverProps> = ({
                 <span className="text-xs italic text-slate-500">{vocab.partOfSpeech}</span>
               </div>
               <div className="flex items-center gap-2 mt-1">
-                <span className="text-sm font-mono text-slate-500">{vocab.phonetic}</span>
+                {vocab.phonetic && <span className="text-sm font-mono text-slate-500">{vocab.phonetic}</span>}
                 <button
                   onClick={speakWord}
                   className="p-1 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-md transition-colors"
@@ -94,11 +94,13 @@ export const VocabPopover: React.FC<VocabPopoverProps> = ({
             </div>
           </div>
 
-          {/* Definition */}
-          <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-100">
-            <div className="text-xs font-medium text-slate-500 mb-1">Definition</div>
-            <p className="text-sm text-slate-800 leading-relaxed">{vocab.definition}</p>
-          </div>
+          {/* Definition (if provided) */}
+          {vocab.definition && vocab.definition.trim().length > 0 && (
+            <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-100">
+              <div className="text-xs font-medium text-slate-500 mb-1">Definition</div>
+              <p className="text-sm text-slate-800 leading-relaxed">{vocab.definition}</p>
+            </div>
+          )}
 
           {/* Example in Context (if provided) */}
           {vocab.example && vocab.example.trim().length > 0 && (
