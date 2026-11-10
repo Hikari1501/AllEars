@@ -34,6 +34,8 @@ import {
   Edit3,
   Download,
   X,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 
 interface LessonEditorProps {
@@ -42,6 +44,15 @@ interface LessonEditorProps {
   onDelete?: (lessonId: string) => void;
   initialLesson?: Lesson | null;
 }
+
+// Helper to sort questions: general / no-pause questions come first, followed by timestamped questions
+const sortLessonQuestions = (list: Question[]): Question[] => {
+  const general = list.filter((q) => q.timestamp == null || q.timestamp < 0);
+  const timestamped = list
+    .filter((q) => typeof q.timestamp === 'number' && q.timestamp >= 0)
+    .sort((a, b) => (a.timestamp as number) - (b.timestamp as number));
+  return [...general, ...timestamped];
+};
 
 export const LessonEditor: React.FC<LessonEditorProps> = ({
   onSave,
@@ -96,9 +107,9 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
     ]
   );
 
-  // Questions list
-  const [questions, setQuestions] = useState<Question[]>(
-    initialLesson?.questions || []
+  // Questions list (general / no-pause questions first, then timestamped questions)
+  const [questions, setQuestions] = useState<Question[]>(() =>
+    sortLessonQuestions(initialLesson?.questions || [])
   );
 
   // Difficult words list
@@ -650,7 +661,7 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
       timestamp: parsedTs,
       type: newQType,
       prompt: newQPrompt.trim(),
-      explanation: newQExplanation.trim() || 'Review the listening segment.',
+      explanation: newQExplanation.trim(),
       points: 10,
     };
 
@@ -678,23 +689,11 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
 
     if (editingQuestionId) {
       setQuestions((prev) =>
-        prev
-          .map((q) => (q.id === editingQuestionId ? questionData : q))
-          .sort((a, b) => {
-            const aT = typeof a.timestamp === 'number' && a.timestamp >= 0 ? a.timestamp : 999999;
-            const bT = typeof b.timestamp === 'number' && b.timestamp >= 0 ? b.timestamp : 999999;
-            return aT - bT;
-          })
+        sortLessonQuestions(prev.map((q) => (q.id === editingQuestionId ? questionData : q)))
       );
       setSuccessMessage(`Updated question successfully!`);
     } else {
-      setQuestions((prev) =>
-        [...prev, questionData].sort((a, b) => {
-          const aT = typeof a.timestamp === 'number' && a.timestamp >= 0 ? a.timestamp : 999999;
-          const bT = typeof b.timestamp === 'number' && b.timestamp >= 0 ? b.timestamp : 999999;
-          return aT - bT;
-        })
-      );
+      setQuestions((prev) => sortLessonQuestions([...prev, questionData]));
       setSuccessMessage(`Added new question to lesson!`);
     }
     setTimeout(() => setSuccessMessage(null), 3000);
@@ -709,15 +708,29 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
   const handleSaveEditQTimestamp = (qId: string) => {
     const parsed = parseTimeToSeconds(editingQTimestampStr);
     setQuestions((prev) =>
-      prev
-        .map((q) => (q.id === qId ? { ...q, timestamp: parsed } : q))
-        .sort((a, b) => {
-          const aT = typeof a.timestamp === 'number' && a.timestamp >= 0 ? a.timestamp : 999999;
-          const bT = typeof b.timestamp === 'number' && b.timestamp >= 0 ? b.timestamp : 999999;
-          return aT - bT;
-        })
+      sortLessonQuestions(prev.map((q) => (q.id === qId ? { ...q, timestamp: parsed } : q)))
     );
     setEditingQTimestampId(null);
+  };
+
+  const handleMoveGeneralQuestion = (qId: string, direction: 'up' | 'down') => {
+    setQuestions((prev) => {
+      const general = prev.filter((q) => q.timestamp == null || q.timestamp < 0);
+      const timestamped = prev.filter((q) => typeof q.timestamp === 'number' && q.timestamp >= 0);
+
+      const idx = general.findIndex((q) => q.id === qId);
+      if (idx === -1) return prev;
+      if (direction === 'up' && idx === 0) return prev;
+      if (direction === 'down' && idx === general.length - 1) return prev;
+
+      const newGeneral = [...general];
+      const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+      const temp = newGeneral[idx];
+      newGeneral[idx] = newGeneral[targetIdx];
+      newGeneral[targetIdx] = temp;
+
+      return [...newGeneral, ...timestamped];
+    });
   };
 
   const handleCancelEditQTimestamp = () => {
@@ -1884,6 +1897,11 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
               <div className="space-y-2.5">
                 {questions.map((q) => {
                   const isCurrentlyEditing = editingQuestionId === q.id;
+                  const isGeneral = q.timestamp == null || q.timestamp < 0;
+                  const generalQuestions = questions.filter((item) => item.timestamp == null || item.timestamp < 0);
+                  const generalIdx = isGeneral ? generalQuestions.findIndex((item) => item.id === q.id) : -1;
+                  const canMoveUp = generalIdx > 0;
+                  const canMoveDown = generalIdx >= 0 && generalIdx < generalQuestions.length - 1;
 
                   return (
                     <div
@@ -2002,8 +2020,40 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                         )}
                       </div>
 
-                      {/* Question Card Actions: Edit Content & Delete */}
+                      {/* Question Card Actions: Reorder, Edit Content & Delete */}
                       <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
+                        {isGeneral && generalQuestions.length > 1 && (
+                          <div className="flex items-center bg-white border border-slate-200 rounded-lg p-0.5 shadow-2xs">
+                            <button
+                              type="button"
+                              onClick={() => handleMoveGeneralQuestion(q.id, 'up')}
+                              disabled={!canMoveUp}
+                              className={`p-1 rounded text-xs transition-colors ${
+                                canMoveUp
+                                  ? 'text-slate-700 hover:text-amber-900 hover:bg-amber-100 cursor-pointer'
+                                  : 'text-slate-300 cursor-not-allowed opacity-40'
+                              }`}
+                              title="Move General Question Up"
+                              aria-label="Move Up"
+                            >
+                              <ArrowUp className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleMoveGeneralQuestion(q.id, 'down')}
+                              disabled={!canMoveDown}
+                              className={`p-1 rounded text-xs transition-colors ${
+                                canMoveDown
+                                  ? 'text-slate-700 hover:text-amber-900 hover:bg-amber-100 cursor-pointer'
+                                  : 'text-slate-300 cursor-not-allowed opacity-40'
+                              }`}
+                              title="Move General Question Down"
+                              aria-label="Move Down"
+                            >
+                              <ArrowDown className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
                         <button
                           type="button"
                           onClick={() => handleStartEditQuestion(q)}

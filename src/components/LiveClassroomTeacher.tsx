@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   LiveSessionState,
   Lesson,
@@ -269,10 +269,18 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
   const studentsList: LiveStudentData[] = session ? Object.values(session.students) : [];
   const totalStudents = studentsList.length;
 
+  const orderedQuestions = useMemo(() => {
+    const general = (lesson.questions || []).filter((q) => q.timestamp == null || q.timestamp < 0);
+    const timestamped = (lesson.questions || [])
+      .filter((q) => typeof q.timestamp === 'number' && q.timestamp >= 0)
+      .sort((a, b) => (a.timestamp as number) - (b.timestamp as number));
+    return [...general, ...timestamped];
+  }, [lesson.questions]);
+
   const inspectingQuestion =
-    lesson.questions.find((q) => q.id === selectedQuestionId) ||
+    orderedQuestions.find((q) => q.id === selectedQuestionId) ||
     activeQuestion ||
-    lesson.questions[0];
+    orderedQuestions[0];
 
   const formatSeconds = (sec?: number | null) => {
     if (typeof sec !== 'number') return 'Whole Video';
@@ -546,7 +554,7 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
                 </div>
 
                 <div className="space-y-2 max-h-[550px] overflow-y-auto pr-1">
-                  {lesson.questions.map((q, idx) => {
+                  {orderedQuestions.map((q, idx) => {
                     const isSelected = inspectingQuestion?.id === q.id;
                     const isAutoPauseActive = session?.autoPauseAtCheckpoints !== false;
                     const currentActiveId = isAutoPauseActive

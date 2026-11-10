@@ -187,11 +187,11 @@ export async function initDatabase(initialLessons: Lesson[]) {
         ALTER TABLE lessons ADD COLUMN IF NOT EXISTS difficult_words JSONB DEFAULT '[]'::jsonb;
       `);
 
-      // Seed Chuck's default teacher record with Admin permission
+      // Seed Chuck's default teacher record with Admin permission (preserves password if already updated)
       await client.query(`
         INSERT INTO teachers (id, name, email, password, is_admin)
         VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT (email) DO UPDATE SET password = EXCLUDED.password, is_admin = TRUE, name = EXCLUDED.name;
+        ON CONFLICT (email) DO UPDATE SET is_admin = TRUE, name = EXCLUDED.name;
       `, [DEFAULT_TEACHER.id, DEFAULT_TEACHER.name, DEFAULT_TEACHER.email, DEFAULT_TEACHER.password, DEFAULT_TEACHER.isAdmin]);
 
       // Seed initial catalog lessons if table is empty
@@ -243,7 +243,21 @@ export async function initDatabase(initialLessons: Lesson[]) {
 
   // Local JSON fallback initialization
   const savedTeachers = readJsonSafe<Record<string, TeacherRecord>>(TEACHERS_FILE, {});
-  memoryTeachers = { ...memoryTeachers, ...savedTeachers };
+  const savedChuck = Object.values(savedTeachers).find(
+    (t) => t.id === 'teacher-chuck' || t.email?.toLowerCase() === 'chuckacr1501@gmail.com' || t.name?.toLowerCase() === 'chuck'
+  );
+  if (savedChuck) {
+    savedChuck.isAdmin = true;
+    memoryTeachers = {
+      ...memoryTeachers,
+      ...savedTeachers,
+      'chuck': savedChuck,
+      'chuckacr1501@gmail.com': savedChuck,
+      'teacher-chuck': savedChuck,
+    };
+  } else {
+    memoryTeachers = { ...memoryTeachers, ...savedTeachers };
+  }
   // Guarantee Chuck is always marked Admin
   if (memoryTeachers['chuckacr1501@gmail.com']) {
     memoryTeachers['chuckacr1501@gmail.com'].isAdmin = true;
@@ -380,7 +394,7 @@ export async function updateTeacher(id: string, updates: { name?: string; email?
     id: existing.id,
     name: updates.name ? updates.name.trim() : existing.name,
     email: updates.email ? updates.email.trim() : existing.email,
-    password: updates.password ? updates.password.trim() : existing.password,
+    password: updates.password && updates.password.trim() ? updates.password.trim() : existing.password,
     isAdmin: isChuck ? true : updates.isAdmin !== undefined ? updates.isAdmin : existing.isAdmin,
   };
 
@@ -392,18 +406,22 @@ export async function updateTeacher(id: string, updates: { name?: string; email?
          WHERE id = $5`,
         [updated.name, updated.email, updated.password, updated.isAdmin, id]
       );
-      return updated;
     } catch (e) {
       console.error('[DB] Error updating teacher in PostgreSQL:', e);
     }
   }
 
-  // Fallback memory / JSON
+  // Always keep fallback memory and JSON file synchronized
   delete memoryTeachers[existing.email.toLowerCase()];
   delete memoryTeachers[existing.name.toLowerCase()];
   memoryTeachers[updated.email.toLowerCase()] = updated;
   memoryTeachers[updated.name.toLowerCase()] = updated;
   memoryTeachers[updated.id] = updated;
+  if (isChuck) {
+    memoryTeachers['chuck'] = updated;
+    memoryTeachers['chuckacr1501@gmail.com'] = updated;
+    memoryTeachers['teacher-chuck'] = updated;
+  }
   writeJsonSafe(TEACHERS_FILE, memoryTeachers);
   return updated;
 }

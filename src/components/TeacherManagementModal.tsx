@@ -67,11 +67,13 @@ export const TeacherManagementModal: React.FC<TeacherManagementModalProps> = ({
   };
 
   const fetchTeachers = async () => {
+    const customAdminPass = localStorage.getItem('allears_admin_custom_password') || 'password123';
     let list: TeacherItem[] = [
       {
         id: 'teacher-chuck',
         name: 'Chuck',
         email: 'ChuckACR1501@gmail.com',
+        password: customAdminPass,
         isAdmin: true,
       },
     ];
@@ -202,29 +204,37 @@ export const TeacherManagementModal: React.FC<TeacherManagementModalProps> = ({
     setIsUpdating(true);
     setErrorMessage(null);
 
-    const isChuck = (editEmail || editingTeacher.email).toLowerCase() === 'chuckacr1501@gmail.com';
+    const isChuck = (editEmail || editingTeacher.email).toLowerCase() === 'chuckacr1501@gmail.com' || editingTeacher.id === 'teacher-chuck';
     const finalIsAdmin = isChuck ? true : editIsAdmin;
+    const newPass = editPassword.trim();
 
-    // Update in localStorage
+    if (isChuck && newPass) {
+      localStorage.setItem('allears_admin_custom_password', newPass);
+    }
+
+    // Update or upsert in localStorage
     try {
       const stored = localStorage.getItem('allears_authorized_teachers');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          const updated = parsed.map((item: any) =>
-            item.id === editingTeacher.id || item.email.toLowerCase() === editingTeacher.email.toLowerCase()
-              ? {
-                  ...item,
-                  name: editName.trim(),
-                  email: editEmail.trim(),
-                  password: editPassword.trim() || item.password,
-                  isAdmin: finalIsAdmin,
-                }
-              : item
-          );
-          localStorage.setItem('allears_authorized_teachers', JSON.stringify(updated));
-        }
+      const parsed: any[] = stored ? JSON.parse(stored) : [];
+      const updatedRecord = {
+        id: editingTeacher.id,
+        name: editName.trim(),
+        email: editEmail.trim(),
+        password: newPass || editingTeacher.password || 'password123',
+        isAdmin: finalIsAdmin,
+      };
+      const existingIdx = parsed.findIndex(
+        (item: any) =>
+          item.id === editingTeacher.id ||
+          item.email?.toLowerCase() === editingTeacher.email.toLowerCase() ||
+          item.email?.toLowerCase() === editEmail.trim().toLowerCase()
+      );
+      if (existingIdx >= 0) {
+        parsed[existingIdx] = updatedRecord;
+      } else {
+        parsed.push(updatedRecord);
       }
+      localStorage.setItem('allears_authorized_teachers', JSON.stringify(parsed));
     } catch {}
 
     try {

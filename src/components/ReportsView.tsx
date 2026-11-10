@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Lesson, LessonSubmission, UserRole, SessionReport } from '../types';
 import {
   BarChart3,
@@ -95,8 +95,16 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     ? Math.round(displayStudents.reduce((acc, s) => acc + s.percentage, 0) / totalAttendees)
     : 0;
 
+  const orderedQuestions = useMemo(() => {
+    const general = (lesson.questions || []).filter((q) => q.timestamp == null || q.timestamp < 0);
+    const timestamped = (lesson.questions || [])
+      .filter((q) => typeof q.timestamp === 'number' && q.timestamp >= 0)
+      .sort((a, b) => (a.timestamp as number) - (b.timestamp as number));
+    return [...general, ...timestamped];
+  }, [lesson.questions]);
+
   // Calculate question accuracy for this session or aggregate
-  const questionStats = lesson.questions.map((q) => {
+  const questionStats = orderedQuestions.map((q) => {
     let attemptedCount = 0;
     let correctCount = 0;
 
@@ -474,7 +482,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                 </div>
 
                 <div className="space-y-3">
-                  {lesson.questions.map((q, idx) => {
+                  {orderedQuestions.map((q, idx) => {
                     const ans = selectedStudentSub.answers ? selectedStudentSub.answers[q.id] : null;
                     return (
                       <div key={q.id} className="p-3 bg-white border border-slate-200 rounded-xl text-xs space-y-1.5">
@@ -542,7 +550,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                 </h3>
 
                 <div className="space-y-3">
-                  {lesson.questions.map((q, idx) => {
+                  {orderedQuestions.map((q, idx) => {
                     const ans = myStudentResult.answers ? myStudentResult.answers[q.id] : null;
                     const isCorrect = ans?.isCorrect;
 

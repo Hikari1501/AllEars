@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Question, StudentAnswer } from '../types';
 import {
   HelpCircle,
@@ -209,13 +209,14 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
   const totalScore = Object.values(answers).reduce((sum, a) => sum + (a.pointsEarned || 0), 0);
   const maxScore = questions.reduce((sum, q) => sum + (q.type === 'open_ended' ? 0 : q.points), 0);
 
-  // Group questions: Timed checkpoints and General questions
-  const timedQuestions = questions.filter(
-    (q) => typeof q.timestamp === 'number' && q.timestamp >= 0
-  );
-  const generalQuestions = questions.filter(
-    (q) => q.timestamp === null || q.timestamp === undefined || q.timestamp < 0
-  );
+  // Group questions: general / no-pause questions come first, followed by timestamped questions
+  const orderedQuestions = useMemo(() => {
+    const general = questions.filter((q) => q.timestamp == null || q.timestamp < 0);
+    const timestamped = questions
+      .filter((q) => typeof q.timestamp === 'number' && q.timestamp >= 0)
+      .sort((a, b) => (a.timestamp as number) - (b.timestamp as number));
+    return [...general, ...timestamped];
+  }, [questions]);
 
   const getFormattedCorrectAnswer = (q: Question) => {
     if (q.type === 'multiple_choice' && q.options) {
@@ -270,12 +271,12 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
 
       {/* Questions Scrollable Feed */}
       <div className="p-4 space-y-4 overflow-y-auto flex-1 divide-y divide-slate-100">
-        {questions.length === 0 ? (
+        {orderedQuestions.length === 0 ? (
           <div className="py-12 text-center text-slate-400 text-xs">
             No questions added to this lesson yet.
           </div>
         ) : (
-          questions.map((q, idx) => {
+          orderedQuestions.map((q, idx) => {
             const isTimestamped = typeof q.timestamp === 'number' && q.timestamp >= 0;
             const timeStr = formatSec(q.timestamp);
             const isActive = currentActiveQuestionId === q.id;

@@ -26,10 +26,12 @@ export const TeacherLoginModal: React.FC<TeacherLoginModalProps> = ({
 
     // Check credentials locally (essential for static deployments like GitHub Pages or offline)
     const checkClientAuth = (): UserAccount | null => {
+      const customAdminPass = localStorage.getItem('allears_admin_custom_password') || 'password123';
+
       // 1. Primary Teacher / Admin Account
       if (
         (normUser === 'chuck' || normUser === 'chuckacr1501@gmail.com') &&
-        cleanPass === 'password123'
+        cleanPass === customAdminPass
       ) {
         return {
           id: 'teacher-chuck',
