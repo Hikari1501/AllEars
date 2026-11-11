@@ -16,8 +16,12 @@ import {
   Unlock,
   X,
   BookOpen,
+  Lightbulb,
+  ChevronDown,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { MatchingPairsCanvas } from './MatchingPairsCanvas';
+import { DragAndDropCanvas } from './DragAndDropCanvas';
 import { playSuccessChime, playWrongAnswerSound } from '../utils/soundEffects';
 
 interface StudentQuestionsPanelProps {
@@ -52,6 +56,8 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
   const [textAnswers, setTextAnswers] = useState<Record<string, string>>({});
   const [matchingSelections, setMatchingSelections] = useState<Record<string, Record<string, string>>>({});
   const [activeMatchingLeft, setActiveMatchingLeft] = useState<Record<string, string | null>>({});
+  const [revealedTips, setRevealedTips] = useState<Record<string, boolean>>({});
+  const [dragDropPlacements, setDragDropPlacements] = useState<Record<string, Record<string, string[]>>>({});
 
   const questionCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -181,6 +187,34 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
       } else {
         pointsEarned = 0;
       }
+    } else if (question.type === 'drag_and_drop') {
+      const categories = question.categories || [];
+      const userPlacements: Record<string, string[]> = rawAnswer || {};
+      let totalItems = 0;
+      let correctCount = 0;
+
+      categories.forEach((cat) => {
+        const expectedItems = cat.items || [];
+        totalItems += expectedItems.length;
+        const placedInCat = userPlacements[cat.id] || [];
+        expectedItems.forEach((expItem) => {
+          if (
+            placedInCat.some(
+              (it) => it.trim().toLowerCase() === expItem.trim().toLowerCase()
+            )
+          ) {
+            correctCount++;
+          }
+        });
+      });
+
+      isCorrect = totalItems > 0 && correctCount === totalItems;
+      // Award points for each item the student drags correctly
+      if (totalItems > 0) {
+        pointsEarned = Math.round((correctCount / totalItems) * (question.points || 10));
+      } else {
+        pointsEarned = 0;
+      }
     } else if (question.type === 'open_ended') {
       isCorrect = true;
       // Open-ended questions: do not award students with points
@@ -237,6 +271,9 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
     }
     if (q.type === 'matching' && q.matchingPairs) {
       return q.matchingPairs.map((p) => `${p.left} ➔ ${p.right}`).join(' | ');
+    }
+    if (q.type === 'drag_and_drop' && q.categories) {
+      return q.categories.map((c) => `${c.name}: [${c.items.join(', ')}]`).join(' | ');
     }
     return q.correctAnswer || 'Model response';
   };
@@ -425,6 +462,59 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                   <div className="text-xs sm:text-sm font-semibold text-slate-900 leading-snug mb-2.5">
                     {q.prompt}
                   </div>
+
+                  {/* Attached Question Image (Only shown if image URL exists) */}
+                  {q.imageUrl && (
+                    <div className="mb-3 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center p-1 shadow-2xs">
+                      <img
+                        src={q.imageUrl}
+                        alt="Question Illustration"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).style.display = 'none';
+                        }}
+                        className="max-h-56 max-w-full object-contain rounded-lg transition-transform hover:scale-101"
+                      />
+                    </div>
+                  )}
+
+                  {/* Question Tip (Only shown if tip exists; collapsed by default) */}
+                  {q.tip && (
+                    <div className="mb-3">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setRevealedTips((prev) => ({
+                            ...prev,
+                            [q.id]: !prev[q.id],
+                          }))
+                        }
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer border ${
+                          revealedTips[q.id]
+                            ? 'bg-amber-100 text-amber-900 border-amber-300'
+                            : 'bg-amber-50 hover:bg-amber-100/80 text-amber-800 border-amber-200'
+                        }`}
+                        title="Click to toggle teacher's tip/hint for this question"
+                      >
+                        <Lightbulb className="w-3.5 h-3.5 text-amber-600 fill-amber-400" />
+                        <span>{revealedTips[q.id] ? 'Hide Question Tip' : '💡 View Question Tip'}</span>
+                        <ChevronDown
+                          className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                            revealedTips[q.id] ? 'rotate-180' : ''
+                          }`}
+                        />
+                      </button>
+
+                      {revealedTips[q.id] && (
+                        <div className="mt-1.5 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-950 text-xs leading-relaxed flex items-start gap-2 shadow-2xs animate-in fade-in duration-150">
+                          <Lightbulb className="w-4 h-4 text-amber-600 shrink-0 mt-0.5 fill-amber-400" />
+                          <div>
+                            <span className="font-bold text-amber-900">Teacher's Tip: </span>
+                            <span>{q.tip}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Answer Status / Edit Permission Notice */}
                   {isAnswered && (
@@ -668,6 +758,65 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                                   <span className="font-semibold text-slate-800">{pair.left}</span>
                                   <span className="text-emerald-600 font-bold">➔</span>
                                   <span className="font-bold text-emerald-900">{pair.right}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* DRAG AND DROP (CATEGORIZATION) */}
+                    {q.type === 'drag_and_drop' && q.categories && (
+                      <div className="space-y-3">
+                        <DragAndDropCanvas
+                          questionId={q.id}
+                          categories={q.categories}
+                          currentPlacements={
+                            dragDropPlacements[q.id] ||
+                            (existingAnswer?.answer as Record<string, string[]>) ||
+                            {}
+                          }
+                          onPlacementsChange={(placements) =>
+                            setDragDropPlacements((prev) => ({
+                              ...prev,
+                              [q.id]: placements,
+                            }))
+                          }
+                          onSubmit={(placements) => evaluateAndSubmit(q, placements)}
+                          disabled={isAnswered && !allowEditAnswer}
+                          isAnswered={isAnswered}
+                          isFeedbackVisible={isFeedbackVisible}
+                          pointsEarned={existingAnswer?.pointsEarned || 0}
+                          totalPoints={q.points || 10}
+                        />
+
+                        {/* When feedback is visible, show expected categorization */}
+                        {isFeedbackVisible && (
+                          <div className="p-3 rounded-xl bg-emerald-50 border-2 border-emerald-400 text-xs text-emerald-950 space-y-2 shadow-2xs">
+                            <div className="font-bold flex items-center gap-1.5 text-emerald-900">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                              <span>Expected Category Breakdown:</span>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {q.categories.map((cat) => (
+                                <div
+                                  key={cat.id}
+                                  className="p-2 bg-white rounded-lg border border-emerald-200 shadow-2xs space-y-1"
+                                >
+                                  <div className="text-[11px] font-bold text-emerald-950 uppercase tracking-wide">
+                                    {cat.name}
+                                  </div>
+                                  <div className="flex flex-wrap gap-1">
+                                    {cat.items.map((item, iIdx) => (
+                                      <span
+                                        key={iIdx}
+                                        className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 text-[10px] font-semibold border border-emerald-200"
+                                      >
+                                        {item}
+                                      </span>
+                                    ))}
+                                  </div>
                                 </div>
                               ))}
                             </div>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Question, StudentAnswer } from '../types';
 import { MatchingPairsCanvas } from './MatchingPairsCanvas';
+import { DragAndDropCanvas } from './DragAndDropCanvas';
 import { playSuccessChime, playWrongAnswerSound } from '../utils/soundEffects';
 import {
   CheckCircle2,
@@ -15,6 +16,8 @@ import {
   Headphones,
   Minimize2,
   Maximize2,
+  Lightbulb,
+  ChevronDown,
 } from 'lucide-react';
 
 interface QuestionModalProps {
@@ -44,6 +47,9 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
   // For matching type
   const [matchingSelections, setMatchingSelections] = useState<Record<string, string>>({});
   const [selectedLeftItem, setSelectedLeftItem] = useState<string | null>(null);
+  // For drag and drop type
+  const [dragDropPlacements, setDragDropPlacements] = useState<Record<string, string[]>>({});
+  const [showTip, setShowTip] = useState<boolean>(false);
 
   const [hasSubmitted, setHasSubmitted] = useState<boolean>(false);
   const [isGradingAi, setIsGradingAi] = useState<boolean>(false);
@@ -63,6 +69,8 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
     setTextInput('');
     setMatchingSelections({});
     setSelectedLeftItem(null);
+    setDragDropPlacements({});
+    setShowTip(false);
     setHasSubmitted(false);
     setIsGradingAi(false);
     setAiFeedback('');
@@ -143,6 +151,30 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
         // Award points for each line matched right
         earned = Math.round((matchCount / question.matchingPairs.length) * question.points);
       }
+    } else if (question.type === 'drag_and_drop') {
+      finalAnswer = dragDropPlacements;
+      const categories = question.categories || [];
+      let totalItems = 0;
+      let correctCount = 0;
+
+      categories.forEach((cat) => {
+        const expectedItems = cat.items || [];
+        totalItems += expectedItems.length;
+        const placedInCat = dragDropPlacements[cat.id] || [];
+        expectedItems.forEach((expItem) => {
+          if (
+            placedInCat.some(
+              (it) => it.trim().toLowerCase() === expItem.trim().toLowerCase()
+            )
+          ) {
+            correctCount++;
+          }
+        });
+      });
+
+      correct = totalItems > 0 && correctCount === totalItems;
+      // Award points for each item the student drags correctly
+      earned = totalItems > 0 ? Math.round((correctCount / totalItems) * question.points) : 0;
     } else if (question.type === 'open_ended') {
       finalAnswer = textInput.trim();
       setIsGradingAi(true);
@@ -210,6 +242,13 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
     if (question.type === 'matching' && question.matchingPairs) {
       return Object.keys(matchingSelections).length === question.matchingPairs.length;
     }
+    if (question.type === 'drag_and_drop') {
+      const placedCount = Object.values(dragDropPlacements).reduce(
+        (sum, arr) => sum + (arr ? arr.length : 0),
+        0
+      );
+      return placedCount > 0;
+    }
     return false;
   };
 
@@ -273,6 +312,9 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
     }
     if (question.type === 'matching' && question.matchingPairs) {
       return question.matchingPairs.map((p) => `${p.left} ➔ ${p.right}`).join(' | ');
+    }
+    if (question.type === 'drag_and_drop' && question.categories) {
+      return question.categories.map((c) => `${c.name}: [${c.items.join(', ')}]`).join(' | ');
     }
     return question.correctAnswer || 'Model response';
   };
@@ -361,6 +403,54 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
               </span>
             )}
           </div>
+
+          {/* Attached Question Image (Only shown if image URL exists) */}
+          {question.imageUrl && (
+            <div className="rounded-xl overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center p-1.5 shadow-2xs">
+              <img
+                src={question.imageUrl}
+                alt="Question Illustration"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).style.display = 'none';
+                }}
+                className="max-h-56 max-w-full object-contain rounded-lg"
+              />
+            </div>
+          )}
+
+          {/* Question Tip (Only shown if tip exists; collapsed by default) */}
+          {question.tip && (
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowTip((prev) => !prev)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer border ${
+                  showTip
+                    ? 'bg-amber-100 text-amber-900 border-amber-300'
+                    : 'bg-amber-50 hover:bg-amber-100/80 text-amber-800 border-amber-200'
+                }`}
+                title="Click to toggle teacher's tip/hint for this question"
+              >
+                <Lightbulb className="w-3.5 h-3.5 text-amber-600 fill-amber-400" />
+                <span>{showTip ? 'Hide Question Tip' : '💡 View Question Tip'}</span>
+                <ChevronDown
+                  className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                    showTip ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+
+              {showTip && (
+                <div className="mt-2 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-950 text-xs leading-relaxed flex items-start gap-2 shadow-2xs animate-in fade-in duration-150">
+                  <Lightbulb className="w-4 h-4 text-amber-600 shrink-0 mt-0.5 fill-amber-400" />
+                  <div>
+                    <span className="font-bold text-amber-900">Teacher's Tip: </span>
+                    <span>{question.tip}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Type: Multiple Choice or True/False */}
           {(question.type === 'multiple_choice' || question.type === 'true_false') && question.options && (
@@ -478,6 +568,50 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
                         <span className="font-bold text-slate-900">{p.left}</span>
                         <span className="text-emerald-700 mx-1.5">➔</span>
                         <span className="text-slate-700">{p.right}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Type: Drag and Drop (Categorization) */}
+          {question.type === 'drag_and_drop' && question.categories && (
+            <div className="space-y-4">
+              <DragAndDropCanvas
+                questionId={question.id}
+                categories={question.categories}
+                currentPlacements={dragDropPlacements}
+                onPlacementsChange={(placements) => setDragDropPlacements(placements)}
+                onSubmit={() => handleSubmit()}
+                disabled={hasSubmitted}
+                isAnswered={hasSubmitted}
+                isFeedbackVisible={canShowFeedback}
+                pointsEarned={pointsEarned}
+                totalPoints={question.points}
+              />
+
+              {canShowFeedback && (
+                <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-lg text-xs space-y-2 text-emerald-950">
+                  <div className="font-bold flex items-center gap-1.5 text-emerald-900">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Expected Categories & Items:</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {question.categories.map((cat) => (
+                      <div key={cat.id} className="p-2 bg-white rounded border border-emerald-200">
+                        <div className="font-bold text-emerald-950 text-[11px] mb-1">{cat.name}</div>
+                        <div className="flex flex-wrap gap-1">
+                          {cat.items.map((it, idx) => (
+                            <span
+                              key={idx}
+                              className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 text-[10px] font-semibold"
+                            >
+                              {it}
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     ))}
                   </div>

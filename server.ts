@@ -997,16 +997,19 @@ Include a variety of question types:
 - multiple_choice (with 4 options, 1 correct)
 - true_false (with True / False)
 - matching (matching 3 terms with definitions or causes with effects)
+- drag_and_drop (categorizing 4-6 items into 2-3 categories)
 - close_ended (short answer / fill-in-the-blank where students type a word heard)
 - open_ended (reflection or synthesis question)
 
 For each question:
 - timestamp: integer seconds where the video should pause (must be between 10 and ${videoDuration - 10})
-- type: 'multiple_choice' | 'true_false' | 'matching' | 'close_ended' | 'open_ended'
+- type: 'multiple_choice' | 'true_false' | 'matching' | 'drag_and_drop' | 'close_ended' | 'open_ended'
 - prompt: clear instruction or question testing listening comprehension
 - options: array of { id: string, text: string } (for multiple_choice and true_false)
 - correctAnswer: correct option id or string value
 - matchingPairs: array of { left: string, right: string } (for matching type)
+- categories: array of { id: string, name: string, items: string[] } (for drag_and_drop type)
+- tip: optional helpful hint for students (string)
 - explanation: educational explanation why this is correct and what listener should notice
 
 Return strictly a JSON array.`;

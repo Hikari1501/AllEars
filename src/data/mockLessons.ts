@@ -67,6 +67,7 @@ export const INITIAL_LESSONS: Lesson[] = [
         timestamp: 16,
         type: 'multiple_choice',
         prompt: 'According to psychologists, which of the following describe why curiosity feels so urgent? (Select ALL correct answers):',
+        tip: 'Listen closely around 0:10-0:20 when the speaker discusses both cognitive discomfort and biological rewards.',
         options: [
           { id: 'a', text: 'Mental discomfort caused by realizing a gap in knowledge' },
           { id: 'b', text: 'An intrinsic psychological drive to explore the unfamiliar' },
@@ -84,6 +85,7 @@ export const INITIAL_LESSONS: Lesson[] = [
         timestamp: 26,
         type: 'true_false',
         prompt: 'True or False: Neuroscientists found that satisfying curiosity activates the same dopamine reward pathway associated with food and social affirmation.',
+        tip: 'Recall what Dr. Sarah highlighted about the dopaminergic reward pathway.',
         options: [
           { id: 'true', text: 'True' },
           { id: 'false', text: 'False' },
@@ -97,6 +99,8 @@ export const INITIAL_LESSONS: Lesson[] = [
         timestamp: 36,
         type: 'matching',
         prompt: 'Match each type of curiosity with its correct psychological description based on the audio:',
+        imageUrl: 'https://images.unsplash.com/photo-1507413245164-6160d8298b31?w=800&auto=format&fit=crop&q=80',
+        tip: 'Think about the root meaning: perceptual relates to sensory perception, whereas epistemic relates to intellectual knowledge.',
         matchingPairs: [
           { left: 'Perceptual Curiosity', right: 'Triggered by novel sensory stimuli' },
           { left: 'Epistemic Curiosity', right: 'The deep pursuit of intellectual knowledge' },
@@ -110,12 +114,35 @@ export const INITIAL_LESSONS: Lesson[] = [
         timestamp: 45,
         type: 'close_ended',
         prompt: 'Fill in the blank: When teachers harness curiosity, students exhibit higher retention because the ____________ is primed for memory consolidation.',
+        tip: 'It is a key seahorse-shaped structure in the brain crucial for memory.',
         correctAnswer: 'hippocampus',
         explanation: 'The speaker specifically mentioned the hippocampus, the brain structure critical for long-term memory formation.',
         points: 10,
       },
       {
         id: 'q5',
+        timestamp: 55,
+        type: 'drag_and_drop',
+        prompt: 'Categorize each stimulus or trait into its correct psychological curiosity category:',
+        imageUrl: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800&auto=format&fit=crop&q=80',
+        tip: 'Review which items stem from sensory novelty versus intellectual thirst for knowledge.',
+        categories: [
+          {
+            id: 'cat-perceptual',
+            name: 'Perceptual Curiosity',
+            items: ['Sudden flash of light', 'Novel sound in hallway', 'Surprising optical illusion'],
+          },
+          {
+            id: 'cat-epistemic',
+            name: 'Epistemic Curiosity',
+            items: ['Reading an encyclopedia', 'Solving a math puzzle', 'Investigating historical causes'],
+          },
+        ],
+        explanation: 'Perceptual curiosity is provoked by novel sensory stimuli, while epistemic curiosity is the deliberate pursuit of conceptual and factual knowledge.',
+        points: 20,
+      },
+      {
+        id: 'q6',
         timestamp: null,
         type: 'open_ended',
         prompt: 'Whole Video Reflection: In your own words, summarize how understanding curiosity can help you improve your own English learning habits.',

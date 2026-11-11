@@ -14,6 +14,7 @@ export type QuestionType =
   | 'multiple_choice'
   | 'true_false'
   | 'matching'
+  | 'drag_and_drop'
   | 'close_ended'
   | 'open_ended';
 
@@ -29,6 +30,12 @@ export interface MatchingPair {
   right: string;
 }
 
+export interface DragDropCategory {
+  id: string;
+  name: string;
+  items: string[];
+}
+
 export interface Question {
   id: string;
   timestamp?: number | null; // in seconds; null/undefined for general whole-video questions
@@ -39,6 +46,9 @@ export interface Question {
   correctAnswers?: string[]; // for multi-select multiple choice
   allowMultipleAnswers?: boolean; // toggle for multiple correct options
   matchingPairs?: MatchingPair[];
+  categories?: DragDropCategory[]; // For drag_and_drop questions: categories and their correct items
+  imageUrl?: string; // Optional image URL attached to the question
+  tip?: string; // Optional teacher tip/hint for students
   explanation: string;
   points: number;
 }

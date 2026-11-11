@@ -7,6 +7,7 @@ import {
   QuestionType,
   CEFRLevel,
   PartOfSpeech,
+  DragDropCategory,
 } from '../types';
 import {
   Plus,
@@ -36,6 +37,8 @@ import {
   X,
   ArrowUp,
   ArrowDown,
+  Lightbulb,
+  Layers,
 } from 'lucide-react';
 
 interface LessonEditorProps {
@@ -172,6 +175,12 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
   const [newQMatchingPairs, setNewQMatchingPairs] = useState<{ left: string; right: string }[]>([
     { left: 'Term 1', right: 'Definition 1' },
     { left: 'Term 2', right: 'Definition 2' },
+  ]);
+  const [newQImageUrl, setNewQImageUrl] = useState<string>('');
+  const [newQTip, setNewQTip] = useState<string>('');
+  const [newQCategories, setNewQCategories] = useState<DragDropCategory[]>([
+    { id: 'cat-1', name: 'Category A', items: ['Item 1', 'Item 2'] },
+    { id: 'cat-2', name: 'Category B', items: ['Item 3'] },
   ]);
 
   // Difficult word form state
@@ -574,10 +583,58 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
     });
   };
 
+  const handleAddCategory = () => {
+    setNewQCategories((prev) => [
+      ...prev,
+      {
+        id: `cat-${Date.now()}`,
+        name: `Category ${String.fromCharCode(65 + prev.length)}`,
+        items: [],
+      },
+    ]);
+  };
+
+  const handleRemoveCategory = (catIdx: number) => {
+    setNewQCategories((prev) => prev.filter((_, idx) => idx !== catIdx));
+  };
+
+  const handleUpdateCategoryName = (catIdx: number, name: string) => {
+    setNewQCategories((prev) => {
+      const copy = [...prev];
+      copy[catIdx] = { ...copy[catIdx], name };
+      return copy;
+    });
+  };
+
+  const handleAddItemToCategory = (catIdx: number, itemText: string) => {
+    if (!itemText.trim()) return;
+    setNewQCategories((prev) => {
+      const copy = [...prev];
+      copy[catIdx] = {
+        ...copy[catIdx],
+        items: [...(copy[catIdx].items || []), itemText.trim()],
+      };
+      return copy;
+    });
+  };
+
+  const handleRemoveItemFromCategory = (catIdx: number, itemIdx: number) => {
+    setNewQCategories((prev) => {
+      const copy = [...prev];
+      copy[catIdx] = {
+        ...copy[catIdx],
+        items: copy[catIdx].items.filter((_, idx) => idx !== itemIdx),
+      };
+      return copy;
+    });
+  };
+
   // Open form to add a new question
   const handleOpenAddQuestion = () => {
     setEditingQuestionId(null);
     setNewQPrompt('');
+    setNewQImageUrl('');
+    setNewQTip('');
     setNewQExplanation('');
     setNewQCloseEndedAns('');
     setNewQIsGeneral(false);
@@ -587,6 +644,10 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
     setNewQCorrectAnswers(new Set(['a']));
     setNewQAllowMulti(false);
     setNewQType('multiple_choice');
+    setNewQCategories([
+      { id: 'cat-1', name: 'Category A', items: ['Item 1', 'Item 2'] },
+      { id: 'cat-2', name: 'Category B', items: ['Item 3'] },
+    ]);
     setIsAddingQuestion(true);
   };
 
@@ -594,6 +655,8 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
   const handleStartEditQuestion = (q: Question) => {
     setEditingQuestionId(q.id);
     setNewQPrompt(q.prompt);
+    setNewQImageUrl(q.imageUrl || '');
+    setNewQTip(q.tip || '');
     setNewQExplanation(q.explanation || '');
     setNewQType(q.type);
     const isGen = q.timestamp == null || q.timestamp < 0;
@@ -628,6 +691,15 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
               { left: 'Term 2', right: 'Definition 2' },
             ]
       );
+    } else if (q.type === 'drag_and_drop') {
+      setNewQCategories(
+        q.categories && q.categories.length > 0
+          ? q.categories
+          : [
+              { id: 'cat-1', name: 'Category A', items: ['Item 1', 'Item 2'] },
+              { id: 'cat-2', name: 'Category B', items: ['Item 3'] },
+            ]
+      );
     }
     setIsAddingQuestion(true);
     // Smooth scroll to the question editor card
@@ -641,6 +713,8 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
     setIsAddingQuestion(false);
     setEditingQuestionId(null);
     setNewQPrompt('');
+    setNewQImageUrl('');
+    setNewQTip('');
     setNewQExplanation('');
     setNewQCloseEndedAns('');
     setNewQIsGeneral(false);
@@ -649,6 +723,10 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
     setNewQOptions(['Option A', 'Option B', 'Option C', 'Option D']);
     setNewQCorrectAnswers(new Set(['a']));
     setNewQAllowMulti(false);
+    setNewQCategories([
+      { id: 'cat-1', name: 'Category A', items: ['Item 1', 'Item 2'] },
+      { id: 'cat-2', name: 'Category B', items: ['Item 3'] },
+    ]);
   };
 
   const handleSaveQuestion = () => {
@@ -661,6 +739,8 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
       timestamp: parsedTs,
       type: newQType,
       prompt: newQPrompt.trim(),
+      imageUrl: newQImageUrl.trim() || undefined,
+      tip: newQTip.trim() || undefined,
       explanation: newQExplanation.trim(),
       points: 10,
     };
@@ -685,6 +765,10 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
       questionData.correctAnswer = newQCloseEndedAns.trim();
     } else if (newQType === 'matching') {
       questionData.matchingPairs = newQMatchingPairs;
+    } else if (newQType === 'drag_and_drop') {
+      questionData.categories = newQCategories.filter(
+        (c) => c.name.trim() && c.items && c.items.length > 0
+      );
     }
 
     if (editingQuestionId) {
@@ -1631,6 +1715,7 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                             <option value="true_false">True / False</option>
                             <option value="close_ended">Fill in the Blank</option>
                             <option value="matching">Matching Pairs</option>
+                            <option value="drag_and_drop">Drag & Drop (Categorization)</option>
                             <option value="open_ended">Open Reflection</option>
                           </select>
                         </div>
@@ -1647,6 +1732,7 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                           <option value="true_false">True / False</option>
                           <option value="close_ended">Fill in the Blank</option>
                           <option value="matching">Matching Pairs</option>
+                          <option value="drag_and_drop">Drag & Drop (Categorization)</option>
                           <option value="open_ended">Open Reflection</option>
                         </select>
                       </div>
@@ -1662,6 +1748,74 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                       placeholder="What caused Marcus to be late?"
                       className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"
                     />
+                  </div>
+
+                  {/* Attached Question Image URL (Optional) */}
+                  <div className="space-y-1 text-xs bg-slate-50/70 p-3 rounded-xl border border-slate-200">
+                    <div className="flex items-center justify-between">
+                      <label className="text-slate-700 font-semibold flex items-center gap-1.5">
+                        <ImageIcon className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Question Image Attachment (URL)</span>
+                      </label>
+                      <span className="text-[10px] text-slate-400 font-medium">Optional · Only shown if URL provided</span>
+                    </div>
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="url"
+                        value={newQImageUrl}
+                        onChange={(e) => setNewQImageUrl(e.target.value)}
+                        placeholder="https://images.unsplash.com/... or image URL link"
+                        className="flex-1 p-2 bg-white border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                      />
+                      {newQImageUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setNewQImageUrl('')}
+                          className="px-2.5 py-2 text-slate-500 hover:text-rose-600 border border-slate-200 rounded-lg hover:bg-rose-50 text-[11px] font-semibold transition-colors cursor-pointer"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                    {newQImageUrl && (
+                      <div className="mt-2 p-2 bg-white border border-slate-200 rounded-lg flex items-center gap-3">
+                        <img
+                          src={newQImageUrl}
+                          alt="Question Preview"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).style.display = 'none';
+                          }}
+                          className="h-16 w-24 object-contain rounded-md border border-slate-200 bg-slate-50"
+                        />
+                        <div className="text-[11px] text-slate-600 min-w-0">
+                          <span className="font-semibold text-emerald-700 flex items-center gap-1">
+                            <Check className="w-3 h-3" /> Image linked & previewing
+                          </span>
+                          <span className="text-slate-400 text-[10px] block truncate max-w-sm">{newQImageUrl}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Question Tip / Hint for Students (Optional) */}
+                  <div className="space-y-1 text-xs bg-slate-50/70 p-3 rounded-xl border border-slate-200">
+                    <div className="flex items-center justify-between">
+                      <label className="text-slate-700 font-semibold flex items-center gap-1.5">
+                        <Lightbulb className="w-3.5 h-3.5 text-amber-500" />
+                        <span>Question Tip / Hint for Students</span>
+                      </label>
+                      <span className="text-[10px] text-slate-400 font-medium">Optional · Collapsed by default</span>
+                    </div>
+                    <input
+                      type="text"
+                      value={newQTip}
+                      onChange={(e) => setNewQTip(e.target.value)}
+                      placeholder="e.g. Listen carefully to the transition words in the second sentence..."
+                      className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                    />
+                    <p className="text-[10px] text-slate-400">
+                      Students can click "💡 View Tip" in Live & Practice modes to reveal this hint. If left empty, no tip button will appear.
+                    </p>
                   </div>
 
                   {newQType === 'multiple_choice' && (
@@ -1863,6 +2017,158 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                     </div>
                   )}
 
+                  {newQType === 'drag_and_drop' && (
+                    <div className="space-y-3 text-xs bg-white p-4 border border-slate-200 rounded-xl">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div>
+                          <div className="font-bold text-slate-800 flex items-center gap-1.5">
+                            <Layers className="w-4 h-4 text-indigo-600" />
+                            <span>Categories & Items Setup (Table Mode)</span>
+                          </div>
+                          <div className="text-[11px] text-slate-500">
+                            Create categories and their correct items below. In live/practice mode, all items will be mixed outside the table for students to categorize.
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleAddCategory}
+                          className="px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 rounded-lg font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>+ Add Category</span>
+                        </button>
+                      </div>
+
+                      {/* Categories & Items Table */}
+                      <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-700 font-bold">
+                              <th className="p-3 w-40">Category Name</th>
+                              <th className="p-3">Category Items (Target Matches)</th>
+                              <th className="p-3 w-16 text-center">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 bg-white">
+                            {newQCategories.map((cat, catIdx) => (
+                              <tr key={cat.id || catIdx} className="align-top hover:bg-slate-50/50 transition-colors">
+                                <td className="p-3">
+                                  <input
+                                    type="text"
+                                    value={cat.name}
+                                    onChange={(e) => handleUpdateCategoryName(catIdx, e.target.value)}
+                                    placeholder={`e.g. Category ${catIdx + 1}`}
+                                    className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-900 focus:bg-white focus:ring-1 focus:ring-indigo-500"
+                                  />
+                                  <span className="text-[10px] text-slate-400 mt-1 block">
+                                    Category #{catIdx + 1}
+                                  </span>
+                                </td>
+                                <td className="p-3 space-y-2">
+                                  {/* Current Items */}
+                                  <div className="flex flex-wrap gap-1.5 min-h-[30px] items-center">
+                                    {(cat.items || []).map((item, itemIdx) => (
+                                      <span
+                                        key={itemIdx}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-950 font-medium text-xs shadow-2xs"
+                                      >
+                                        <span>{item}</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRemoveItemFromCategory(catIdx, itemIdx)}
+                                          className="text-indigo-400 hover:text-rose-600 transition-colors cursor-pointer"
+                                          title="Remove item"
+                                        >
+                                          <X className="w-3 h-3" />
+                                        </button>
+                                      </span>
+                                    ))}
+                                    {(cat.items || []).length === 0 && (
+                                      <span className="text-slate-400 italic text-[11px]">
+                                        No items yet. Type an item below and click "+ Add".
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Add item inline */}
+                                  <div className="flex items-center gap-1.5 pt-1">
+                                    <input
+                                      type="text"
+                                      id={`new-cat-item-input-${catIdx}`}
+                                      placeholder="Type item name and press Enter..."
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault();
+                                          const val = (e.currentTarget.value || '').trim();
+                                          if (val) {
+                                            handleAddItemToCategory(catIdx, val);
+                                            e.currentTarget.value = '';
+                                          }
+                                        }
+                                      }}
+                                      className="flex-1 p-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const input = document.getElementById(`new-cat-item-input-${catIdx}`) as HTMLInputElement;
+                                        if (input && input.value.trim()) {
+                                          handleAddItemToCategory(catIdx, input.value.trim());
+                                          input.value = '';
+                                        }
+                                      }}
+                                      className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-semibold text-[11px] cursor-pointer"
+                                    >
+                                      + Add Item
+                                    </button>
+                                  </div>
+                                </td>
+                                <td className="p-3 text-center">
+                                  {newQCategories.length > 2 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveCategory(catIdx)}
+                                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                      title="Delete Category"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Visual Table Preview */}
+                      <div className="pt-2">
+                        <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                          Student Target Table Preview:
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                          {newQCategories.map((cat, idx) => (
+                            <div key={idx} className="bg-white border-2 border-dashed border-indigo-200 rounded-xl p-3 space-y-2 shadow-2xs">
+                              <div className="font-bold text-indigo-900 border-b border-indigo-100 pb-1 flex items-center justify-between text-xs">
+                                <span>{cat.name || `Category ${idx + 1}`}</span>
+                                <span className="text-[10px] font-mono text-indigo-500 font-normal">
+                                  {cat.items.length} items
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap gap-1 min-h-[30px]">
+                                {cat.items.map((it, i) => (
+                                  <span key={i} className="px-2 py-0.5 bg-indigo-50 text-indigo-900 rounded text-[10px] border border-indigo-100">
+                                    {it}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="space-y-1 text-xs">
                     <label className="text-slate-700 font-semibold">Teacher Explanation</label>
                     <input
@@ -1980,6 +2286,28 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                           {q.prompt}
                         </div>
 
+                        {/* Question Image Attachment Preview */}
+                        {q.imageUrl && (
+                          <div className="pt-0.5">
+                            <img
+                              src={q.imageUrl}
+                              alt="Question Attachment"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).style.display = 'none';
+                              }}
+                              className="h-16 w-24 object-contain rounded-lg border border-slate-200 bg-white shadow-2xs"
+                            />
+                          </div>
+                        )}
+
+                        {/* Question Tip Preview */}
+                        {q.tip && (
+                          <div className="text-[11px] text-amber-900 bg-amber-50/80 px-2.5 py-1 rounded-lg border border-amber-200 flex items-center gap-1.5 font-medium">
+                            <Lightbulb className="w-3.5 h-3.5 text-amber-600 fill-amber-400 shrink-0" />
+                            <span><strong className="font-bold text-amber-950">Tip:</strong> {q.tip}</span>
+                          </div>
+                        )}
+
                         {/* Options / Answer Preview */}
                         {q.options && q.options.length > 0 && (
                           <div className="flex flex-wrap gap-1.5 pt-0.5">
@@ -2010,6 +2338,27 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                         {q.type === 'close_ended' && q.correctAnswer && (
                           <div className="text-[11px] text-slate-600 font-mono">
                             Expected: <span className="font-bold text-emerald-700 font-sans">"{q.correctAnswer}"</span>
+                          </div>
+                        )}
+
+                        {/* Drag and Drop Categories & Items Preview */}
+                        {q.type === 'drag_and_drop' && q.categories && q.categories.length > 0 && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1">
+                            {q.categories.map((cat, cIdx) => (
+                              <div key={cIdx} className="p-2 rounded-lg bg-indigo-50/70 border border-indigo-200 text-[11px] space-y-1">
+                                <div className="font-bold text-indigo-900 flex items-center justify-between">
+                                  <span>{cat.name}</span>
+                                  <span className="text-[10px] text-indigo-600 font-mono font-normal">{(cat.items || []).length} items</span>
+                                </div>
+                                <div className="flex flex-wrap gap-1">
+                                  {(cat.items || []).map((it, iIdx) => (
+                                    <span key={iIdx} className="px-1.5 py-0.5 rounded bg-white text-indigo-950 border border-indigo-100 text-[10px] shadow-2xs">
+                                      {it}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         )}
 

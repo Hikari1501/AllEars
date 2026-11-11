@@ -32,6 +32,8 @@ import {
   Unlock,
   Subtitles,
   PauseCircle,
+  Lightbulb,
+  Image as ImageIcon,
 } from 'lucide-react';
 
 interface LiveClassroomTeacherProps {
@@ -745,6 +747,31 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
                       {inspectingQuestion.prompt}
                     </h3>
 
+                    {/* Question Image if present */}
+                    {inspectingQuestion.imageUrl && (
+                      <div className="rounded-xl overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center p-1.5 shadow-2xs">
+                        <img
+                          src={inspectingQuestion.imageUrl}
+                          alt="Question Illustration"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).style.display = 'none';
+                          }}
+                          className="max-h-52 max-w-full object-contain rounded-lg"
+                        />
+                      </div>
+                    )}
+
+                    {/* Question Tip if present */}
+                    {inspectingQuestion.tip && (
+                      <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-950 flex items-start gap-2 shadow-2xs">
+                        <Lightbulb className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5 fill-amber-400" />
+                        <div>
+                          <span className="font-bold text-amber-900">Student Tip: </span>
+                          <span>{inspectingQuestion.tip}</span>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Options & Correct Answer Key for Teacher Inspection */}
                     {inspectingQuestion.type === 'multiple_choice' && inspectingQuestion.options && (
                       <div className="space-y-1.5 pt-1">
@@ -863,6 +890,37 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
                       </div>
                     )}
 
+                    {/* Drag and Drop Categories & Items Answer Key */}
+                    {inspectingQuestion.type === 'drag_and_drop' && inspectingQuestion.categories && inspectingQuestion.categories.length > 0 && (
+                      <div className="space-y-1.5 pt-1">
+                        <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                          Correct Category Breakdown:
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {inspectingQuestion.categories.map((cat) => (
+                            <div
+                              key={cat.id}
+                              className="p-2.5 rounded-lg bg-emerald-50/80 border border-emerald-200 text-xs space-y-1"
+                            >
+                              <div className="font-bold text-emerald-950 uppercase tracking-wide text-[11px]">
+                                {cat.name}
+                              </div>
+                              <div className="flex flex-wrap gap-1">
+                                {cat.items.map((it, iIdx) => (
+                                  <span
+                                    key={iIdx}
+                                    className="px-1.5 py-0.5 rounded bg-white text-emerald-900 border border-emerald-300 text-[10px] font-semibold"
+                                  >
+                                    {it}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Explanation for teacher reference */}
                     {inspectingQuestion.explanation && (
                       <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1">
@@ -904,6 +962,15 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
                             if (inspectingQuestion.options) {
                               const opt = inspectingQuestion.options.find((o) => o.id === val);
                               formattedResponse = opt ? `Option ${opt.id.toUpperCase()}: "${opt.text}"` : String(val);
+                            } else if (inspectingQuestion.type === 'drag_and_drop' && typeof val === 'object' && val !== null) {
+                              const entries = Object.entries(val as Record<string, string[]>);
+                              formattedResponse = entries
+                                .map(([catId, items]) => {
+                                  const cat = inspectingQuestion.categories?.find((c) => c.id === catId);
+                                  const catName = cat?.name || catId;
+                                  return `${catName}: [${items.join(', ')}]`;
+                                })
+                                .join(' | ');
                             } else if (Array.isArray(val)) {
                               formattedResponse = val.join(', ');
                             } else if (typeof val === 'object' && val !== null) {
