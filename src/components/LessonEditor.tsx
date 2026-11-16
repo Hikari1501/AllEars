@@ -127,6 +127,7 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
   const [isImportingYtTranscript, setIsImportingYtTranscript] = useState(false);
   const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false);
   const [isEnrichingVocab, setIsEnrichingVocab] = useState(false);
+  const [vocabFeedback, setVocabFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -416,6 +417,8 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
   // AI Automatic Transcription
   const handleAiTranscribe = async () => {
     setIsTranscribing(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
     try {
       const res = await fetch('/api/ai/transcribe', {
         method: 'POST',
@@ -426,8 +429,8 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
           sampleTranscript: captions.map((c) => c.text).join(' '),
         }),
       });
-      const data = await res.json();
-      if (data.success && data.captions && data.captions.length > 0) {
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success && Array.isArray(data.captions) && data.captions.length > 0) {
         setCaptions(
           data.captions.map((c: any, idx: number) => ({
             id: `gen-c-${idx}`,
@@ -438,10 +441,15 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
           }))
         );
         setSuccessMessage('AI generated timestamped captions successfully!');
-        setTimeout(() => setSuccessMessage(null), 3000);
+        setTimeout(() => setSuccessMessage(null), 4000);
+      } else {
+        setErrorMessage(data.error || 'Could not generate AI captions. Please try again.');
+        setTimeout(() => setErrorMessage(null), 6000);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      setErrorMessage(e?.message || 'Network error while generating AI captions.');
+      setTimeout(() => setErrorMessage(null), 6000);
     } finally {
       setIsTranscribing(false);
     }
@@ -449,22 +457,70 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
 
   // AI Auto-detect Difficult Words
   const handleAiVocabEnrich = async () => {
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setVocabFeedback(null);
+
+    const captionText = captions.map((c) => c.text).join(' ').trim();
+    const fallbackText = [title, description, backgroundInfoText].filter(Boolean).join('\n').trim();
+    const textToAnalyze = captionText || fallbackText;
+
+    if (!textToAnalyze) {
+      const msg = 'Please add captions, a lesson title, or description before running Auto-Detect with AI.';
+      setErrorMessage(msg);
+      setVocabFeedback({ type: 'error', message: msg });
+      return;
+    }
+
     setIsEnrichingVocab(true);
     try {
-      const allText = captions.map((c) => c.text).join(' ');
       const res = await fetch('/api/ai/vocab-enrich', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcriptText: allText || title }),
+        body: JSON.stringify({ transcriptText: textToAnalyze }),
       });
-      const data = await res.json();
-      if (data.success && data.words && data.words.length > 0) {
-        setDifficultWords(data.words);
-        setSuccessMessage(`Identified ${data.words.length} CEFR vocabulary words!`);
-        setTimeout(() => setSuccessMessage(null), 3000);
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data.success) {
+        const msg = data.error || 'Failed to auto-detect difficult vocabulary with AI.';
+        setErrorMessage(msg);
+        setVocabFeedback({ type: 'error', message: msg });
+        return;
       }
-    } catch (e) {
+
+      if (!Array.isArray(data.words) || data.words.length === 0) {
+        const msg = 'AI did not detect any new difficult vocabulary words in the current text.';
+        setErrorMessage(msg);
+        setVocabFeedback({ type: 'error', message: msg });
+        return;
+      }
+
+      const existingKeys = new Set(difficultWords.map((w) => w.word.trim().toLowerCase()));
+      const newWords: VocabEntry[] = [];
+      for (const w of data.words as VocabEntry[]) {
+        const key = (w.word || '').trim().toLowerCase();
+        if (key && !existingKeys.has(key)) {
+          existingKeys.add(key);
+          newWords.push(w);
+        }
+      }
+
+      if (newWords.length === 0) {
+        const msg = 'All AI-detected vocabulary words are already in your lesson list.';
+        setSuccessMessage(msg);
+        setVocabFeedback({ type: 'success', message: msg });
+      } else {
+        setDifficultWords((prev) => [...prev, ...newWords]);
+        const msg = `Added ${newWords.length} CEFR vocabulary ${newWords.length === 1 ? 'word' : 'words'} with AI!`;
+        setSuccessMessage(msg);
+        setVocabFeedback({ type: 'success', message: msg });
+      }
+      setTimeout(() => setSuccessMessage(null), 4000);
+    } catch (e: any) {
       console.error(e);
+      const msg = e?.message || 'Network error while connecting to AI vocabulary detection.';
+      setErrorMessage(msg);
+      setVocabFeedback({ type: 'error', message: msg });
     } finally {
       setIsEnrichingVocab(false);
     }
@@ -1474,10 +1530,10 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                     type="button"
                     onClick={handleAiTranscribe}
                     disabled={isTranscribing}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 disabled:opacity-60 disabled:cursor-not-allowed text-amber-800 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
                   >
-                    <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                    <span>Auto-Transcribe with AI</span>
+                    <Sparkles className={`w-3.5 h-3.5 text-amber-600 ${isTranscribing ? 'animate-spin' : ''}`} />
+                    <span>{isTranscribing ? 'Transcribing...' : 'Auto-Transcribe with AI'}</span>
                   </button>
                 </div>
               </div>
@@ -2672,13 +2728,40 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                     type="button"
                     onClick={handleAiVocabEnrich}
                     disabled={isEnrichingVocab}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl text-xs font-semibold cursor-pointer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-60 disabled:cursor-not-allowed text-emerald-800 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
                   >
-                    <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Auto-Detect with AI</span>
+                    <Sparkles className={`w-3.5 h-3.5 text-emerald-600 ${isEnrichingVocab ? 'animate-spin' : ''}`} />
+                    <span>{isEnrichingVocab ? 'Detecting with AI...' : 'Auto-Detect with AI'}</span>
                   </button>
                 </div>
               </div>
+
+              {vocabFeedback && (
+                <div
+                  className={`p-3 rounded-xl border text-xs font-medium flex items-center justify-between gap-2 ${
+                    vocabFeedback.type === 'error'
+                      ? 'bg-rose-50 border-rose-200 text-rose-900'
+                      : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    {vocabFeedback.type === 'error' ? (
+                      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                    ) : (
+                      <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                    )}
+                    <span>{vocabFeedback.message}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setVocabFeedback(null)}
+                    className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                    aria-label="Dismiss message"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
 
               {/* Add / Edit vocabulary dialog */}
               {isAddingVocab && (

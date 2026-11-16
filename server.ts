@@ -54,15 +54,73 @@ if (!fs.existsSync(DATA_DIR)) {
 const LESSONS_FILE = path.join(DATA_DIR, 'db-lessons.json');
 const REPORTS_FILE = path.join(DATA_DIR, 'db-session-reports.json');
 
-// Initialize GoogleGenAI server-side with telemetry header
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
+// Lazy server-side GoogleGenAI initializer (reads key exclusively from server env)
+function getGeminiClient(): GoogleGenAI {
+  const apiKey = (process.env.GEMINI_API_KEY || '').trim();
+  if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
+    const err: any = new Error(
+      'GEMINI_API_KEY is not configured in server environment secrets. Add it in Settings > Secrets (or your hosting environment variables).'
+    );
+    err.status = 503;
+    throw err;
+  }
+  return new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      },
     },
-  },
-});
+  });
+}
+
+function parseGeminiJson<T>(rawText: string | undefined, fallback: T): T {
+  if (!rawText) return fallback;
+  const cleaned = rawText
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+  if (!cleaned) return fallback;
+  return JSON.parse(cleaned) as T;
+}
+
+function formatGeminiError(err: any, fallbackMessage: string): { status: number; message: string } {
+  const rawMessage = String(err?.message || '');
+  const numericStatus = Number(err?.status || err?.statusCode || 0);
+
+  if (numericStatus === 503) {
+    return { status: 503, message: rawMessage || fallbackMessage };
+  }
+  if (
+    numericStatus === 400 ||
+    numericStatus === 403 ||
+    /API_KEY_INVALID|API key not valid|PERMISSION_DENIED/i.test(rawMessage)
+  ) {
+    return {
+      status: numericStatus === 403 ? 403 : 400,
+      message:
+        'Gemini API key is invalid or lacks permission. Please verify GEMINI_API_KEY in Settings > Secrets (or your hosting environment variables).',
+    };
+  }
+  if (numericStatus === 404 || /NOT_FOUND|is not found for API version/i.test(rawMessage)) {
+    return {
+      status: 404,
+      message: 'The configured Gemini model could not be found or is unavailable.',
+    };
+  }
+  if (numericStatus === 429 || /RESOURCE_EXHAUSTED|quota|rate limit/i.test(rawMessage)) {
+    return {
+      status: 429,
+      message:
+        'Gemini API quota or rate limit was exceeded. Please try again shortly or check your API billing/quota in Settings > Secrets.',
+    };
+  }
+  return {
+    status: numericStatus >= 400 && numericStatus < 600 ? numericStatus : 500,
+    message: rawMessage || fallbackMessage,
+  };
+}
 
 // In-memory store for synchronized live classroom sessions
 interface LiveStudent {
@@ -883,6 +941,7 @@ app.post('/api/live/bot-answer', (req: Request, res: Response) => {
 // AI Audio / Video Transcription & Subtitle Generation
 app.post('/api/ai/transcribe', async (req: Request, res: Response) => {
   try {
+    const ai = getGeminiClient();
     const { mediaTitle, mediaDescription, sampleTranscript } = req.body;
 
     const prompt = `You are an expert ESL/EFL listening curriculum specialist.
@@ -900,7 +959,7 @@ Each caption must have:
 Return strictly JSON matching this structure.`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-4-hydrogen',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -920,40 +979,48 @@ Return strictly JSON matching this structure.`;
       },
     });
 
-    const parsed = JSON.parse(response.text || '[]');
-    res.json({ success: true, captions: parsed });
+    const parsed = parseGeminiJson<any[]>(response.text, []);
+    res.json({ success: true, captions: Array.isArray(parsed) ? parsed : [] });
   } catch (err: any) {
     console.error('Error in /api/ai/transcribe:', err);
-    res.status(500).json({ error: err.message || 'Failed to generate transcription' });
+    const { status, message } = formatGeminiError(err, 'Failed to generate transcription');
+    res.status(status).json({ error: message });
   }
 });
 
-// AI Vocabulary Enrichment (B1, B2, C1, C2 identification, definitions, examples, Cambridge dictionary links)
+// AI Vocabulary Enrichment (CEFR identification, definitions, examples, Cambridge dictionary links)
 app.post('/api/ai/vocab-enrich', async (req: Request, res: Response) => {
   try {
-    const { transcriptText } = req.body;
+    const transcriptText = typeof req.body?.transcriptText === 'string' ? req.body.transcriptText.trim() : '';
+    if (!transcriptText) {
+      return res.status(400).json({
+        error: 'Please add captions, a lesson title, or description before running AI vocabulary detection.',
+      });
+    }
 
-    const prompt = `Analyze this English transcript for ESL learners:
+    const ai = getGeminiClient();
+
+    const prompt = `Analyze this English listening lesson text for ESL/EFL learners:
 """
 ${transcriptText}
 """
-Identify 4 to 8 challenging or notable vocabulary words, phrasal verbs, or idioms suitable for English learners.
+Identify 4 to 8 challenging or notable vocabulary words, phrasal verbs, or idioms present in or directly relevant to this text.
 Assign accurate CEFR levels (A1, A2, B1, B2, C1, or C2).
-For each word:
-- word: the target word or phrase in root form
-- phonetic: IPA phonetic spelling e.g. "/ˌkɑːm.prəˈhen.ʃən/"
-- cefrLevel: "A1", "A2", "B1", "B2", "C1", or "C2"
-- partOfSpeech: "noun", "verb", "adjective", "adverb", "idiom", "phrasal verb", "pronoun", "preposition", "conjunction", "determiner", or "interjection"
-- definition: learner-friendly clear definition
-- example: an illustrative example sentence highlighting how to use it
-- cambridgeSlug: URL slug for Cambridge Dictionary (e.g. "comprehension", "take-for-granted")
-
-Return strictly a JSON array.`;
+For each entry provide:
+- word: the target word or phrase in base/root form
+- phonetic: IPA phonetic pronunciation (e.g. "/ɪnˈtrɪn.zɪk/")
+- cefrLevel: one of "A1", "A2", "B1", "B2", "C1", "C2"
+- partOfSpeech: one of "noun", "verb", "adjective", "adverb", "idiom", "phrasal verb", "pronoun", "preposition", "conjunction", "determiner", "interjection"
+- definition: clear, learner-friendly definition
+- example: an illustrative example sentence showing natural usage
+- cambridgeSlug: lowercase hyphenated Cambridge Dictionary URL slug (e.g. "intrinsic", "take-for-granted")`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-4-hydrogen',
       contents: prompt,
       config: {
+        systemInstruction:
+          'You are an expert ESL/EFL lexicographer and curriculum designer. Return accurate CEFR-graded vocabulary entries strictly matching the JSON schema.',
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.ARRAY,
@@ -974,17 +1041,58 @@ Return strictly a JSON array.`;
       },
     });
 
-    const parsed = JSON.parse(response.text || '[]');
-    res.json({ success: true, words: parsed });
+    const allowedLevels = new Set(['A1', 'A2', 'B1', 'B2', 'C1', 'C2']);
+    const allowedPos = new Set([
+      'noun',
+      'verb',
+      'adjective',
+      'adverb',
+      'pronoun',
+      'preposition',
+      'conjunction',
+      'determiner',
+      'interjection',
+      'idiom',
+      'phrasal verb',
+    ]);
+
+    const rawList = parseGeminiJson<any[]>(response.text, []);
+    const words = (Array.isArray(rawList) ? rawList : [])
+      .filter((item) => item && typeof item.word === 'string' && item.word.trim().length > 0)
+      .map((item) => {
+        const cleanWord = item.word.trim();
+        const normalizedLevel = String(item.cefrLevel || 'B2').toUpperCase().trim();
+        const normalizedPos = String(item.partOfSpeech || 'noun').toLowerCase().trim();
+        const slugSource =
+          typeof item.cambridgeSlug === 'string' && item.cambridgeSlug.trim()
+            ? item.cambridgeSlug.trim()
+            : cleanWord;
+        return {
+          word: cleanWord,
+          phonetic: typeof item.phonetic === 'string' ? item.phonetic.trim() : '',
+          cefrLevel: allowedLevels.has(normalizedLevel) ? normalizedLevel : 'B2',
+          partOfSpeech: allowedPos.has(normalizedPos) ? normalizedPos : 'noun',
+          definition: typeof item.definition === 'string' ? item.definition.trim() : '',
+          example: typeof item.example === 'string' ? item.example.trim() : '',
+          cambridgeSlug: slugSource
+            .toLowerCase()
+            .replace(/[^\w\s-]/g, '')
+            .replace(/\s+/g, '-'),
+        };
+      });
+
+    res.json({ success: true, words });
   } catch (err: any) {
     console.error('Error in /api/ai/vocab-enrich:', err);
-    res.status(500).json({ error: err.message || 'Failed to enrich vocabulary' });
+    const { status, message } = formatGeminiError(err, 'Failed to enrich vocabulary');
+    res.status(status).json({ error: message });
   }
 });
 
 // AI Formative Assessment Question Generator
 app.post('/api/ai/generate-questions', async (req: Request, res: Response) => {
   try {
+    const ai = getGeminiClient();
     const { transcript, videoDuration = 180 } = req.body;
 
     const prompt = `Based on the following English listening transcript:
@@ -1015,24 +1123,26 @@ For each question:
 Return strictly a JSON array.`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-4-hydrogen',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
       },
     });
 
-    const parsed = JSON.parse(response.text || '[]');
-    res.json({ success: true, questions: parsed });
+    const parsed = parseGeminiJson<any[]>(response.text, []);
+    res.json({ success: true, questions: Array.isArray(parsed) ? parsed : [] });
   } catch (err: any) {
     console.error('Error in /api/ai/generate-questions:', err);
-    res.status(500).json({ error: err.message || 'Failed to generate questions' });
+    const { status, message } = formatGeminiError(err, 'Failed to generate questions');
+    res.status(status).json({ error: message });
   }
 });
 
 // AI Feedback for Student Open-Ended Responses
 app.post('/api/ai/grade-open-ended', async (req: Request, res: Response) => {
   try {
+    const ai = getGeminiClient();
     const { questionPrompt, studentAnswer, listeningContext } = req.body;
 
     const prompt = `You are a supportive, encouraging English teacher assessing an ESL student's listening comprehension.
@@ -1049,7 +1159,7 @@ Provide:
 Return JSON.`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-4-hydrogen',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -1065,11 +1175,12 @@ Return JSON.`;
       },
     });
 
-    const parsed = JSON.parse(response.text || '{}');
+    const parsed = parseGeminiJson<Record<string, any>>(response.text, {});
     res.json({ success: true, result: parsed });
   } catch (err: any) {
     console.error('Error in /api/ai/grade-open-ended:', err);
-    res.status(500).json({ error: err.message || 'Failed to grade response' });
+    const { status, message } = formatGeminiError(err, 'Failed to grade response');
+    res.status(status).json({ error: message });
   }
 });
 
@@ -1156,12 +1267,13 @@ app.post('/api/youtube/transcript', async (req: Request, res: Response) => {
     }
 
     // Attempt 2: Fast Gemini Subtitle Generation
+    const ai = getGeminiClient();
     const prompt = `Generate a realistic 6-sentence timed English listening transcript for YouTube video ID "${videoId}".
 Context: Natural spoken ESL listening material.
 Format as JSON array with properties: start (float), end (float), text (string), speaker (string).`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-4-hydrogen',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -1181,8 +1293,8 @@ Format as JSON array with properties: start (float), end (float), text (string),
       },
     });
 
-    const parsed = JSON.parse(response.text || '[]');
-    const formatted = parsed.map((c: any, idx: number) => ({
+    const parsed = parseGeminiJson<any[]>(response.text, []);
+    const formatted = (Array.isArray(parsed) ? parsed : []).map((c: any, idx: number) => ({
       id: `yt-cap-${idx + 1}`,
       start: c.start !== undefined ? c.start : idx * 8,
       end: c.end !== undefined ? c.end : (idx + 1) * 8,
