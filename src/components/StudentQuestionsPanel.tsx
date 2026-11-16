@@ -19,6 +19,7 @@ import {
   Lightbulb,
   ChevronDown,
   Image as ImageIcon,
+  Eye,
 } from 'lucide-react';
 import { MatchingPairsCanvas } from './MatchingPairsCanvas';
 import { DragAndDropCanvas } from './DragAndDropCanvas';
@@ -64,6 +65,8 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
   const [activeMatchingLeft, setActiveMatchingLeft] = useState<Record<string, string | null>>({});
   const [revealedTips, setRevealedTips] = useState<Record<string, boolean>>({});
   const [dragDropPlacements, setDragDropPlacements] = useState<Record<string, Record<string, string[]>>>({});
+  const [attemptCounts, setAttemptCounts] = useState<Record<string, number>>({});
+  const [revealedCorrectAnswers, setRevealedCorrectAnswers] = useState<Record<string, boolean>>({});
 
   const questionCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const autoOpenedTipsRef = useRef<Record<string, boolean>>({});
@@ -107,8 +110,12 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
+  const isQuestionEditLocked = (questionId: string) =>
+    (Boolean(answers[questionId]) && !allowEditAnswer) ||
+    (!isLiveMode && Boolean(revealedCorrectAnswers[questionId]));
+
   const handleChoiceClick = (question: Question, optionId: string) => {
-    if (answers[question.id] && !allowEditAnswer) return;
+    if (isQuestionEditLocked(question.id)) return;
     const isMulti = question.allowMultipleAnswers;
     const currentSet = new Set(selectedChoices[question.id] || []);
 
@@ -136,21 +143,21 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
   };
 
   const handleMultiSubmit = (question: Question) => {
-    if (answers[question.id] && !allowEditAnswer) return;
+    if (isQuestionEditLocked(question.id)) return;
     const chosen = Array.from(selectedChoices[question.id] || []);
     if (chosen.length === 0) return;
     evaluateAndSubmit(question, chosen);
   };
 
   const handleTextSubmit = (question: Question) => {
-    if (answers[question.id] && !allowEditAnswer) return;
+    if (isQuestionEditLocked(question.id)) return;
     const text = (textAnswers[question.id] || '').trim();
     if (!text) return;
     evaluateAndSubmit(question, text);
   };
 
   const handleMatchingPair = (question: Question, left: string, right: string) => {
-    if (answers[question.id] && !allowEditAnswer) return;
+    if (isQuestionEditLocked(question.id)) return;
     const current = { ...(matchingSelections[question.id] || {}) };
     if (!right) {
       delete current[left];
@@ -269,6 +276,12 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
       }));
     }
 
+    // Increment submission attempt counter for this question
+    setAttemptCounts((prev) => ({
+      ...prev,
+      [question.id]: (prev[question.id] || 0) + 1,
+    }));
+
     const submission: StudentAnswer = {
       questionId: question.id,
       answer: rawAnswer,
@@ -365,8 +378,18 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
             const isActive = currentActiveQuestionId === q.id;
             const existingAnswer = answers[q.id];
             const isAnswered = !!existingAnswer;
+            const attempts = attemptCounts[q.id] || (isAnswered ? 1 : 0);
+            const isWrongPractice =
+              !isLiveMode && isAnswered && !existingAnswer.isCorrect && q.type !== 'open_ended';
+            const hasClickedShowAnswer = Boolean(revealedCorrectAnswers[q.id]);
+            const isLockedAfterReveal = !isLiveMode && hasClickedShowAnswer;
+            const isInputDisabled = (isAnswered && !allowEditAnswer) || isLockedAfterReveal;
             const isFeedbackVisible =
               isAnswered && (!isLiveMode || revealedFeedbackForQuestionId === q.id);
+            const canShowCorrectAnswer = isLiveMode
+              ? isFeedbackVisible
+              : isAnswered &&
+                (existingAnswer.isCorrect || q.type === 'open_ended' || hasClickedShowAnswer);
 
             return (
               <div
@@ -595,7 +618,7 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                   )}
 
                   {/* Answer Status / Edit Permission Notice */}
-                  {isAnswered && (
+                  {isAnswered && !isLockedAfterReveal && (
                     <div className="flex items-center gap-1.5 text-[11px] mb-2.5 font-medium">
                       {!allowEditAnswer ? (
                         <span className="inline-flex items-center gap-1.5 text-slate-600 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg">
@@ -635,7 +658,7 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                             buttonStyle = 'bg-amber-500/15 border-amber-500 text-slate-950 font-semibold';
                           }
 
-                          if (isFeedbackVisible) {
+                          if (canShowCorrectAnswer) {
                             if (isOptCorrect) {
                               buttonStyle = 'bg-emerald-50 border-2 border-emerald-500 text-emerald-950 font-semibold ring-1 ring-emerald-400/40 shadow-2xs';
                             } else if (isSelected && !isOptCorrect) {
@@ -643,24 +666,28 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                             } else {
                               buttonStyle = 'bg-slate-50 border-slate-200 text-slate-400 opacity-60';
                             }
+                          } else if (isFeedbackVisible && !q.allowMultipleAnswers && isSelected && !existingAnswer?.isCorrect) {
+                            buttonStyle = 'bg-rose-50 border-2 border-rose-400 text-rose-950 font-medium';
                           }
 
                           return (
                             <button
                               key={opt.id}
                               type="button"
-                              disabled={isAnswered && !allowEditAnswer}
+                              disabled={isInputDisabled}
                               onClick={() => handleChoiceClick(q, opt.id)}
                               className={`w-full text-left p-2.5 rounded-lg border transition-all flex items-center justify-between gap-2 ${
-                                isAnswered && !allowEditAnswer ? 'cursor-not-allowed' : 'cursor-pointer'
+                                isInputDisabled ? 'cursor-not-allowed' : 'cursor-pointer'
                               } ${buttonStyle}`}
                             >
                               <div className="flex items-center gap-2 flex-1">
                                 <span
                                   className={`w-5 h-5 rounded-md flex items-center justify-center font-mono font-bold text-[11px] shrink-0 uppercase ${
-                                    isFeedbackVisible && isOptCorrect
+                                    canShowCorrectAnswer && isOptCorrect
                                       ? 'bg-emerald-600 text-white'
-                                      : isFeedbackVisible && isSelected && !isOptCorrect
+                                      : canShowCorrectAnswer && isSelected && !isOptCorrect
+                                      ? 'bg-rose-600 text-white'
+                                      : isFeedbackVisible && !canShowCorrectAnswer && !q.allowMultipleAnswers && isSelected
                                       ? 'bg-rose-600 text-white'
                                       : isSelected
                                       ? 'bg-amber-600 text-white'
@@ -673,7 +700,7 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                               </div>
 
                               {/* Right Feedback / Selection Status Badge */}
-                              {isFeedbackVisible ? (
+                              {canShowCorrectAnswer ? (
                                 isOptCorrect ? (
                                   <span className="px-2 py-0.5 rounded bg-emerald-200 text-emerald-950 text-[10px] font-bold flex items-center gap-1 shrink-0">
                                     <Check className="w-3.5 h-3.5 text-emerald-800 stroke-[3]" />
@@ -685,6 +712,11 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                                     <span>Your Answer (Incorrect)</span>
                                   </span>
                                 ) : null
+                              ) : isFeedbackVisible && !q.allowMultipleAnswers && isSelected && !existingAnswer?.isCorrect ? (
+                                <span className="px-2 py-0.5 rounded bg-rose-200 text-rose-950 text-[10px] font-bold flex items-center gap-1 shrink-0">
+                                  <X className="w-3.5 h-3.5 text-rose-800 stroke-[3]" />
+                                  <span>Your Answer (Incorrect)</span>
+                                </span>
                               ) : (
                                 isSelected && <Check className="w-4 h-4 text-amber-700 shrink-0" />
                               )}
@@ -692,11 +724,11 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                           );
                         })}
 
-                        {q.allowMultipleAnswers && (
+                        {q.allowMultipleAnswers && !isLockedAfterReveal && (
                           <button
                             type="button"
                             onClick={() => handleMultiSubmit(q)}
-                            disabled={(!selectedChoices[q.id] || selectedChoices[q.id].size === 0) || (isAnswered && !allowEditAnswer)}
+                            disabled={(!selectedChoices[q.id] || selectedChoices[q.id].size === 0) || isInputDisabled}
                             className="w-full mt-2 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
                           >
                             {isAnswered ? 'Update Answer' : 'Submit Answer'} ({selectedChoices[q.id]?.size || 0} selected)
@@ -722,7 +754,7 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                               : 'bg-rose-600 text-white border-rose-700';
                           }
 
-                          if (isFeedbackVisible) {
+                          if (canShowCorrectAnswer) {
                             if (isThisCorrect) {
                               tfStyle = 'bg-emerald-50 border-2 border-emerald-500 text-emerald-950 font-bold ring-1 ring-emerald-400/40 shadow-2xs';
                             } else if (isSelected && !isThisCorrect) {
@@ -730,20 +762,22 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                             } else {
                               tfStyle = 'bg-slate-50 border-slate-200 text-slate-400 opacity-60';
                             }
+                          } else if (isFeedbackVisible && isSelected && !existingAnswer?.isCorrect) {
+                            tfStyle = 'bg-rose-50 border-2 border-rose-400 text-rose-950 font-medium';
                           }
 
                           return (
                             <button
                               key={val}
                               type="button"
-                              disabled={isAnswered && !allowEditAnswer}
+                              disabled={isInputDisabled}
                               onClick={() => handleChoiceClick(q, val)}
                               className={`py-2 px-3 rounded-lg border font-bold capitalize transition-all flex items-center justify-between ${
-                                isAnswered && !allowEditAnswer ? 'cursor-not-allowed' : 'cursor-pointer'
+                                isInputDisabled ? 'cursor-not-allowed' : 'cursor-pointer'
                               } ${tfStyle}`}
                             >
                               <span>{val}</span>
-                              {isFeedbackVisible && isThisCorrect && (
+                              {canShowCorrectAnswer && isThisCorrect && (
                                 <span className="px-1.5 py-0.5 rounded bg-emerald-200 text-emerald-950 text-[10px] font-bold flex items-center gap-0.5">
                                   <Check className="w-3 h-3 stroke-[2.5]" />
                                   <span>{isSelected ? 'Correct!' : 'Key'}</span>
@@ -767,7 +801,7 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                         <div className="flex gap-2">
                           <input
                             type="text"
-                            disabled={isAnswered && !allowEditAnswer}
+                            disabled={isInputDisabled}
                             value={textAnswers[q.id] !== undefined ? textAnswers[q.id] : (existingAnswer?.answer || '')}
                             onChange={(e) =>
                               setTextAnswers((prev) => ({
@@ -781,18 +815,20 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                             placeholder="Type your answer here..."
                             className="flex-1 p-2 bg-white border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none disabled:bg-slate-100 disabled:cursor-not-allowed"
                           />
-                          <button
-                            type="button"
-                            disabled={isAnswered && !allowEditAnswer}
-                            onClick={() => handleTextSubmit(q)}
-                            className="px-3 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-bold rounded-lg text-xs transition-colors shrink-0 cursor-pointer disabled:cursor-not-allowed"
-                          >
-                            {isAnswered ? 'Update' : 'Submit'}
-                          </button>
+                          {!isLockedAfterReveal && (
+                            <button
+                              type="button"
+                              disabled={isInputDisabled}
+                              onClick={() => handleTextSubmit(q)}
+                              className="px-3 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-bold rounded-lg text-xs transition-colors shrink-0 cursor-pointer disabled:cursor-not-allowed"
+                            >
+                              {isAnswered ? 'Update' : 'Submit'}
+                            </button>
+                          )}
                         </div>
 
-                        {/* When feedback is visible, show correct expected text */}
-                        {isFeedbackVisible && (
+                        {/* When correct answer is allowed to be visible, show correct expected text */}
+                        {canShowCorrectAnswer && (
                           <div className="p-2.5 rounded-lg bg-emerald-50 border-2 border-emerald-400 text-xs text-emerald-950 flex items-center justify-between gap-2 shadow-2xs">
                             <div className="flex items-center gap-2">
                               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -816,12 +852,12 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                           pairs={q.matchingPairs}
                           currentSelections={matchingSelections[q.id] || {}}
                           onPairMatch={(left, right) => handleMatchingPair(q, left, right)}
-                          disabled={isAnswered && !allowEditAnswer}
-                          isFeedbackVisible={isFeedbackVisible}
+                          disabled={isInputDisabled}
+                          isFeedbackVisible={canShowCorrectAnswer}
                         />
 
-                        {/* When feedback is visible, display correct matching key */}
-                        {isFeedbackVisible && (
+                        {/* When correct answer is visible, display correct matching key */}
+                        {canShowCorrectAnswer && (
                           <div className="mt-2.5 p-2.5 rounded-lg bg-emerald-50 border-2 border-emerald-400 text-xs text-emerald-950 space-y-1.5 shadow-2xs">
                             <div className="font-bold flex items-center gap-1.5 text-emerald-900">
                               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
@@ -861,16 +897,20 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                               [q.id]: placements,
                             }))
                           }
-                          onSubmit={(placements) => evaluateAndSubmit(q, placements)}
-                          disabled={isAnswered && !allowEditAnswer}
+                          onSubmit={(placements) => {
+                            if (!isQuestionEditLocked(q.id)) {
+                              evaluateAndSubmit(q, placements);
+                            }
+                          }}
+                          disabled={isInputDisabled}
                           isAnswered={isAnswered}
-                          isFeedbackVisible={isFeedbackVisible}
+                          isFeedbackVisible={canShowCorrectAnswer}
                           pointsEarned={existingAnswer?.pointsEarned || 0}
                           totalPoints={q.points || 10}
                         />
 
-                        {/* When feedback is visible, show expected categorization */}
-                        {isFeedbackVisible && (
+                        {/* When correct answer is visible, show expected categorization */}
+                        {canShowCorrectAnswer && (
                           <div className="p-3 rounded-xl bg-emerald-50 border-2 border-emerald-400 text-xs text-emerald-950 space-y-2 shadow-2xs">
                             <div className="font-bold flex items-center gap-1.5 text-emerald-900">
                               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
@@ -908,7 +948,7 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                       <div className="space-y-1.5">
                         <textarea
                           rows={2}
-                          disabled={isAnswered && !allowEditAnswer}
+                          disabled={isInputDisabled}
                           value={textAnswers[q.id] !== undefined ? textAnswers[q.id] : (existingAnswer?.answer || '')}
                           onChange={(e) =>
                             setTextAnswers((prev) => ({
@@ -921,7 +961,7 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                         />
                         <button
                           type="button"
-                          disabled={isAnswered && !allowEditAnswer}
+                          disabled={isInputDisabled}
                           onClick={() => handleTextSubmit(q)}
                           className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-bold rounded-lg text-xs transition-colors cursor-pointer disabled:cursor-not-allowed"
                         >
@@ -935,66 +975,119 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                   {isFeedbackVisible && (() => {
                     const hasSpecificExp =
                       q.explanationCorrect !== undefined || q.explanationIncorrect !== undefined;
-                    const directionalExplanation = existingAnswer.isCorrect
+                    const showBothExplanations = isWrongPractice && hasClickedShowAnswer;
+
+                    const primaryExplanation = existingAnswer.isCorrect
                       ? (q.explanationCorrect || (!hasSpecificExp ? q.explanation : ''))
-                      : (q.explanationIncorrect || (!hasSpecificExp ? q.explanation : ''));
+                      : (q.explanationIncorrect ||
+                          (showBothExplanations ? q.explanationCorrect : '') ||
+                          (!hasSpecificExp ? q.explanation : ''));
+
+                    const secondaryCorrectExplanation =
+                      showBothExplanations && q.explanationIncorrect && q.explanationCorrect
+                        ? q.explanationCorrect
+                        : '';
+
                     const hasDetails = Boolean(
-                      directionalExplanation?.trim() || existingAnswer.aiFeedback
+                      primaryExplanation?.trim() ||
+                        secondaryCorrectExplanation?.trim() ||
+                        existingAnswer.aiFeedback
                     );
 
                     return (
-                      <div
-                        className={`mt-3 p-3.5 rounded-xl border text-xs space-y-2.5 animate-in fade-in shadow-2xs ${
-                          existingAnswer.isCorrect
-                            ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
-                            : 'bg-amber-50/90 border-amber-300 text-amber-950'
-                        }`}
-                      >
+                      <>
                         <div
-                          className={`font-bold flex items-center justify-between gap-2 ${
-                            hasDetails ? 'border-b border-black/5 pb-2' : ''
+                          className={`mt-3 p-3.5 rounded-xl border text-xs space-y-2.5 animate-in fade-in shadow-2xs ${
+                            existingAnswer.isCorrect
+                              ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
+                              : 'bg-amber-50/90 border-amber-300 text-amber-950'
                           }`}
                         >
-                          <div className="flex items-center gap-1.5 text-sm">
-                            {existingAnswer.isCorrect ? (
-                              <>
-                                <CheckCircle2 className="w-4 h-4 text-emerald-600 stroke-[2.5]" />
-                                <span className="text-emerald-900 font-extrabold">Correct Answer!</span>
-                              </>
-                            ) : (
-                              <>
-                                <XCircle className="w-4 h-4 text-rose-600 stroke-[2.5]" />
-                                <span className="text-rose-900 font-extrabold">Needs Review</span>
-                              </>
-                            )}
+                          <div
+                            className={`font-bold flex items-center justify-between gap-2 ${
+                              hasDetails ? 'border-b border-black/5 pb-2' : ''
+                            }`}
+                          >
+                            <div className="flex items-center gap-1.5 text-sm">
+                              {existingAnswer.isCorrect ? (
+                                <>
+                                  <CheckCircle2 className="w-4 h-4 text-emerald-600 stroke-[2.5]" />
+                                  <span className="text-emerald-900 font-extrabold">Correct Answer!</span>
+                                </>
+                              ) : (
+                                <>
+                                  <XCircle className="w-4 h-4 text-rose-600 stroke-[2.5]" />
+                                  <span className="text-rose-900 font-extrabold">Needs Review</span>
+                                </>
+                              )}
+                            </div>
+                            <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-white/80 border border-slate-200 text-slate-800">
+                              +{existingAnswer.pointsEarned} pts
+                            </span>
                           </div>
-                          <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-white/80 border border-slate-200 text-slate-800">
-                            +{existingAnswer.pointsEarned} pts
-                          </span>
+
+                          {/* Explanation (why wrong during retries, or answer explanation once revealed/correct) */}
+                          {primaryExplanation && primaryExplanation.trim().length > 0 && (
+                            <div className="space-y-0.5 pt-0.5">
+                              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                Teacher Explanation:
+                              </div>
+                              <p className="text-xs text-slate-800 leading-relaxed font-normal whitespace-pre-line">
+                                {primaryExplanation}
+                              </p>
+                            </div>
+                          )}
+
+                          {secondaryCorrectExplanation && secondaryCorrectExplanation.trim().length > 0 && (
+                            <div className="space-y-0.5 pt-1 border-t border-black/5">
+                              <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">
+                                Correct Answer Explanation:
+                              </div>
+                              <p className="text-xs text-emerald-950 leading-relaxed font-normal whitespace-pre-line">
+                                {secondaryCorrectExplanation}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Optional AI Feedback for open-ended reflections */}
+                          {existingAnswer.aiFeedback && (
+                            <div className="p-2 bg-amber-100/60 border border-amber-300 rounded-lg text-xs space-y-0.5">
+                              <div className="text-[10px] font-bold uppercase tracking-wider text-amber-900">
+                                Teacher / AI Feedback:
+                              </div>
+                              <p className="text-amber-950 leading-relaxed">{existingAnswer.aiFeedback}</p>
+                            </div>
+                          )}
                         </div>
 
-                        {/* Directional Explanation (if provided) */}
-                        {directionalExplanation && directionalExplanation.trim().length > 0 && (
-                          <div className="space-y-0.5 pt-0.5">
-                            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                              Teacher Explanation:
+                        {/* Practice Mode 3-Attempt "Show Answer" Control (below "Needs Review" box) */}
+                        {isWrongPractice && !hasClickedShowAnswer && (
+                          attempts >= 3 ? (
+                            <div className="mt-2.5 flex items-center justify-between gap-2 flex-wrap">
+                              <span className="text-[11px] text-amber-800 font-medium">
+                                Attempted {attempts} times.
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setRevealedCorrectAnswers((prev) => ({
+                                    ...prev,
+                                    [q.id]: true,
+                                  }))
+                                }
+                                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-colors shadow-xs cursor-pointer"
+                              >
+                                <Eye className="w-3.5 h-3.5 text-amber-400" />
+                                <span>Show Answer</span>
+                              </button>
                             </div>
-                            <p className="text-xs text-slate-800 leading-relaxed font-normal whitespace-pre-line">
-                              {directionalExplanation}
-                            </p>
-                          </div>
-                        )}
-
-                        {/* Optional AI Feedback for open-ended reflections */}
-                        {existingAnswer.aiFeedback && (
-                          <div className="p-2 bg-amber-100/60 border border-amber-300 rounded-lg text-xs space-y-0.5">
-                            <div className="text-[10px] font-bold uppercase tracking-wider text-amber-900">
-                              Teacher / AI Feedback:
+                          ) : (
+                            <div className="mt-2 text-[11px] text-slate-500 font-medium">
+                              Attempt {attempts} of 3 · Try again to unlock "Show Answer".
                             </div>
-                            <p className="text-amber-950 leading-relaxed">{existingAnswer.aiFeedback}</p>
-                          </div>
+                          )
                         )}
-                      </div>
+                      </>
                     );
                   })()}
                 </div>

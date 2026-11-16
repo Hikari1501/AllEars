@@ -65,7 +65,7 @@ export function playSuccessChime(): void {
 }
 
 /**
- * Plays a gentle, descending two-tone cue (261Hz -> 196Hz)
+ * Plays a clear, unmistakable descending two-tone cue (E4 -> B3)
  * Triggered on student device whenever an incorrect answer is submitted.
  */
 export function playWrongAnswerSound(): void {
@@ -75,25 +75,30 @@ export function playWrongAnswerSound(): void {
 
     const startTime = ctx.currentTime + 0.02;
 
-    // Subdued descending tones: C4 (261.63Hz) -> G3 (196.00Hz)
+    // Distinct descending tones: E4 (329.63Hz) -> B3 (246.94Hz)
     const tones = [
-      { freq: 261.63, timeOffset: 0.00, duration: 0.12, volume: 0.15 },
-      { freq: 196.00, timeOffset: 0.10, duration: 0.22, volume: 0.16 },
+      { freq: 329.63, timeOffset: 0.00, duration: 0.16, volume: 0.62 },
+      { freq: 246.94, timeOffset: 0.14, duration: 0.28, volume: 0.68 },
     ];
 
     tones.forEach((tone) => {
       const osc = ctx.createOscillator();
+      const filter = ctx.createBiquadFilter();
       const gain = ctx.createGain();
 
-      osc.type = 'triangle'; // Softer, warmer waveform for gentle feedback
+      osc.type = 'sawtooth';
       osc.frequency.setValueAtTime(tone.freq, startTime + tone.timeOffset);
+
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(1600, startTime + tone.timeOffset);
 
       const noteStart = startTime + tone.timeOffset;
       gain.gain.setValueAtTime(0.0001, noteStart);
-      gain.gain.linearRampToValueAtTime(tone.volume, noteStart + 0.02);
+      gain.gain.linearRampToValueAtTime(tone.volume, noteStart + 0.015);
       gain.gain.exponentialRampToValueAtTime(0.0001, noteStart + tone.duration);
 
-      osc.connect(gain);
+      osc.connect(filter);
+      filter.connect(gain);
       gain.connect(ctx.destination);
 
       osc.start(noteStart);
