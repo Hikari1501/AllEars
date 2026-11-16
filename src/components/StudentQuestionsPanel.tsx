@@ -37,6 +37,7 @@ interface StudentQuestionsPanelProps {
   onContinueWatching?: () => void;
   isLiveMode?: boolean;
   revealedFeedbackForQuestionId?: string | null;
+  revealedKeyQuestionIds?: string[];
   allowRewind?: boolean;
   allowEditAnswer?: boolean;
   backgroundInfoText?: string;
@@ -54,6 +55,7 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
   onContinueWatching,
   isLiveMode = false,
   revealedFeedbackForQuestionId = null,
+  revealedKeyQuestionIds = [],
   allowRewind = true,
   allowEditAnswer = true,
   backgroundInfoText,
@@ -385,9 +387,14 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
             const hasClickedShowAnswer = Boolean(revealedCorrectAnswers[q.id]);
             const isLockedAfterReveal = !isLiveMode && hasClickedShowAnswer;
             const isInputDisabled = (isAnswered && !allowEditAnswer) || isLockedAfterReveal;
+            const hasTeacherRevealedKey = Boolean(
+              isLiveMode &&
+                (revealedKeyQuestionIds.includes(q.id) ||
+                  revealedFeedbackForQuestionId === q.id)
+            );
             const isFeedbackVisible = isAnswered;
             const canShowCorrectAnswer = isLiveMode
-              ? isAnswered
+              ? (isAnswered && q.type === 'open_ended') || hasTeacherRevealedKey
               : isAnswered &&
                 (existingAnswer.isCorrect || q.type === 'open_ended' || hasClickedShowAnswer);
 
@@ -642,7 +649,10 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                         )}
                         {q.options.map((opt) => {
                           const isSelected = q.allowMultipleAnswers
-                            ? selectedChoices[q.id]?.has(opt.id)
+                            ? selectedChoices[q.id]
+                              ? selectedChoices[q.id].has(opt.id)
+                              : Array.isArray(existingAnswer?.answer) &&
+                                existingAnswer.answer.includes(opt.id)
                             : existingAnswer?.answer === opt.id ||
                               selectedChoices[q.id]?.has(opt.id);
 
@@ -898,11 +908,13 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                     )}
                   </div>
 
-                  {/* Feedback Explanation Banner (shown when answered or revealed by teacher) */}
+                  {/* Feedback Explanation Banner (shown immediately on submit) */}
                   {isFeedbackVisible && (() => {
                     const hasSpecificExp =
                       q.explanationCorrect !== undefined || q.explanationIncorrect !== undefined;
-                    const showBothExplanations = isWrongPractice && hasClickedShowAnswer;
+                    const showBothExplanations =
+                      (isWrongPractice && hasClickedShowAnswer) ||
+                      (isLiveMode && !existingAnswer.isCorrect && hasTeacherRevealedKey);
 
                     const primaryExplanation = existingAnswer.isCorrect
                       ? (q.explanationCorrect || (!hasSpecificExp ? q.explanation : ''))
@@ -986,109 +998,109 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                             </div>
                           )}
                         </div>
-
-                        {/* Key / Answer Breakdown (Displayed BELOW the Correct / Needs Review box) */}
-                        {canShowCorrectAnswer && q.type === 'close_ended' && (
-                          <div className="mt-2.5 p-2.5 rounded-xl bg-emerald-50 border-2 border-emerald-400 text-xs text-emerald-950 flex items-center justify-between gap-2 flex-wrap shadow-2xs animate-in fade-in">
-                            <div className="flex items-center gap-2">
-                              <KeyRound className="w-4 h-4 text-emerald-700 shrink-0" />
-                              <span>
-                                Key:{' '}
-                                <strong className="font-mono text-sm underline decoration-emerald-500 font-bold">
-                                  {q.correctAnswer}
-                                </strong>
-                              </span>
-                            </div>
-                            {existingAnswer && !existingAnswer.isCorrect && (
-                              <span className="text-[11px] text-rose-800 font-mono bg-rose-100 px-2 py-0.5 rounded border border-rose-200">
-                                You typed: "{String(existingAnswer.answer)}"
-                              </span>
-                            )}
-                          </div>
-                        )}
-
-                        {canShowCorrectAnswer && q.type === 'matching' && q.matchingPairs && (
-                          <div className="mt-2.5 p-2.5 rounded-xl bg-emerald-50 border-2 border-emerald-400 text-xs text-emerald-950 space-y-1.5 shadow-2xs animate-in fade-in">
-                            <div className="font-bold flex items-center gap-1.5 text-emerald-900">
-                              <KeyRound className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-                              <span>Key (Matching Pairs):</span>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                              {q.matchingPairs.map((pair, pIdx) => (
-                                <div
-                                  key={pIdx}
-                                  className="p-1.5 bg-white rounded border border-emerald-200 text-[11px] flex items-center justify-between gap-1 shadow-2xs"
-                                >
-                                  <span className="font-semibold text-slate-800">{pair.left}</span>
-                                  <span className="text-emerald-600 font-bold">➔</span>
-                                  <span className="font-bold text-emerald-900">{pair.right}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {canShowCorrectAnswer && q.type === 'drag_and_drop' && q.categories && (
-                          <div className="mt-2.5 p-3 rounded-xl bg-emerald-50 border-2 border-emerald-400 text-xs text-emerald-950 space-y-2 shadow-2xs animate-in fade-in">
-                            <div className="font-bold flex items-center gap-1.5 text-emerald-900">
-                              <KeyRound className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-                              <span>Key (Category Breakdown):</span>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              {q.categories.map((cat) => (
-                                <div
-                                  key={cat.id}
-                                  className="p-2 bg-white rounded-lg border border-emerald-200 shadow-2xs space-y-1"
-                                >
-                                  <div className="text-[11px] font-bold text-emerald-950 uppercase tracking-wide">
-                                    {cat.name}
-                                  </div>
-                                  <div className="flex flex-wrap gap-1">
-                                    {cat.items.map((item, iIdx) => (
-                                      <span
-                                        key={iIdx}
-                                        className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 text-[10px] font-semibold border border-emerald-200"
-                                      >
-                                        {item}
-                                      </span>
-                                    ))}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Practice Mode 3-Attempt "Show Answer" Control (below "Needs Review" box) */}
-                        {isWrongPractice && !hasClickedShowAnswer && (
-                          attempts >= 3 ? (
-                            <div className="mt-2.5 flex items-center justify-between gap-2 flex-wrap">
-                              <span className="text-[11px] text-amber-800 font-medium">
-                                Attempted {attempts} times.
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setRevealedCorrectAnswers((prev) => ({
-                                    ...prev,
-                                    [q.id]: true,
-                                  }))
-                                }
-                                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-colors shadow-xs cursor-pointer"
-                              >
-                                <Eye className="w-3.5 h-3.5 text-amber-400" />
-                                <span>Show Answer</span>
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="mt-2 text-[11px] text-slate-500 font-medium">
-                              Attempt {attempts} of 3 · Try again to unlock "Show Answer".
-                            </div>
-                          )
-                        )}
                       </>
                     );
                   })()}
+
+                  {/* Key / Answer Breakdown (Displayed BELOW Correct / Needs Review box once Key is revealed) */}
+                  {canShowCorrectAnswer && q.type === 'close_ended' && (
+                    <div className="mt-2.5 p-2.5 rounded-xl bg-emerald-50 border-2 border-emerald-400 text-xs text-emerald-950 flex items-center justify-between gap-2 flex-wrap shadow-2xs animate-in fade-in">
+                      <div className="flex items-center gap-2">
+                        <KeyRound className="w-4 h-4 text-emerald-700 shrink-0" />
+                        <span>
+                          Key:{' '}
+                          <strong className="font-mono text-sm underline decoration-emerald-500 font-bold">
+                            {q.correctAnswer}
+                          </strong>
+                        </span>
+                      </div>
+                      {existingAnswer && !existingAnswer.isCorrect && (
+                        <span className="text-[11px] text-rose-800 font-mono bg-rose-100 px-2 py-0.5 rounded border border-rose-200">
+                          You typed: "{String(existingAnswer.answer)}"
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {canShowCorrectAnswer && q.type === 'matching' && q.matchingPairs && (
+                    <div className="mt-2.5 p-2.5 rounded-xl bg-emerald-50 border-2 border-emerald-400 text-xs text-emerald-950 space-y-1.5 shadow-2xs animate-in fade-in">
+                      <div className="font-bold flex items-center gap-1.5 text-emerald-900">
+                        <KeyRound className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                        <span>Key (Matching Pairs):</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                        {q.matchingPairs.map((pair, pIdx) => (
+                          <div
+                            key={pIdx}
+                            className="p-1.5 bg-white rounded border border-emerald-200 text-[11px] flex items-center justify-between gap-1 shadow-2xs"
+                          >
+                            <span className="font-semibold text-slate-800">{pair.left}</span>
+                            <span className="text-emerald-600 font-bold">➔</span>
+                            <span className="font-bold text-emerald-900">{pair.right}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {canShowCorrectAnswer && q.type === 'drag_and_drop' && q.categories && (
+                    <div className="mt-2.5 p-3 rounded-xl bg-emerald-50 border-2 border-emerald-400 text-xs text-emerald-950 space-y-2 shadow-2xs animate-in fade-in">
+                      <div className="font-bold flex items-center gap-1.5 text-emerald-900">
+                        <KeyRound className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                        <span>Key (Category Breakdown):</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {q.categories.map((cat) => (
+                          <div
+                            key={cat.id}
+                            className="p-2 bg-white rounded-lg border border-emerald-200 shadow-2xs space-y-1"
+                          >
+                            <div className="text-[11px] font-bold text-emerald-950 uppercase tracking-wide">
+                              {cat.name}
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {cat.items.map((item, iIdx) => (
+                                <span
+                                  key={iIdx}
+                                  className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 text-[10px] font-semibold border border-emerald-200"
+                                >
+                                  {item}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Practice Mode 3-Attempt "Show Answer" Control (below "Needs Review" box) */}
+                  {isWrongPractice && !hasClickedShowAnswer && (
+                    attempts >= 3 ? (
+                      <div className="mt-2.5 flex items-center justify-between gap-2 flex-wrap">
+                        <span className="text-[11px] text-amber-800 font-medium">
+                          Attempted {attempts} times.
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setRevealedCorrectAnswers((prev) => ({
+                              ...prev,
+                              [q.id]: true,
+                            }))
+                          }
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-colors shadow-xs cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Show Answer</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="mt-2 text-[11px] text-slate-500 font-medium">
+                        Attempt {attempts} of 3 · Try again to unlock "Show Answer".
+                      </div>
+                    )
+                  )}
                 </div>
               </div>
             );

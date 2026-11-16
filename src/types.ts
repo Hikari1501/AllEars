@@ -163,6 +163,7 @@ export interface LiveSessionState {
   playbackSpeed: number;
   currentQuestionId: string | null;
   revealedFeedbackForQuestionId: string | null;
+  revealedKeyQuestionIds?: string[];
   activeVocabWord?: VocabEntry | null;
   activeStudentResponse?: AnonymousStudentResponse | null;
   allowEditAnswer?: boolean;

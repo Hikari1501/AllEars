@@ -142,6 +142,7 @@ interface LiveSession {
   playbackSpeed: number;
   currentQuestionId: string | null;
   revealedFeedbackForQuestionId: string | null;
+  revealedKeyQuestionIds?: string[];
   activeVocabWord: any | null;
   activeStudentResponse: any | null;
   allowEditAnswer?: boolean;
@@ -718,6 +719,7 @@ app.post('/api/live/create', async (req: Request, res: Response) => {
     playbackSpeed: 1,
     currentQuestionId: null,
     revealedFeedbackForQuestionId: null,
+    revealedKeyQuestionIds: [],
     activeVocabWord: null,
     activeStudentResponse: null,
     allowEditAnswer: false,
@@ -788,7 +790,7 @@ app.post('/api/live/join', (req: Request, res: Response) => {
 
 // Update live session state (supported via /api/live/update-state and /api/live/update alias)
 const handleUpdateSessionState = (req: Request, res: Response) => {
-  const { pin, currentTime, isPlaying, playbackSpeed, currentQuestionId, isCompleted, activeVocabWord, activeStudentResponse, allowEditAnswer, allowStudentCaptions, autoPauseAtCheckpoints } = req.body;
+  const { pin, currentTime, isPlaying, playbackSpeed, currentQuestionId, isCompleted, activeVocabWord, activeStudentResponse, allowEditAnswer, allowStudentCaptions, autoPauseAtCheckpoints, revealedKeyQuestionIds } = req.body;
   const session = liveSessions[pin];
   if (!session) {
     return res.status(404).json({ error: 'Session not found' });
@@ -802,6 +804,9 @@ const handleUpdateSessionState = (req: Request, res: Response) => {
   if (allowEditAnswer !== undefined) session.allowEditAnswer = Boolean(allowEditAnswer);
   if (allowStudentCaptions !== undefined) session.allowStudentCaptions = Boolean(allowStudentCaptions);
   if (autoPauseAtCheckpoints !== undefined) session.autoPauseAtCheckpoints = Boolean(autoPauseAtCheckpoints);
+  if (Array.isArray(revealedKeyQuestionIds)) {
+    session.revealedKeyQuestionIds = revealedKeyQuestionIds.filter((id) => typeof id === 'string');
+  }
   if (activeVocabWord !== undefined) {
     session.activeVocabWord = activeVocabWord;
     if (activeVocabWord) {
@@ -819,7 +824,39 @@ const handleUpdateSessionState = (req: Request, res: Response) => {
 app.post('/api/live/update-state', handleUpdateSessionState);
 app.post('/api/live/update', handleUpdateSessionState);
 
-// Teacher reveals feedback & answers to the whole class
+// Teacher reveals or hides the answer key for a specific question to the whole class
+app.post('/api/live/show-key', (req: Request, res: Response) => {
+  const { pin, questionId, show } = req.body;
+  const session = liveSessions[pin];
+  if (!session) {
+    return res.status(404).json({ error: 'Session not found' });
+  }
+  if (!questionId || typeof questionId !== 'string') {
+    return res.status(400).json({ error: 'questionId is required' });
+  }
+
+  const current = Array.isArray(session.revealedKeyQuestionIds)
+    ? session.revealedKeyQuestionIds
+    : [];
+  const shouldShow = show !== undefined ? Boolean(show) : !current.includes(questionId);
+
+  if (shouldShow) {
+    session.revealedKeyQuestionIds = current.includes(questionId)
+      ? current
+      : [...current, questionId];
+    session.revealedFeedbackForQuestionId = questionId;
+  } else {
+    session.revealedKeyQuestionIds = current.filter((id) => id !== questionId);
+    if (session.revealedFeedbackForQuestionId === questionId) {
+      session.revealedFeedbackForQuestionId = null;
+    }
+  }
+  session.lastUpdated = Date.now();
+
+  res.json({ success: true, session });
+});
+
+// Legacy reveal-feedback alias (also reveals key for questionId)
 app.post('/api/live/reveal-feedback', (req: Request, res: Response) => {
   const { pin, questionId } = req.body;
   const session = liveSessions[pin];
@@ -828,6 +865,14 @@ app.post('/api/live/reveal-feedback', (req: Request, res: Response) => {
   }
 
   session.revealedFeedbackForQuestionId = questionId;
+  if (questionId && typeof questionId === 'string') {
+    const current = Array.isArray(session.revealedKeyQuestionIds)
+      ? session.revealedKeyQuestionIds
+      : [];
+    if (!current.includes(questionId)) {
+      session.revealedKeyQuestionIds = [...current, questionId];
+    }
+  }
   session.lastUpdated = Date.now();
 
   res.json({ success: true, session });

@@ -1,0 +1,162 @@
+[
+  {
+    "sessionId": "live-sess-303678-1794829061775",
+    "pin": "303678",
+    "lessonId": "test-lesson-key",
+    "lessonTitle": "Live Listening Lesson",
+    "teacherId": "test-teacher-verify",
+    "teacherName": "Verify",
+    "mode": "live",
+    "createdAt": 1794829061737,
+    "endedAt": 1794829061775,
+    "totalStudents": 0,
+    "averageScore": 0,
+    "students": [],
+    "questionStats": {}
+  },
+  {
+    "sessionId": "sess-live-918234",
+    "pin": "918234",
+    "lessonId": "lesson-curiosity-science",
+    "lessonTitle": "Curiosity: The Science of Learning",
+    "teacherId": "teacher-chuck",
+    "teacherName": "Chuck",
+    "mode": "live",
+    "createdAt": 1794643159032,
+    "endedAt": 1794644959032,
+    "totalStudents": 4,
+    "averageScore": 88,
+    "students": [
+      {
+        "id": "stu-alex",
+        "name": "Alex Johnson",
+        "score": 30,
+        "maxScore": 30,
+        "percentage": 100,
+        "answers": {
+          "q1": {
+            "answer": "a",
+            "isCorrect": true,
+            "points": 10
+          },
+          "q2": {
+            "answer": "true",
+            "isCorrect": true,
+            "points": 10
+          },
+          "q3": {
+            "answer": "hippocampus",
+            "isCorrect": true,
+            "points": 10
+          }
+        },
+        "isBot": true,
+        "completedAt": "11/14/2026, 8:24:19 AM"
+      },
+      {
+        "id": "stu-maya",
+        "name": "Maya Lin",
+        "score": 25,
+        "maxScore": 30,
+        "percentage": 83,
+        "answers": {
+          "q1": {
+            "answer": "a",
+            "isCorrect": true,
+            "points": 10
+          },
+          "q2": {
+            "answer": "true",
+            "isCorrect": true,
+            "points": 10
+          },
+          "q3": {
+            "answer": "dopamine",
+            "isCorrect": false,
+            "points": 0
+          }
+        },
+        "isBot": true,
+        "completedAt": "11/14/2026, 8:25:59 AM"
+      },
+      {
+        "id": "stu-liam",
+        "name": "Liam Davies",
+        "score": 20,
+        "maxScore": 30,
+        "percentage": 67,
+        "answers": {
+          "q1": {
+            "answer": "b",
+            "isCorrect": false,
+            "points": 0
+          },
+          "q2": {
+            "answer": "true",
+            "isCorrect": true,
+            "points": 10
+          },
+          "q3": {
+            "answer": "hippocampus",
+            "isCorrect": true,
+            "points": 10
+          }
+        },
+        "isBot": true,
+        "completedAt": "11/14/2026, 8:27:39 AM"
+      },
+      {
+        "id": "stu-chloe",
+        "name": "Chloe Dubois",
+        "score": 30,
+        "maxScore": 30,
+        "percentage": 100,
+        "answers": {
+          "q1": {
+            "answer": "a",
+            "isCorrect": true,
+            "points": 10
+          },
+          "q2": {
+            "answer": "true",
+            "isCorrect": true,
+            "points": 10
+          },
+          "q3": {
+            "answer": "hippocampus",
+            "isCorrect": true,
+            "points": 10
+          }
+        },
+        "isBot": true,
+        "completedAt": "11/14/2026, 8:29:19 AM"
+      }
+    ],
+    "questionStats": {
+      "q1": {
+        "questionId": "q1",
+        "prompt": "According to cognitive psychology, what causes curiosity?",
+        "type": "multiple_choice",
+        "totalAnswered": 4,
+        "correctCount": 3,
+        "accuracy": 75
+      },
+      "q2": {
+        "questionId": "q2",
+        "prompt": "Satisfying curiosity activates the dopamine reward pathway.",
+        "type": "true_false",
+        "totalAnswered": 4,
+        "correctCount": 4,
+        "accuracy": 100
+      },
+      "q3": {
+        "questionId": "q3",
+        "prompt": "Which part of the brain is primed when curiosity is activated?",
+        "type": "close_ended",
+        "totalAnswered": 4,
+        "correctCount": 3,
+        "accuracy": 75
+      }
+    }
+  }
+]

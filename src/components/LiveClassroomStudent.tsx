@@ -277,6 +277,7 @@ export const LiveClassroomStudent: React.FC<LiveClassroomStudentProps> = ({
             onAnswerSubmit={handleStudentSubmit}
             isLiveMode={true}
             revealedFeedbackForQuestionId={session?.revealedFeedbackForQuestionId || null}
+            revealedKeyQuestionIds={session?.revealedKeyQuestionIds || []}
             allowRewind={false}
             allowEditAnswer={session?.allowEditAnswer ?? false}
             backgroundInfoText={lesson.backgroundInfoText}

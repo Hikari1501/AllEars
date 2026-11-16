@@ -263,6 +263,7 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
   };
 
   const canShowFeedback = hasSubmitted;
+  const canShowKey = isLiveMode ? Boolean(isFeedbackRevealed) : hasSubmitted;
 
   // Floating minimized pill for students in homework mode to listen and scrub freely
   if (isMinimized && !isLiveMode) {
@@ -471,7 +472,7 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
                   stateClass = 'border-amber-500 bg-amber-50/50 text-amber-950 font-medium shadow-xs';
                 }
 
-                if (canShowFeedback) {
+                if (canShowKey) {
                   if (isCorrect) {
                     stateClass = 'border-emerald-500 bg-emerald-50 text-emerald-950 font-medium';
                   } else if (isSelected && !isCorrect) {
@@ -479,6 +480,8 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
                   } else {
                     stateClass = 'opacity-50 border-slate-200 text-slate-500';
                   }
+                } else if (canShowFeedback && isSelected && !isAnswerCorrect) {
+                  stateClass = 'border-rose-400 bg-rose-50 text-rose-950';
                 }
 
                 return (
@@ -497,10 +500,10 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
                       )}
                     </span>
                     <span className="text-sm leading-relaxed flex-1">{option.text}</span>
-                    {canShowFeedback && isCorrect && (
+                    {canShowKey && isCorrect && (
                       <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
                     )}
-                    {canShowFeedback && isSelected && !isCorrect && (
+                    {(canShowKey || (canShowFeedback && !isAnswerCorrect)) && isSelected && !isCorrect && (
                       <XCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
                     )}
                   </button>
@@ -548,7 +551,7 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
                   })
                 }
                 disabled={hasSubmitted}
-                isFeedbackVisible={canShowFeedback}
+                isFeedbackVisible={canShowKey}
               />
             </div>
           )}
@@ -564,7 +567,7 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
                 onSubmit={() => handleSubmit()}
                 disabled={hasSubmitted}
                 isAnswered={hasSubmitted}
-                isFeedbackVisible={canShowFeedback}
+                isFeedbackVisible={canShowKey}
                 pointsEarned={pointsEarned}
                 totalPoints={question.points}
               />
@@ -657,7 +660,7 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
           )}
 
           {/* Key Box displayed below the Correct / Needs Review box */}
-          {canShowFeedback && question.type === 'close_ended' && (
+          {canShowKey && question.type === 'close_ended' && (
             <div className="p-3 rounded-xl bg-emerald-50 border-2 border-emerald-400 text-xs text-emerald-950 flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-center gap-2">
                 <KeyRound className="w-4 h-4 text-emerald-700 shrink-0" />
@@ -673,7 +676,7 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
             </div>
           )}
 
-          {canShowFeedback && question.type === 'matching' && question.matchingPairs && (
+          {canShowKey && question.type === 'matching' && question.matchingPairs && (
             <div className="p-3 bg-emerald-50 border-2 border-emerald-400 rounded-xl text-xs space-y-1.5 text-emerald-950">
               <div className="font-bold flex items-center gap-1.5 text-emerald-900">
                 <KeyRound className="w-3.5 h-3.5 text-emerald-700" />
@@ -691,7 +694,7 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
             </div>
           )}
 
-          {canShowFeedback && question.type === 'drag_and_drop' && question.categories && (
+          {canShowKey && question.type === 'drag_and_drop' && question.categories && (
             <div className="p-3 bg-emerald-50 border-2 border-emerald-400 rounded-xl text-xs space-y-2 text-emerald-950">
               <div className="font-bold flex items-center gap-1.5 text-emerald-900">
                 <KeyRound className="w-3.5 h-3.5 text-emerald-700" />

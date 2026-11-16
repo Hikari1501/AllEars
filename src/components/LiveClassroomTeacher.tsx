@@ -34,6 +34,7 @@ import {
   PauseCircle,
   Lightbulb,
   Image as ImageIcon,
+  KeyRound,
 } from 'lucide-react';
 
 interface LiveClassroomTeacherProps {
@@ -234,6 +235,31 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
       autoPauseAtCheckpoints: nextVal,
       ...(nextVal === false ? { currentQuestionId: null } : {}),
     });
+  };
+
+  // Toggle revealing or hiding the answer Key for a specific question on student screens
+  const handleToggleShowKey = async (questionId: string) => {
+    const currentRevealed = session?.revealedKeyQuestionIds || [];
+    const nextShow = !currentRevealed.includes(questionId);
+    const nextList = nextShow
+      ? [...currentRevealed, questionId]
+      : currentRevealed.filter((id) => id !== questionId);
+
+    setSession((prev) => (prev ? { ...prev, revealedKeyQuestionIds: nextList } : null));
+
+    try {
+      const res = await fetch('/api/live/show-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin, questionId, show: nextShow }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.session) setSession(data.session);
+      }
+    } catch (e) {
+      console.error('Failed to toggle Show Key:', e);
+    }
   };
 
   const copyRoomLink = () => {
@@ -561,6 +587,15 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
                           </span>
 
                           <div className="flex items-center gap-1.5">
+                            {session?.revealedKeyQuestionIds?.includes(q.id) && (
+                              <span
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-[9px]"
+                                title="Answer key is visible to students"
+                              >
+                                <KeyRound className="w-2.5 h-2.5" />
+                                <span>Key Shown</span>
+                              </span>
+                            )}
                             {isActive && (
                               <span className="px-1.5 py-0.5 rounded bg-amber-500 text-slate-950 font-extrabold text-[9px] uppercase animate-pulse">
                                 Active Now
@@ -678,7 +713,7 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         {typeof inspectingQuestion.timestamp === 'number' && (
                           (session?.currentQuestionId || activeQuestion?.id) === inspectingQuestion.id ? (
                             <span className="px-3 py-1.5 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-2xs">
@@ -697,6 +732,30 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
                           )
                         )}
 
+                        {inspectingQuestion.type !== 'open_ended' && (() => {
+                          const isKeyShown = Boolean(
+                            session?.revealedKeyQuestionIds?.includes(inspectingQuestion.id)
+                          );
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleShowKey(inspectingQuestion.id)}
+                              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs flex items-center gap-1.5 border ${
+                                isKeyShown
+                                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700'
+                                  : 'bg-amber-500 hover:bg-amber-400 text-slate-950 border-amber-500'
+                              }`}
+                              title={
+                                isKeyShown
+                                  ? 'Key is currently visible to students (click to hide)'
+                                  : 'Show the answer key for this question to all students'
+                              }
+                            >
+                              <KeyRound className="w-3.5 h-3.5" />
+                              <span>{isKeyShown ? 'Key Shown (Hide)' : 'Show Key'}</span>
+                            </button>
+                          );
+                        })()}
                       </div>
                     </div>
 
