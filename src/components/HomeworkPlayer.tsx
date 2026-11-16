@@ -3,7 +3,7 @@ import { Lesson, Question, StudentAnswer, LessonSubmission } from '../types';
 import { UnifiedPlayer } from './UnifiedPlayer';
 import { InteractiveCaptions } from './InteractiveCaptions';
 import { StudentQuestionsPanel } from './StudentQuestionsPanel';
-import { CheckCircle2, Award, ArrowLeft, RotateCcw, FileText, Check } from 'lucide-react';
+import { CheckCircle2, Award, ArrowLeft, RotateCcw, FileText, Check, PauseCircle } from 'lucide-react';
 
 interface HomeworkPlayerProps {
   lesson: Lesson;
@@ -29,6 +29,7 @@ export const HomeworkPlayer: React.FC<HomeworkPlayerProps> = ({
     number | { time: number; nonce: number; allowJump?: boolean; autoPlay?: boolean } | undefined
   >(undefined);
   const [showCaptions, setShowCaptions] = useState(true);
+  const [autoPauseAtQuestions, setAutoPauseAtQuestions] = useState(true);
 
   const answeredQuestionIds = new Set(Object.keys(answers));
 
@@ -126,8 +127,34 @@ export const HomeworkPlayer: React.FC<HomeworkPlayerProps> = ({
           </div>
         </div>
 
-        {/* Progress & Score Tracker */}
-        <div className="flex items-center gap-4">
+        {/* Progress, Auto-Pause Toggle & Score Tracker */}
+        <div className="flex items-center flex-wrap gap-3 sm:gap-4">
+          <button
+            type="button"
+            onClick={() => {
+              setAutoPauseAtQuestions((prev) => {
+                const next = !prev;
+                if (!next) setActiveQuestionId(null);
+                return next;
+              });
+            }}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+              autoPauseAtQuestions
+                ? 'bg-amber-50 border-amber-300 text-amber-900 shadow-2xs'
+                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+            }`}
+            title={
+              autoPauseAtQuestions
+                ? 'Video auto-pauses at each question timestamp & highlights it (Click to turn OFF)'
+                : 'Video plays continuously without pausing at question timestamps (Click to turn ON)'
+            }
+          >
+            <PauseCircle
+              className={`w-3.5 h-3.5 ${autoPauseAtQuestions ? 'text-amber-600' : 'text-slate-400'}`}
+            />
+            <span>Auto-Pause at Questions: {autoPauseAtQuestions ? 'ON' : 'OFF'}</span>
+          </button>
+
           <div className="text-right">
             <div className="text-[11px] uppercase tracking-wider font-bold text-slate-400">
               Questions Completed
@@ -177,6 +204,7 @@ export const HomeworkPlayer: React.FC<HomeworkPlayerProps> = ({
             onToggleCaptions={() => setShowCaptions(!showCaptions)}
             onWordClick={() => setPauseTrigger(Date.now())}
             answeredQuestionIds={answeredQuestionIds}
+            autoPauseAtCheckpoints={autoPauseAtQuestions}
             onTimeUpdate={handleTimeUpdate}
             onQuestionTrigger={handleQuestionTrigger}
           />
@@ -197,7 +225,7 @@ export const HomeworkPlayer: React.FC<HomeworkPlayerProps> = ({
         <div className="lg:col-span-5 lg:sticky lg:top-20">
           <StudentQuestionsPanel
             questions={lesson.questions}
-            currentActiveQuestionId={activeQuestionId}
+            currentActiveQuestionId={autoPauseAtQuestions ? activeQuestionId : null}
             answers={answers}
             onAnswerSubmit={handleAnswerSubmit}
             onRewind={handleRewind}

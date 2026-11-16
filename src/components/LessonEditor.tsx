@@ -39,6 +39,7 @@ import {
   ArrowDown,
   Lightbulb,
   Layers,
+  Copy,
 } from 'lucide-react';
 
 interface LessonEditorProps {
@@ -795,6 +796,36 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
       const el = document.getElementById('question-editor-card');
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }, 50);
+  };
+
+  // Duplicate an existing question cleanly right below the original
+  const handleDuplicateQuestion = (q: Question) => {
+    const newId = `q-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const cloned: Question = {
+      ...q,
+      id: newId,
+      options: q.options ? q.options.map((opt) => ({ ...opt })) : undefined,
+      correctAnswers: q.correctAnswers ? [...q.correctAnswers] : undefined,
+      matchingPairs: q.matchingPairs ? q.matchingPairs.map((pair) => ({ ...pair })) : undefined,
+      categories: q.categories
+        ? q.categories.map((cat, idx) => ({
+            ...cat,
+            id: `cat-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 5)}`,
+            items: cat.items ? [...cat.items] : [],
+          }))
+        : undefined,
+      tipTimestamps: q.tipTimestamps ? [...q.tipTimestamps] : undefined,
+    };
+
+    setQuestions((prev) => {
+      const idx = prev.findIndex((item) => item.id === q.id);
+      if (idx === -1) return sortLessonQuestions([...prev, cloned]);
+      const copy = [...prev];
+      copy.splice(idx + 1, 0, cloned);
+      return sortLessonQuestions(copy);
+    });
+    setSuccessMessage('Question duplicated! You can now edit the copy.');
+    setTimeout(() => setSuccessMessage(null), 3000);
   };
 
   const handleCancelQuestionForm = () => {
@@ -2041,7 +2072,7 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                     </div>
 
                     <p className="text-[10px] text-slate-400">
-                      Students can click "View Question Tip" in Live & Practice modes (and it opens automatically on a wrong answer). In Practice Mode, clicking any timestamp jumps the video directly to that segment.
+                      Students can click the tip button in Live & Practice modes (and it opens automatically on a wrong answer). In Practice Mode, clicking any timestamp jumps the video directly to that segment.
                     </p>
                   </div>
 
@@ -2676,6 +2707,15 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                             </button>
                           </div>
                         )}
+                        <button
+                          type="button"
+                          onClick={() => handleDuplicateQuestion(q)}
+                          className="flex items-center gap-1 px-2.5 py-1 text-slate-700 hover:text-indigo-900 bg-white hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 rounded-lg text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
+                          title="Duplicate this question"
+                        >
+                          <Copy className="w-3.5 h-3.5 text-indigo-600" />
+                          <span>Duplicate</span>
+                        </button>
                         <button
                           type="button"
                           onClick={() => handleStartEditQuestion(q)}

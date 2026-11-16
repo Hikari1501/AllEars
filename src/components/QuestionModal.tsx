@@ -413,15 +413,15 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
               <button
                 type="button"
                 onClick={() => setShowTip((prev) => !prev)}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer border ${
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer border ${
                   showTip
                     ? 'bg-amber-100 text-amber-900 border-amber-300'
                     : 'bg-amber-50 hover:bg-amber-100/80 text-amber-800 border-amber-200'
                 }`}
-                title="Click to toggle question tip"
+                title={showTip ? 'Hide Question Tip' : 'View Question Tip'}
+                aria-label={showTip ? 'Hide Question Tip' : 'View Question Tip'}
               >
                 <Lightbulb className="w-3.5 h-3.5 text-amber-600 fill-amber-400" />
-                <span>{showTip ? 'Hide Question Tip' : '💡 View Question Tip'}</span>
                 <ChevronDown
                   className={`w-3.5 h-3.5 transition-transform duration-200 ${
                     showTip ? 'rotate-180' : ''
@@ -430,17 +430,13 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
               </button>
 
               {showTip && (
-                <div className="mt-2 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-950 text-xs leading-relaxed flex items-start gap-2 shadow-2xs animate-in fade-in duration-150">
-                  <Lightbulb className="w-4 h-4 text-amber-600 shrink-0 mt-0.5 fill-amber-400" />
-                  <div className="space-y-2 flex-1">
+                <div className="mt-2 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-950 text-xs leading-relaxed shadow-2xs animate-in fade-in duration-150">
+                  <div className="space-y-2">
                     {question.tip && question.tip.trim().length > 0 && (
                       <p className="whitespace-pre-line">{question.tip}</p>
                     )}
                     {question.tipTimestamps && question.tipTimestamps.length > 0 && (
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="text-[11px] font-semibold text-amber-900">
-                          Key segment{question.tipTimestamps.length > 1 ? 's' : ''}:
-                        </span>
                         {question.tipTimestamps.map((ts, tsIdx) => (
                           <span
                             key={`${question.id}-modal-tip-ts-${tsIdx}-${ts}`}
