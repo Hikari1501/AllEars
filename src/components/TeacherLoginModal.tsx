@@ -28,21 +28,7 @@ export const TeacherLoginModal: React.FC<TeacherLoginModalProps> = ({
     const checkClientAuth = (): UserAccount | null => {
       const customAdminPass = localStorage.getItem('allears_admin_custom_password') || 'password123';
 
-      // 1. Primary Teacher / Admin Account
-      if (
-        (normUser === 'chuck' || normUser === 'chuckacr1501@gmail.com') &&
-        cleanPass === customAdminPass
-      ) {
-        return {
-          id: 'teacher-chuck',
-          name: 'Chuck',
-          email: 'ChuckACR1501@gmail.com',
-          role: 'teacher',
-          isAdmin: true,
-        };
-      }
-
-      // 2. Any additional authorized teachers saved in localStorage
+      // 1. Check any authorized/updated teachers saved in localStorage first (preserves edited admin display name)
       try {
         const stored = localStorage.getItem('allears_authorized_teachers');
         if (stored) {
@@ -59,12 +45,29 @@ export const TeacherLoginModal: React.FC<TeacherLoginModalProps> = ({
                 name: found.name,
                 email: found.email,
                 role: 'teacher',
-                isAdmin: found.email?.toLowerCase() === 'chuckacr1501@gmail.com' ? true : !!found.isAdmin,
+                isAdmin:
+                  found.id === 'teacher-chuck' || found.email?.toLowerCase() === 'chuckacr1501@gmail.com'
+                    ? true
+                    : !!found.isAdmin,
               };
             }
           }
         }
       } catch {}
+
+      // 2. Fallback Primary Teacher / Admin Account
+      if (
+        (normUser === 'chuck' || normUser === 'chuckacr1501@gmail.com') &&
+        cleanPass === customAdminPass
+      ) {
+        return {
+          id: 'teacher-chuck',
+          name: 'Chuck',
+          email: 'ChuckACR1501@gmail.com',
+          role: 'teacher',
+          isAdmin: true,
+        };
+      }
 
       return null;
     };

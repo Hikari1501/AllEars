@@ -1,6 +1,0 @@
-{
-  "summary": "Comprehensive architecture and step-by-step migration plan to deploy All Ears onto Render as a unified full-stack application with managed PostgreSQL database persistence for lessons, reports, and real-time live classroom sync.",
-  "updatedAt": "2026-11-06T04:29:50.894705646Z",
-  "requestFeedback": true,
-  "userFacing": true
-}

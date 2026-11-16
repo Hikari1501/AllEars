@@ -68,25 +68,33 @@ export const TeacherManagementModal: React.FC<TeacherManagementModalProps> = ({
 
   const fetchTeachers = async () => {
     const customAdminPass = localStorage.getItem('allears_admin_custom_password') || 'password123';
-    let list: TeacherItem[] = [
-      {
-        id: 'teacher-chuck',
-        name: 'Chuck',
-        email: 'ChuckACR1501@gmail.com',
-        password: customAdminPass,
-        isAdmin: true,
-      },
-    ];
+    const defaultAdminFallback: TeacherItem = {
+      id: 'teacher-chuck',
+      name: 'Chuck',
+      email: 'ChuckACR1501@gmail.com',
+      password: customAdminPass,
+      isAdmin: true,
+    };
+
+    let list: TeacherItem[] = [];
 
     try {
       const stored = localStorage.getItem('allears_authorized_teachers');
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
-          list = [...list, ...parsed];
+          list = [...parsed];
         }
       }
     } catch {}
+
+    // Only append default Chuck if not already overridden in localStorage
+    const hasAdminInList = list.some(
+      (t) => t.id === 'teacher-chuck' || t.email.toLowerCase() === 'chuckacr1501@gmail.com'
+    );
+    if (!hasAdminInList) {
+      list.unshift(defaultAdminFallback);
+    }
 
     try {
       const res = await fetch('/api/auth/teachers', { headers: authHeaders });
@@ -98,12 +106,14 @@ export const TeacherManagementModal: React.FC<TeacherManagementModalProps> = ({
       // In static deployment, use list
     }
 
-    // Deduplicate by email
-    const seen = new Set<string>();
+    // Deduplicate by email and id
+    const seenEmails = new Set<string>();
+    const seenIds = new Set<string>();
     const unique = list.filter((t) => {
-      const key = t.email.toLowerCase();
-      if (seen.has(key)) return false;
-      seen.add(key);
+      const emailKey = t.email.toLowerCase();
+      if (seenEmails.has(emailKey) || seenIds.has(t.id)) return false;
+      seenEmails.add(emailKey);
+      seenIds.add(t.id);
       return true;
     });
 

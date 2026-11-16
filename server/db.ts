@@ -175,6 +175,8 @@ export async function initDatabase(initialLessons: Lesson[]) {
         UPDATE teachers SET is_admin = TRUE WHERE LOWER(email) = 'chuckacr1501@gmail.com';
 
         ALTER TABLE lessons ADD COLUMN IF NOT EXISTS description TEXT DEFAULT '';
+        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS background_info_text TEXT DEFAULT '';
+        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS background_info_image_url TEXT;
         ALTER TABLE lessons ADD COLUMN IF NOT EXISTS trim_start NUMERIC DEFAULT 0;
         ALTER TABLE lessons ADD COLUMN IF NOT EXISTS trim_end NUMERIC DEFAULT 180;
         ALTER TABLE lessons ADD COLUMN IF NOT EXISTS prevent_skipping BOOLEAN DEFAULT FALSE;
@@ -187,12 +189,23 @@ export async function initDatabase(initialLessons: Lesson[]) {
         ALTER TABLE lessons ADD COLUMN IF NOT EXISTS difficult_words JSONB DEFAULT '[]'::jsonb;
       `);
 
-      // Seed Chuck's default teacher record with Admin permission (preserves password if already updated)
-      await client.query(`
-        INSERT INTO teachers (id, name, email, password, is_admin)
-        VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT (email) DO UPDATE SET is_admin = TRUE, name = EXCLUDED.name;
-      `, [DEFAULT_TEACHER.id, DEFAULT_TEACHER.name, DEFAULT_TEACHER.email, DEFAULT_TEACHER.password, DEFAULT_TEACHER.isAdmin]);
+      // Seed Chuck's default teacher record ONLY if not already present (preserves custom display name, email, and password)
+      const existingAdminRes = await client.query(
+        'SELECT id FROM teachers WHERE id = $1 OR LOWER(email) = LOWER($2) LIMIT 1',
+        [DEFAULT_TEACHER.id, DEFAULT_TEACHER.email]
+      );
+      if (existingAdminRes.rows.length > 0) {
+        await client.query(
+          'UPDATE teachers SET is_admin = TRUE WHERE id = $1',
+          [existingAdminRes.rows[0].id]
+        );
+      } else {
+        await client.query(
+          `INSERT INTO teachers (id, name, email, password, is_admin)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [DEFAULT_TEACHER.id, DEFAULT_TEACHER.name, DEFAULT_TEACHER.email, DEFAULT_TEACHER.password, DEFAULT_TEACHER.isAdmin]
+        );
+      }
 
       // Seed initial catalog lessons if table is empty
       const countRes = await client.query('SELECT COUNT(*) FROM lessons');
@@ -244,27 +257,29 @@ export async function initDatabase(initialLessons: Lesson[]) {
   // Local JSON fallback initialization
   const savedTeachers = readJsonSafe<Record<string, TeacherRecord>>(TEACHERS_FILE, {});
   const savedChuck = Object.values(savedTeachers).find(
-    (t) => t.id === 'teacher-chuck' || t.email?.toLowerCase() === 'chuckacr1501@gmail.com' || t.name?.toLowerCase() === 'chuck'
+    (t) => t.id === 'teacher-chuck' || t.email?.toLowerCase() === 'chuckacr1501@gmail.com'
   );
   if (savedChuck) {
     savedChuck.isAdmin = true;
-    memoryTeachers = {
-      ...memoryTeachers,
-      ...savedTeachers,
-      'chuck': savedChuck,
-      'chuckacr1501@gmail.com': savedChuck,
-      'teacher-chuck': savedChuck,
-    };
-  } else {
-    memoryTeachers = { ...memoryTeachers, ...savedTeachers };
+    const cleaned: Record<string, TeacherRecord> = {};
+    Object.entries(savedTeachers).forEach(([k, val]) => {
+      if (val && val.id !== savedChuck.id) {
+        cleaned[k] = val;
+      }
+    });
+    cleaned[savedChuck.email.toLowerCase()] = savedChuck;
+    cleaned[savedChuck.name.toLowerCase()] = savedChuck;
+    cleaned[savedChuck.id] = savedChuck;
+    memoryTeachers = cleaned;
+  } else if (Object.keys(savedTeachers).length > 0) {
+    memoryTeachers = { ...savedTeachers };
   }
-  // Guarantee Chuck is always marked Admin
-  if (memoryTeachers['chuckacr1501@gmail.com']) {
-    memoryTeachers['chuckacr1501@gmail.com'].isAdmin = true;
-  }
-  if (memoryTeachers['chuck']) {
-    memoryTeachers['chuck'].isAdmin = true;
-  }
+  // Guarantee primary admin is always marked Admin
+  Object.values(memoryTeachers).forEach((t) => {
+    if (t.id === 'teacher-chuck' || t.email?.toLowerCase() === 'chuckacr1501@gmail.com') {
+      t.isAdmin = true;
+    }
+  });
 
   const savedStudents = readJsonSafe<Record<string, StudentRecord>>(STUDENTS_FILE, {});
   memoryStudents = { ...memoryStudents, ...savedStudents };
@@ -412,16 +427,17 @@ export async function updateTeacher(id: string, updates: { name?: string; email?
   }
 
   // Always keep fallback memory and JSON file synchronized
+  Object.keys(memoryTeachers).forEach((key) => {
+    if (memoryTeachers[key]?.id === id) {
+      delete memoryTeachers[key];
+    }
+  });
   delete memoryTeachers[existing.email.toLowerCase()];
   delete memoryTeachers[existing.name.toLowerCase()];
+  delete memoryTeachers[existing.id];
   memoryTeachers[updated.email.toLowerCase()] = updated;
   memoryTeachers[updated.name.toLowerCase()] = updated;
   memoryTeachers[updated.id] = updated;
-  if (isChuck) {
-    memoryTeachers['chuck'] = updated;
-    memoryTeachers['chuckacr1501@gmail.com'] = updated;
-    memoryTeachers['teacher-chuck'] = updated;
-  }
   writeJsonSafe(TEACHERS_FILE, memoryTeachers);
   return updated;
 }
@@ -494,6 +510,8 @@ function rowToLesson(row: any): Lesson {
     id: row.id,
     title: row.title,
     description: row.description || '',
+    backgroundInfoText: row.background_info_text || undefined,
+    backgroundInfoImageUrl: row.background_info_image_url || undefined,
     level: row.level,
     mediaType: row.media_type,
     mediaUrl: row.media_url,
@@ -552,13 +570,16 @@ export async function saveLesson(lesson: Lesson): Promise<Lesson> {
     try {
       await pool.query(`
         INSERT INTO lessons (
-          id, title, description, level, media_type, media_url, duration, trim_start, trim_end,
+          id, title, description, background_info_text, background_info_image_url,
+          level, media_type, media_url, duration, trim_start, trim_end,
           prevent_skipping, thumbnail_url, teacher_id, teacher_name, is_published,
           captions, questions, difficult_words, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, CURRENT_TIMESTAMP)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, CURRENT_TIMESTAMP)
         ON CONFLICT (id) DO UPDATE SET
           title = EXCLUDED.title,
           description = EXCLUDED.description,
+          background_info_text = EXCLUDED.background_info_text,
+          background_info_image_url = EXCLUDED.background_info_image_url,
           level = EXCLUDED.level,
           media_type = EXCLUDED.media_type,
           media_url = EXCLUDED.media_url,
@@ -578,6 +599,8 @@ export async function saveLesson(lesson: Lesson): Promise<Lesson> {
         lesson.id,
         lesson.title,
         lesson.description || '',
+        lesson.backgroundInfoText || '',
+        lesson.backgroundInfoImageUrl || null,
         lesson.level,
         lesson.mediaType,
         lesson.mediaUrl,

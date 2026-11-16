@@ -18,6 +18,7 @@ import {
   Maximize2,
   Lightbulb,
   ChevronDown,
+  Clock,
 } from 'lucide-react';
 
 interface QuestionModalProps {
@@ -213,6 +214,14 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
       playWrongAnswerSound();
     }
 
+    // Automatically open Question Tip (if available) on wrong answer
+    const hasTipContent = Boolean(
+      question.tip?.trim() || (question.tipTimestamps && question.tipTimestamps.length > 0)
+    );
+    if (!correct && question.type !== 'open_ended' && hasTipContent) {
+      setShowTip(true);
+    }
+
     setIsAnswerCorrect(correct);
     setPointsEarned(earned);
     setHasSubmitted(true);
@@ -293,30 +302,10 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
     );
   }
 
-  const getFormattedCorrectAnswer = () => {
-    if (question.type === 'multiple_choice' && question.options) {
-      const expectedList = question.correctAnswers || (question.correctAnswer ? [question.correctAnswer] : []);
-      const matched = question.options.filter(
-        (o) => expectedList.includes(o.id) || expectedList.includes(o.text)
-      );
-      if (matched.length > 0) {
-        return matched.map((m) => `Option ${m.id.toUpperCase()}: "${m.text}"`).join(' and ');
-      }
-      return `Option ${(question.correctAnswer || 'A').toUpperCase()}`;
-    }
-    if (question.type === 'true_false') {
-      return String(question.correctAnswer || 'true').toUpperCase();
-    }
-    if (question.type === 'close_ended') {
-      return `"${question.correctAnswer || ''}"`;
-    }
-    if (question.type === 'matching' && question.matchingPairs) {
-      return question.matchingPairs.map((p) => `${p.left} ➔ ${p.right}`).join(' | ');
-    }
-    if (question.type === 'drag_and_drop' && question.categories) {
-      return question.categories.map((c) => `${c.name}: [${c.items.join(', ')}]`).join(' | ');
-    }
-    return question.correctAnswer || 'Model response';
+  const formatTipTimestamp = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
   return (
@@ -418,8 +407,8 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
             </div>
           )}
 
-          {/* Question Tip (Only shown if tip exists; collapsed by default) */}
-          {question.tip && (
+          {/* Question Tip (Only shown if tip text or timestamps exist; collapsed by default, auto-opens on wrong answer) */}
+          {(question.tip?.trim() || (question.tipTimestamps && question.tipTimestamps.length > 0)) && (
             <div>
               <button
                 type="button"
@@ -429,7 +418,7 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
                     ? 'bg-amber-100 text-amber-900 border-amber-300'
                     : 'bg-amber-50 hover:bg-amber-100/80 text-amber-800 border-amber-200'
                 }`}
-                title="Click to toggle teacher's tip/hint for this question"
+                title="Click to toggle question tip"
               >
                 <Lightbulb className="w-3.5 h-3.5 text-amber-600 fill-amber-400" />
                 <span>{showTip ? 'Hide Question Tip' : '💡 View Question Tip'}</span>
@@ -443,9 +432,26 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
               {showTip && (
                 <div className="mt-2 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-950 text-xs leading-relaxed flex items-start gap-2 shadow-2xs animate-in fade-in duration-150">
                   <Lightbulb className="w-4 h-4 text-amber-600 shrink-0 mt-0.5 fill-amber-400" />
-                  <div>
-                    <span className="font-bold text-amber-900">Teacher's Tip: </span>
-                    <span>{question.tip}</span>
+                  <div className="space-y-2 flex-1">
+                    {question.tip && question.tip.trim().length > 0 && (
+                      <p className="whitespace-pre-line">{question.tip}</p>
+                    )}
+                    {question.tipTimestamps && question.tipTimestamps.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[11px] font-semibold text-amber-900">
+                          Key segment{question.tipTimestamps.length > 1 ? 's' : ''}:
+                        </span>
+                        {question.tipTimestamps.map((ts, tsIdx) => (
+                          <span
+                            key={`${question.id}-modal-tip-ts-${tsIdx}-${ts}`}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/80 text-amber-900 border border-amber-300 font-mono text-[11px] font-bold"
+                          >
+                            <Clock className="w-2.5 h-2.5 text-amber-700" />
+                            <span>{formatTipTimestamp(ts)}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -654,30 +660,27 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
             </div>
           )}
 
-          {/* Feedback & Explanation section once feedback is active */}
-          {canShowFeedback && (
-            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
-              {/* Prominent Correct Answer Card */}
-              <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-lg text-xs space-y-1">
-                <div className="font-bold text-emerald-900 uppercase tracking-wider text-[10px] flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Correct Answer:</span>
-                </div>
-                <div className="text-sm font-bold text-emerald-950 leading-relaxed">
-                  {getFormattedCorrectAnswer()}
-                </div>
-              </div>
+          {/* Directional Explanation section once feedback is active */}
+          {canShowFeedback && (() => {
+            const hasSpecificExp =
+              question.explanationCorrect !== undefined ||
+              question.explanationIncorrect !== undefined;
+            const directionalExplanation = isAnswerCorrect
+              ? (question.explanationCorrect || (!hasSpecificExp ? question.explanation : ''))
+              : (question.explanationIncorrect || (!hasSpecificExp ? question.explanation : ''));
+            if (!directionalExplanation || !directionalExplanation.trim()) return null;
 
-              {question.explanation && (
-                <div className="space-y-1">
-                  <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    Teacher Explanation
-                  </div>
-                  <p className="text-sm text-slate-700 leading-relaxed">{question.explanation}</p>
+            return (
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Teacher Explanation
                 </div>
-              )}
-            </div>
-          )}
+                <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">
+                  {directionalExplanation}
+                </p>
+              </div>
+            );
+          })()}
 
           {/* Live mode submitted waiting state */}
           {hasSubmitted && !isFeedbackRevealed && isLiveMode && (

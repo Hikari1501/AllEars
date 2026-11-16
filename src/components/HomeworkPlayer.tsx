@@ -25,7 +25,9 @@ export const HomeworkPlayer: React.FC<HomeworkPlayerProps> = ({
   const [answers, setAnswers] = useState<Record<string, StudentAnswer>>({});
   const [isCompleted, setIsCompleted] = useState(false);
   const [pauseTrigger, setPauseTrigger] = useState(0);
-  const [seekTriggerTime, setSeekTriggerTime] = useState<number | undefined>(undefined);
+  const [seekTriggerTime, setSeekTriggerTime] = useState<
+    number | { time: number; nonce: number; allowJump?: boolean; autoPlay?: boolean } | undefined
+  >(undefined);
   const [showCaptions, setShowCaptions] = useState(true);
 
   const answeredQuestionIds = new Set(Object.keys(answers));
@@ -37,11 +39,15 @@ export const HomeworkPlayer: React.FC<HomeworkPlayerProps> = ({
 
   const handleRewind = (seconds: number) => {
     const target = Math.max(lesson.trimStart || 0, currentTime - seconds);
-    setSeekTriggerTime(target);
+    setSeekTriggerTime({ time: target, nonce: Date.now() });
   };
 
   const handleSeek = (seconds: number) => {
-    setSeekTriggerTime(seconds);
+    setSeekTriggerTime({ time: seconds, nonce: Date.now() });
+  };
+
+  const handleTipSeek = (seconds: number) => {
+    setSeekTriggerTime({ time: seconds, nonce: Date.now(), allowJump: true, autoPlay: true });
   };
 
   const handleTimeUpdate = (time: number) => {
@@ -198,9 +204,12 @@ export const HomeworkPlayer: React.FC<HomeworkPlayerProps> = ({
             onSeek={(t) => {
               if (!lesson.preventSkipping) handleSeek(t);
             }}
+            onTipSeek={handleTipSeek}
             onContinueWatching={() => setActiveQuestionId(null)}
             isLiveMode={false}
             allowRewind={true}
+            backgroundInfoText={lesson.backgroundInfoText}
+            backgroundInfoImageUrl={lesson.backgroundInfoImageUrl}
           />
         </div>
       </div>

@@ -33,7 +33,7 @@ interface UnifiedPlayerProps {
   externalIsPlaying?: boolean;
   externalPlaybackSpeed?: number;
   pauseTrigger?: number;
-  seekTriggerTime?: number;
+  seekTriggerTime?: number | { time: number; nonce: number; allowJump?: boolean; autoPlay?: boolean };
   captions?: CaptionSegment[];
   difficultWords?: VocabEntry[];
   showCaptions?: boolean;
@@ -318,10 +318,18 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
     }
   }, [pauseTrigger, handlePause]);
 
-  // Support programmatic external seek (e.g. from Homework audio rewind buttons)
+  // Support programmatic external seek (e.g. from Homework audio rewind buttons or Question Tip timestamps)
   useEffect(() => {
-    if (seekTriggerTime !== undefined && seekTriggerTime >= 0) {
-      seekTo(seekTriggerTime);
+    if (seekTriggerTime === undefined) return;
+    if (typeof seekTriggerTime === 'number') {
+      if (seekTriggerTime >= 0) {
+        seekTo(seekTriggerTime);
+      }
+    } else if (seekTriggerTime.time >= 0) {
+      seekTo(seekTriggerTime.time, Boolean(seekTriggerTime.allowJump));
+      if (seekTriggerTime.autoPlay) {
+        handlePlay();
+      }
     }
   }, [seekTriggerTime]);
 
@@ -401,11 +409,11 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
     }
   };
 
-  const seekTo = (seconds: number) => {
+  const seekTo = (seconds: number, allowJump = false) => {
     let target = Math.max(effectiveStart, Math.min(seconds, effectiveEnd));
 
-    // Enforce skip prevention if in student mode
-    if (preventSkipping && isStudent && target > maxWatchedTime + 1) {
+    // Enforce skip prevention if in student mode (unless explicitly jumping via teacher-provided tip timestamp)
+    if (!allowJump && preventSkipping && isStudent && target > maxWatchedTime + 1) {
       target = maxWatchedTime;
     }
 

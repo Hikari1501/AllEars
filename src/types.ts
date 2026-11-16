@@ -49,7 +49,10 @@ export interface Question {
   categories?: DragDropCategory[]; // For drag_and_drop questions: categories and their correct items
   imageUrl?: string; // Optional image URL attached to the question
   tip?: string; // Optional teacher tip/hint for students
-  explanation: string;
+  tipTimestamps?: number[]; // Optional timestamps (seconds) pointing to where needed information lies
+  explanation?: string; // Legacy fallback explanation
+  explanationCorrect?: string; // Optional explanation shown when student answers correctly
+  explanationIncorrect?: string; // Optional explanation shown when student answers incorrectly
   points: number;
 }
 
@@ -89,6 +92,8 @@ export interface Lesson {
   id: string;
   title: string;
   description: string;
+  backgroundInfoText?: string;
+  backgroundInfoImageUrl?: string;
   level: CEFRLevel;
   mediaType: 'youtube' | 'video' | 'audio';
   mediaUrl: string;

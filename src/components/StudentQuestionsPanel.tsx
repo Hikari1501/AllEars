@@ -31,11 +31,14 @@ interface StudentQuestionsPanelProps {
   onAnswerSubmit: (answer: StudentAnswer) => void;
   onRewind?: (seconds: number) => void;
   onSeek?: (timestamp: number) => void;
+  onTipSeek?: (timestamp: number) => void;
   onContinueWatching?: () => void;
   isLiveMode?: boolean;
   revealedFeedbackForQuestionId?: string | null;
   allowRewind?: boolean;
   allowEditAnswer?: boolean;
+  backgroundInfoText?: string;
+  backgroundInfoImageUrl?: string;
 }
 
 export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
@@ -45,11 +48,14 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
   onAnswerSubmit,
   onRewind,
   onSeek,
+  onTipSeek,
   onContinueWatching,
   isLiveMode = false,
   revealedFeedbackForQuestionId = null,
   allowRewind = true,
   allowEditAnswer = true,
+  backgroundInfoText,
+  backgroundInfoImageUrl,
 }) => {
   // Local pending states for non-submitted inputs
   const [selectedChoices, setSelectedChoices] = useState<Record<string, Set<string>>>({});
@@ -60,6 +66,7 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
   const [dragDropPlacements, setDragDropPlacements] = useState<Record<string, Record<string, string[]>>>({});
 
   const questionCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const autoOpenedTipsRef = useRef<Record<string, boolean>>({});
 
   // Auto-scroll to active question when it triggers
   useEffect(() => {
@@ -70,6 +77,28 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
       });
     }
   }, [currentActiveQuestionId]);
+
+  // Auto-open Question Tip once if a wrong answer exists (e.g. synced session or feedback reveal)
+  useEffect(() => {
+    const toOpen: Record<string, boolean> = {};
+    questions.forEach((q) => {
+      const ans = answers[q.id];
+      const hasTip = Boolean(q.tip?.trim() || (q.tipTimestamps && q.tipTimestamps.length > 0));
+      if (
+        ans &&
+        !ans.isCorrect &&
+        q.type !== 'open_ended' &&
+        hasTip &&
+        !autoOpenedTipsRef.current[q.id]
+      ) {
+        autoOpenedTipsRef.current[q.id] = true;
+        toOpen[q.id] = true;
+      }
+    });
+    if (Object.keys(toOpen).length > 0) {
+      setRevealedTips((prev) => ({ ...prev, ...toOpen }));
+    }
+  }, [answers, questions]);
 
   const formatSec = (seconds?: number | null) => {
     if (seconds === undefined || seconds === null || seconds < 0) return null;
@@ -228,6 +257,18 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
       playWrongAnswerSound();
     }
 
+    // Automatically open Question Tip (if available) when student gets a wrong answer
+    const hasTipContent = Boolean(
+      question.tip?.trim() || (question.tipTimestamps && question.tipTimestamps.length > 0)
+    );
+    if (!isCorrect && question.type !== 'open_ended' && hasTipContent) {
+      autoOpenedTipsRef.current[question.id] = true;
+      setRevealedTips((prev) => ({
+        ...prev,
+        [question.id]: true,
+      }));
+    }
+
     const submission: StudentAnswer = {
       questionId: question.id,
       answer: rawAnswer,
@@ -252,31 +293,9 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
     return [...general, ...timestamped];
   }, [questions]);
 
-  const getFormattedCorrectAnswer = (q: Question) => {
-    if (q.type === 'multiple_choice' && q.options) {
-      const expectedList = q.correctAnswers || (q.correctAnswer ? [q.correctAnswer] : []);
-      const matched = q.options.filter(
-        (o) => expectedList.includes(o.id) || expectedList.includes(o.text)
-      );
-      if (matched.length > 0) {
-        return matched.map((m) => `Option ${m.id.toUpperCase()}: "${m.text}"`).join(' and ');
-      }
-      return `Option ${(q.correctAnswer || 'A').toUpperCase()}`;
-    }
-    if (q.type === 'true_false') {
-      return String(q.correctAnswer || 'true').toUpperCase();
-    }
-    if (q.type === 'close_ended') {
-      return `"${q.correctAnswer || ''}"`;
-    }
-    if (q.type === 'matching' && q.matchingPairs) {
-      return q.matchingPairs.map((p) => `${p.left} ➔ ${p.right}`).join(' | ');
-    }
-    if (q.type === 'drag_and_drop' && q.categories) {
-      return q.categories.map((c) => `${c.name}: [${c.items.join(', ')}]`).join(' | ');
-    }
-    return q.correctAnswer || 'Model response';
-  };
+  const hasBackgroundInfo = Boolean(
+    backgroundInfoText?.trim() || backgroundInfoImageUrl?.trim()
+  );
 
   return (
     <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden flex flex-col h-full max-h-[calc(100vh-140px)]">
@@ -308,6 +327,33 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
 
       {/* Questions Scrollable Feed */}
       <div className="p-4 space-y-4 overflow-y-auto flex-1 divide-y divide-slate-100">
+        {/* Background Information (Shown above questions if present) */}
+        {hasBackgroundInfo && (
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5 shadow-2xs">
+            <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-600">
+              <BookOpen className="w-3.5 h-3.5 text-amber-600" />
+              <span>Background Information</span>
+            </div>
+            {backgroundInfoText && backgroundInfoText.trim().length > 0 && (
+              <p className="text-xs text-slate-800 leading-relaxed whitespace-pre-line">
+                {backgroundInfoText}
+              </p>
+            )}
+            {backgroundInfoImageUrl && backgroundInfoImageUrl.trim().length > 0 && (
+              <div className="rounded-lg overflow-hidden border border-slate-200 bg-white flex items-center justify-center p-1">
+                <img
+                  src={backgroundInfoImageUrl}
+                  alt="Lesson Background Information"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).style.display = 'none';
+                  }}
+                  className="max-h-52 max-w-full object-contain rounded"
+                />
+              </div>
+            )}
+          </div>
+        )}
+
         {orderedQuestions.length === 0 ? (
           <div className="py-12 text-center text-slate-400 text-xs">
             No questions added to this lesson yet.
@@ -477,8 +523,8 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                     </div>
                   )}
 
-                  {/* Question Tip (Only shown if tip exists; collapsed by default) */}
-                  {q.tip && (
+                  {/* Question Tip (Only shown if tip text or tip timestamps exist; collapsed by default, auto-opens on wrong answer) */}
+                  {(q.tip?.trim() || (q.tipTimestamps && q.tipTimestamps.length > 0)) && (
                     <div className="mb-3">
                       <button
                         type="button"
@@ -493,7 +539,7 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                             ? 'bg-amber-100 text-amber-900 border-amber-300'
                             : 'bg-amber-50 hover:bg-amber-100/80 text-amber-800 border-amber-200'
                         }`}
-                        title="Click to toggle teacher's tip/hint for this question"
+                        title="Click to toggle question tip"
                       >
                         <Lightbulb className="w-3.5 h-3.5 text-amber-600 fill-amber-400" />
                         <span>{revealedTips[q.id] ? 'Hide Question Tip' : '💡 View Question Tip'}</span>
@@ -507,9 +553,41 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                       {revealedTips[q.id] && (
                         <div className="mt-1.5 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-950 text-xs leading-relaxed flex items-start gap-2 shadow-2xs animate-in fade-in duration-150">
                           <Lightbulb className="w-4 h-4 text-amber-600 shrink-0 mt-0.5 fill-amber-400" />
-                          <div>
-                            <span className="font-bold text-amber-900">Teacher's Tip: </span>
-                            <span>{q.tip}</span>
+                          <div className="space-y-2 flex-1">
+                            {q.tip && q.tip.trim().length > 0 && (
+                              <p className="whitespace-pre-line">{q.tip}</p>
+                            )}
+                            {q.tipTimestamps && q.tipTimestamps.length > 0 && (
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="text-[11px] font-semibold text-amber-900">
+                                  Key segment{q.tipTimestamps.length > 1 ? 's' : ''}:
+                                </span>
+                                {q.tipTimestamps.map((ts, tsIdx) => {
+                                  const label = formatSec(ts) || '00:00';
+                                  const jumpHandler = !isLiveMode ? (onTipSeek || onSeek) : undefined;
+                                  return jumpHandler ? (
+                                    <button
+                                      key={`${q.id}-tip-ts-${tsIdx}-${ts}`}
+                                      type="button"
+                                      onClick={() => jumpHandler(ts)}
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 font-mono text-[11px] font-bold transition-colors cursor-pointer shadow-2xs"
+                                      title={`Jump video to ${label}`}
+                                    >
+                                      <Play className="w-2.5 h-2.5 fill-current text-amber-700" />
+                                      <span>{label}</span>
+                                    </button>
+                                  ) : (
+                                    <span
+                                      key={`${q.id}-tip-ts-${tsIdx}-${ts}`}
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/80 text-amber-900 border border-amber-300 font-mono text-[11px] font-bold"
+                                    >
+                                      <Clock className="w-2.5 h-2.5 text-amber-700" />
+                                      <span>{label}</span>
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}
@@ -854,67 +932,71 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                   </div>
 
                   {/* Feedback Explanation Banner (shown when answered or revealed by teacher) */}
-                  {isFeedbackVisible && (
-                    <div
-                      className={`mt-3 p-3.5 rounded-xl border text-xs space-y-2.5 animate-in fade-in shadow-2xs ${
-                        existingAnswer.isCorrect
-                          ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
-                          : 'bg-amber-50/90 border-amber-300 text-amber-950'
-                      }`}
-                    >
-                      <div className="font-bold flex items-center justify-between gap-2 border-b border-black/5 pb-2">
-                        <div className="flex items-center gap-1.5 text-sm">
-                          {existingAnswer.isCorrect ? (
-                            <>
-                              <CheckCircle2 className="w-4 h-4 text-emerald-600 stroke-[2.5]" />
-                              <span className="text-emerald-900 font-extrabold">Correct Answer!</span>
-                            </>
-                          ) : (
-                            <>
-                              <XCircle className="w-4 h-4 text-rose-600 stroke-[2.5]" />
-                              <span className="text-rose-900 font-extrabold">Needs Review</span>
-                            </>
-                          )}
-                        </div>
-                        <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-white/80 border border-slate-200 text-slate-800">
-                          +{existingAnswer.pointsEarned} pts
-                        </span>
-                      </div>
+                  {isFeedbackVisible && (() => {
+                    const hasSpecificExp =
+                      q.explanationCorrect !== undefined || q.explanationIncorrect !== undefined;
+                    const directionalExplanation = existingAnswer.isCorrect
+                      ? (q.explanationCorrect || (!hasSpecificExp ? q.explanation : ''))
+                      : (q.explanationIncorrect || (!hasSpecificExp ? q.explanation : ''));
+                    const hasDetails = Boolean(
+                      directionalExplanation?.trim() || existingAnswer.aiFeedback
+                    );
 
-                      {/* Prominent Correct Answer Display */}
-                      <div className="p-2.5 rounded-lg bg-white/90 border border-emerald-300 space-y-1">
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-900 flex items-center gap-1">
-                          <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" />
-                          <span>Correct Answer:</span>
-                        </div>
-                        <div className="text-xs font-bold text-emerald-950 leading-relaxed">
-                          {getFormattedCorrectAnswer(q)}
-                        </div>
-                      </div>
-
-                      {/* Explanation */}
-                      {q.explanation && (
-                        <div className="space-y-0.5 pt-0.5">
-                          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                            Teacher Explanation:
+                    return (
+                      <div
+                        className={`mt-3 p-3.5 rounded-xl border text-xs space-y-2.5 animate-in fade-in shadow-2xs ${
+                          existingAnswer.isCorrect
+                            ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
+                            : 'bg-amber-50/90 border-amber-300 text-amber-950'
+                        }`}
+                      >
+                        <div
+                          className={`font-bold flex items-center justify-between gap-2 ${
+                            hasDetails ? 'border-b border-black/5 pb-2' : ''
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5 text-sm">
+                            {existingAnswer.isCorrect ? (
+                              <>
+                                <CheckCircle2 className="w-4 h-4 text-emerald-600 stroke-[2.5]" />
+                                <span className="text-emerald-900 font-extrabold">Correct Answer!</span>
+                              </>
+                            ) : (
+                              <>
+                                <XCircle className="w-4 h-4 text-rose-600 stroke-[2.5]" />
+                                <span className="text-rose-900 font-extrabold">Needs Review</span>
+                              </>
+                            )}
                           </div>
-                          <p className="text-xs text-slate-800 leading-relaxed font-normal">
-                            {q.explanation}
-                          </p>
+                          <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-white/80 border border-slate-200 text-slate-800">
+                            +{existingAnswer.pointsEarned} pts
+                          </span>
                         </div>
-                      )}
 
-                      {/* Optional AI Feedback for open-ended reflections */}
-                      {existingAnswer.aiFeedback && (
-                        <div className="p-2 bg-amber-100/60 border border-amber-300 rounded-lg text-xs space-y-0.5">
-                          <div className="text-[10px] font-bold uppercase tracking-wider text-amber-900">
-                            Teacher / AI Feedback:
+                        {/* Directional Explanation (if provided) */}
+                        {directionalExplanation && directionalExplanation.trim().length > 0 && (
+                          <div className="space-y-0.5 pt-0.5">
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                              Teacher Explanation:
+                            </div>
+                            <p className="text-xs text-slate-800 leading-relaxed font-normal whitespace-pre-line">
+                              {directionalExplanation}
+                            </p>
                           </div>
-                          <p className="text-amber-950 leading-relaxed">{existingAnswer.aiFeedback}</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                        )}
+
+                        {/* Optional AI Feedback for open-ended reflections */}
+                        {existingAnswer.aiFeedback && (
+                          <div className="p-2 bg-amber-100/60 border border-amber-300 rounded-lg text-xs space-y-0.5">
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-amber-900">
+                              Teacher / AI Feedback:
+                            </div>
+                            <p className="text-amber-950 leading-relaxed">{existingAnswer.aiFeedback}</p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             );

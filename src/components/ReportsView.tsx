@@ -397,7 +397,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                         ? `Checkpoint at ${Math.floor(q.timestamp / 60)}:${(q.timestamp % 60).toString().padStart(2, '0')}`
                         : 'General / Whole Video Comprehension'}
                     </span>
-                    <span className="italic">{q.explanation}</span>
+                    <span className="italic">
+                      {q.explanationCorrect || q.explanationIncorrect || q.explanation}
+                    </span>
                   </div>
                 </div>
               ))}
@@ -580,12 +582,21 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                           </span>
                         </div>
 
-                        {q.explanation && (
-                          <div className="p-3 bg-white border border-slate-200 rounded-lg text-slate-600 leading-relaxed">
-                            <span className="font-semibold text-slate-800">Teacher Explanation: </span>
-                            {q.explanation}
-                          </div>
-                        )}
+                        {(() => {
+                          const hasSpecificExp =
+                            q.explanationCorrect !== undefined ||
+                            q.explanationIncorrect !== undefined;
+                          const exp = isCorrect
+                            ? (q.explanationCorrect || (!hasSpecificExp ? q.explanation : ''))
+                            : (q.explanationIncorrect || (!hasSpecificExp ? q.explanation : ''));
+                          if (!exp || !exp.trim()) return null;
+                          return (
+                            <div className="p-3 bg-white border border-slate-200 rounded-lg text-slate-600 leading-relaxed">
+                              <span className="font-semibold text-slate-800">Teacher Explanation: </span>
+                              {exp}
+                            </div>
+                          );
+                        })()}
                       </div>
                     );
                   })}

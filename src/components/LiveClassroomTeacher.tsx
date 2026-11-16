@@ -762,12 +762,29 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
                     )}
 
                     {/* Question Tip if present */}
-                    {inspectingQuestion.tip && (
+                    {(inspectingQuestion.tip?.trim() || (inspectingQuestion.tipTimestamps && inspectingQuestion.tipTimestamps.length > 0)) && (
                       <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-950 flex items-start gap-2 shadow-2xs">
                         <Lightbulb className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5 fill-amber-400" />
-                        <div>
-                          <span className="font-bold text-amber-900">Student Tip: </span>
-                          <span>{inspectingQuestion.tip}</span>
+                        <div className="space-y-1.5 flex-1">
+                          {inspectingQuestion.tip && inspectingQuestion.tip.trim().length > 0 && (
+                            <div>
+                              <span className="font-bold text-amber-900">Student Tip: </span>
+                              <span>{inspectingQuestion.tip}</span>
+                            </div>
+                          )}
+                          {inspectingQuestion.tipTimestamps && inspectingQuestion.tipTimestamps.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="text-[11px] font-bold text-amber-900">Tip Timestamps:</span>
+                              {inspectingQuestion.tipTimestamps.map((ts, tIdx) => (
+                                <span
+                                  key={`${inspectingQuestion.id}-t-tip-ts-${tIdx}-${ts}`}
+                                  className="px-1.5 py-0.5 rounded bg-white border border-amber-300 font-mono text-[10px] font-bold text-amber-900"
+                                >
+                                  {formatSeconds(ts)}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -921,16 +938,34 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
                       </div>
                     )}
 
-                    {/* Explanation for teacher reference */}
-                    {inspectingQuestion.explanation && (
-                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1">
+                    {/* Explanations for teacher reference */}
+                    {(inspectingQuestion.explanationCorrect ||
+                      inspectingQuestion.explanationIncorrect ||
+                      inspectingQuestion.explanation) && (
+                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1.5">
                         <div className="font-bold text-slate-600 uppercase text-[10px] flex items-center gap-1.5">
                           <BookOpen className="w-3.5 h-3.5 text-slate-500" />
-                          <span>Teacher Explanation & Learning Notes:</span>
+                          <span>Teacher Explanations & Learning Notes:</span>
                         </div>
-                        <p className="text-slate-800 leading-relaxed font-normal">
-                          {inspectingQuestion.explanation}
-                        </p>
+                        {inspectingQuestion.explanationCorrect && (
+                          <div className="text-emerald-900 bg-emerald-50/70 border border-emerald-200 rounded-lg p-2 leading-relaxed">
+                            <span className="font-bold">If Right: </span>
+                            {inspectingQuestion.explanationCorrect}
+                          </div>
+                        )}
+                        {inspectingQuestion.explanationIncorrect && (
+                          <div className="text-rose-900 bg-rose-50/70 border border-rose-200 rounded-lg p-2 leading-relaxed">
+                            <span className="font-bold">If Wrong: </span>
+                            {inspectingQuestion.explanationIncorrect}
+                          </div>
+                        )}
+                        {!inspectingQuestion.explanationCorrect &&
+                          !inspectingQuestion.explanationIncorrect &&
+                          inspectingQuestion.explanation && (
+                            <p className="text-slate-800 leading-relaxed font-normal">
+                              {inspectingQuestion.explanation}
+                            </p>
+                          )}
                       </div>
                     )}
                   </div>
@@ -1028,6 +1063,14 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
                                       if (isSpotlighted) {
                                         updateServerState({ activeStudentResponse: null });
                                       } else {
+                                        const hasSpecificExp =
+                                          inspectingQuestion.explanationCorrect !== undefined ||
+                                          inspectingQuestion.explanationIncorrect !== undefined;
+                                        const resolvedExplanation = record.isCorrect
+                                          ? (inspectingQuestion.explanationCorrect ||
+                                              (!hasSpecificExp ? inspectingQuestion.explanation : ''))
+                                          : (inspectingQuestion.explanationIncorrect ||
+                                              (!hasSpecificExp ? inspectingQuestion.explanation : ''));
                                         updateServerState({
                                           activeStudentResponse: {
                                             questionId: inspectingQuestion.id,
@@ -1035,7 +1078,7 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
                                             questionType: inspectingQuestion.type,
                                             answerText: formattedResponse,
                                             isCorrect: record.isCorrect,
-                                            explanation: inspectingQuestion.explanation,
+                                            explanation: resolvedExplanation || undefined,
                                           },
                                         });
                                       }

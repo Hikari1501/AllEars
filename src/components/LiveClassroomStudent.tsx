@@ -279,6 +279,8 @@ export const LiveClassroomStudent: React.FC<LiveClassroomStudentProps> = ({
             revealedFeedbackForQuestionId={session?.revealedFeedbackForQuestionId || null}
             allowRewind={false}
             allowEditAnswer={session?.allowEditAnswer ?? false}
+            backgroundInfoText={lesson.backgroundInfoText}
+            backgroundInfoImageUrl={lesson.backgroundInfoImageUrl}
           />
         </div>
       </div>

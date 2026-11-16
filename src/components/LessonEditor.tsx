@@ -68,6 +68,8 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
 
   const [title, setTitle] = useState(initialLesson?.title || '');
   const [description, setDescription] = useState(initialLesson?.description || '');
+  const [backgroundInfoText, setBackgroundInfoText] = useState(initialLesson?.backgroundInfoText || '');
+  const [backgroundInfoImageUrl, setBackgroundInfoImageUrl] = useState(initialLesson?.backgroundInfoImageUrl || '');
   const [level, setLevel] = useState<CEFRLevel>(initialLesson?.level || 'B2');
   const [mediaType, setMediaType] = useState<'youtube' | 'video' | 'audio'>(
     initialLesson?.mediaType || 'youtube'
@@ -170,7 +172,8 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
   ]);
   const [newQAllowMulti, setNewQAllowMulti] = useState<boolean>(false);
   const [newQCorrectAnswers, setNewQCorrectAnswers] = useState<Set<string>>(new Set(['a']));
-  const [newQExplanation, setNewQExplanation] = useState<string>('');
+  const [newQExplanationCorrect, setNewQExplanationCorrect] = useState<string>('');
+  const [newQExplanationIncorrect, setNewQExplanationIncorrect] = useState<string>('');
   const [newQCloseEndedAns, setNewQCloseEndedAns] = useState<string>('');
   const [newQMatchingPairs, setNewQMatchingPairs] = useState<{ left: string; right: string }[]>([
     { left: 'Term 1', right: 'Definition 1' },
@@ -178,6 +181,8 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
   ]);
   const [newQImageUrl, setNewQImageUrl] = useState<string>('');
   const [newQTip, setNewQTip] = useState<string>('');
+  const [newQTipTimestamps, setNewQTipTimestamps] = useState<number[]>([]);
+  const [newQTipTimestampInput, setNewQTipTimestampInput] = useState<string>('');
   const [newQCategories, setNewQCategories] = useState<DragDropCategory[]>([
     { id: 'cat-1', name: 'Category A', items: ['Item 1', 'Item 2'] },
     { id: 'cat-2', name: 'Category B', items: ['Item 3'] },
@@ -629,13 +634,31 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
     });
   };
 
+  const handleAddTipTimestamp = () => {
+    const raw = newQTipTimestampInput.trim();
+    if (!raw) return;
+    const secs = parseTimeToSeconds(raw);
+    setNewQTipTimestamps((prev) => {
+      if (prev.includes(secs)) return prev;
+      return [...prev, secs].sort((a, b) => a - b);
+    });
+    setNewQTipTimestampInput('');
+  };
+
+  const handleRemoveTipTimestamp = (ts: number) => {
+    setNewQTipTimestamps((prev) => prev.filter((item) => item !== ts));
+  };
+
   // Open form to add a new question
   const handleOpenAddQuestion = () => {
     setEditingQuestionId(null);
     setNewQPrompt('');
     setNewQImageUrl('');
     setNewQTip('');
-    setNewQExplanation('');
+    setNewQTipTimestamps([]);
+    setNewQTipTimestampInput('');
+    setNewQExplanationCorrect('');
+    setNewQExplanationIncorrect('');
     setNewQCloseEndedAns('');
     setNewQIsGeneral(false);
     setNewQTimestamp(15);
@@ -657,7 +680,16 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
     setNewQPrompt(q.prompt);
     setNewQImageUrl(q.imageUrl || '');
     setNewQTip(q.tip || '');
-    setNewQExplanation(q.explanation || '');
+    setNewQTipTimestamps(q.tipTimestamps ? [...q.tipTimestamps].sort((a, b) => a - b) : []);
+    setNewQTipTimestampInput('');
+    const hasSpecificExplanations =
+      q.explanationCorrect !== undefined || q.explanationIncorrect !== undefined;
+    setNewQExplanationCorrect(
+      hasSpecificExplanations ? (q.explanationCorrect || '') : (q.explanation || '')
+    );
+    setNewQExplanationIncorrect(
+      hasSpecificExplanations ? (q.explanationIncorrect || '') : (q.explanation || '')
+    );
     setNewQType(q.type);
     const isGen = q.timestamp == null || q.timestamp < 0;
     setNewQIsGeneral(isGen);
@@ -715,7 +747,10 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
     setNewQPrompt('');
     setNewQImageUrl('');
     setNewQTip('');
-    setNewQExplanation('');
+    setNewQTipTimestamps([]);
+    setNewQTipTimestampInput('');
+    setNewQExplanationCorrect('');
+    setNewQExplanationIncorrect('');
     setNewQCloseEndedAns('');
     setNewQIsGeneral(false);
     setNewQTimestamp(15);
@@ -734,6 +769,16 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
 
     const parsedTs = newQIsGeneral ? null : parseTimeToSeconds(newQTimestampStr || newQTimestamp);
 
+    // Also include any pending timestamp currently typed in the tip timestamp box
+    let finalTipTimestamps = [...newQTipTimestamps];
+    if (newQTipTimestampInput.trim()) {
+      const extraTs = parseTimeToSeconds(newQTipTimestampInput.trim());
+      if (!finalTipTimestamps.includes(extraTs)) {
+        finalTipTimestamps.push(extraTs);
+      }
+    }
+    finalTipTimestamps.sort((a, b) => a - b);
+
     const questionData: Question = {
       id: editingQuestionId || `q-${Date.now()}`,
       timestamp: parsedTs,
@@ -741,7 +786,10 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
       prompt: newQPrompt.trim(),
       imageUrl: newQImageUrl.trim() || undefined,
       tip: newQTip.trim() || undefined,
-      explanation: newQExplanation.trim(),
+      tipTimestamps: finalTipTimestamps.length > 0 ? finalTipTimestamps : undefined,
+      explanationCorrect: newQExplanationCorrect.trim() || undefined,
+      explanationIncorrect: newQExplanationIncorrect.trim() || undefined,
+      explanation: '',
       points: 10,
     };
 
@@ -831,6 +879,8 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
       id: initialLesson?.id || `lesson-${Date.now()}`,
       title,
       description,
+      backgroundInfoText: backgroundInfoText.trim() || undefined,
+      backgroundInfoImageUrl: backgroundInfoImageUrl.trim() || undefined,
       level,
       mediaType,
       mediaUrl,
@@ -864,6 +914,8 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
       id: initialLesson?.id || `lesson-${Date.now()}`,
       title,
       description,
+      backgroundInfoText: backgroundInfoText.trim() || undefined,
+      backgroundInfoImageUrl: backgroundInfoImageUrl.trim() || undefined,
       level,
       mediaType,
       mediaUrl,
@@ -1245,6 +1297,68 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                   placeholder="Context and instructions for students..."
                   className="w-full p-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl"
                 />
+              </div>
+
+              {/* Background Information for Video / Audio (Optional) */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-1">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                    <BookOpen className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Background Information (Optional)</span>
+                  </div>
+                  <span className="text-[11px] text-slate-500">
+                    Displayed above questions in Practice & Live Modes
+                  </span>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-700">Background Text</label>
+                  <textarea
+                    rows={3}
+                    value={backgroundInfoText}
+                    onChange={(e) => setBackgroundInfoText(e.target.value)}
+                    placeholder="Insert pre-listening background context, speaker bio, or setting details..."
+                    className="w-full p-2.5 text-xs bg-white border border-slate-200 rounded-xl focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                      <ImageIcon className="w-3.5 h-3.5 text-amber-600" />
+                      <span>Background Image Link (URL)</span>
+                    </label>
+                    {backgroundInfoImageUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setBackgroundInfoImageUrl('')}
+                        className="text-[11px] font-semibold text-rose-600 hover:underline cursor-pointer"
+                      >
+                        Clear Image
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="url"
+                    value={backgroundInfoImageUrl}
+                    onChange={(e) => setBackgroundInfoImageUrl(e.target.value)}
+                    placeholder="https://images.unsplash.com/... or image URL link"
+                    className="w-full p-2.5 text-xs bg-white border border-slate-200 rounded-xl focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                  />
+                  {backgroundInfoImageUrl && (
+                    <div className="mt-2 p-2 bg-white border border-slate-200 rounded-lg flex items-center gap-3">
+                      <img
+                        src={backgroundInfoImageUrl}
+                        alt="Background Info Preview"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).style.display = 'none';
+                        }}
+                        className="h-16 w-24 object-contain rounded-md border border-slate-200 bg-slate-50"
+                      />
+                      <span className="text-[11px] text-slate-500 truncate flex-1">{backgroundInfoImageUrl}</span>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Media URL selector */}
@@ -1797,14 +1911,14 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                     )}
                   </div>
 
-                  {/* Question Tip / Hint for Students (Optional) */}
-                  <div className="space-y-1 text-xs bg-slate-50/70 p-3 rounded-xl border border-slate-200">
-                    <div className="flex items-center justify-between">
+                  {/* Question Tip / Hint & Key Segment Timestamps (Optional) */}
+                  <div className="space-y-2.5 text-xs bg-slate-50/70 p-3.5 rounded-xl border border-slate-200">
+                    <div className="flex items-center justify-between flex-wrap gap-1">
                       <label className="text-slate-700 font-semibold flex items-center gap-1.5">
                         <Lightbulb className="w-3.5 h-3.5 text-amber-500" />
                         <span>Question Tip / Hint for Students</span>
                       </label>
-                      <span className="text-[10px] text-slate-400 font-medium">Optional · Collapsed by default</span>
+                      <span className="text-[10px] text-slate-400 font-medium">Optional · Auto-opens on wrong answer</span>
                     </div>
                     <input
                       type="text"
@@ -1813,8 +1927,65 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                       placeholder="e.g. Listen carefully to the transition words in the second sentence..."
                       className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"
                     />
+
+                    {/* Key Segment Timestamps inside Tip */}
+                    <div className="pt-2 border-t border-slate-200/80 space-y-2">
+                      <div className="flex items-center justify-between flex-wrap gap-1">
+                        <label className="text-[11px] font-semibold text-slate-700 flex items-center gap-1.5">
+                          <Clock className="w-3 h-3 text-amber-600" />
+                          <span>Timestamps Where Needed Information Lies (mm:ss or sec)</span>
+                        </label>
+                        <span className="text-[10px] text-slate-400">Clickable in Practice Mode</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={newQTipTimestampInput}
+                          onChange={(e) => setNewQTipTimestampInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddTipTimestamp();
+                            }
+                          }}
+                          placeholder="e.g. 00:25 or 25"
+                          className="w-36 p-1.5 bg-white border border-slate-200 rounded-lg font-mono text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddTipTimestamp}
+                          className="px-2.5 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>Add Timestamp</span>
+                        </button>
+                      </div>
+
+                      {newQTipTimestamps.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {newQTipTimestamps.map((ts) => (
+                            <span
+                              key={ts}
+                              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-amber-100 border border-amber-300 text-amber-950 font-mono text-[11px] font-bold"
+                            >
+                              <Clock className="w-3 h-3 text-amber-700" />
+                              <span>{formatSec(ts)}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveTipTimestamp(ts)}
+                                className="text-amber-700 hover:text-rose-600 font-bold ml-0.5 cursor-pointer"
+                                title="Remove timestamp"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
                     <p className="text-[10px] text-slate-400">
-                      Students can click "💡 View Tip" in Live & Practice modes to reveal this hint. If left empty, no tip button will appear.
+                      Students can click "View Question Tip" in Live & Practice modes (and it opens automatically on a wrong answer). In Practice Mode, clicking any timestamp jumps the video directly to that segment.
                     </p>
                   </div>
 
@@ -2169,15 +2340,35 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                     </div>
                   )}
 
-                  <div className="space-y-1 text-xs">
-                    <label className="text-slate-700 font-semibold">Teacher Explanation</label>
-                    <input
-                      type="text"
-                      value={newQExplanation}
-                      onChange={(e) => setNewQExplanation(e.target.value)}
-                      placeholder="Why this answer is correct..."
-                      className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs"
-                    />
+                  {/* Optional Dual Explanations (When Right vs When Wrong) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1">
+                    <div className="space-y-1 p-3 rounded-xl bg-emerald-50/50 border border-emerald-200">
+                      <label className="text-emerald-900 font-semibold flex items-center gap-1.5">
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Explanation When Right (Optional)</span>
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={newQExplanationCorrect}
+                        onChange={(e) => setNewQExplanationCorrect(e.target.value)}
+                        placeholder="Shown when student gets the right answer..."
+                        className="w-full p-2 bg-white border border-emerald-200 rounded-lg text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="space-y-1 p-3 rounded-xl bg-rose-50/50 border border-rose-200">
+                      <label className="text-rose-900 font-semibold flex items-center gap-1.5">
+                        <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                        <span>Explanation When Wrong (Optional)</span>
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={newQExplanationIncorrect}
+                        onChange={(e) => setNewQExplanationIncorrect(e.target.value)}
+                        placeholder="Shown when student gets the wrong answer..."
+                        className="w-full p-2 bg-white border border-rose-200 rounded-lg text-xs focus:ring-1 focus:ring-rose-500 focus:outline-none"
+                      />
+                    </div>
                   </div>
 
                   <div className="flex items-center gap-2 pt-1">
@@ -2300,11 +2491,25 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                           </div>
                         )}
 
-                        {/* Question Tip Preview */}
-                        {q.tip && (
-                          <div className="text-[11px] text-amber-900 bg-amber-50/80 px-2.5 py-1 rounded-lg border border-amber-200 flex items-center gap-1.5 font-medium">
-                            <Lightbulb className="w-3.5 h-3.5 text-amber-600 fill-amber-400 shrink-0" />
-                            <span><strong className="font-bold text-amber-950">Tip:</strong> {q.tip}</span>
+                        {/* Question Tip & Tip Timestamps Preview */}
+                        {(q.tip || (q.tipTimestamps && q.tipTimestamps.length > 0)) && (
+                          <div className="text-[11px] text-amber-900 bg-amber-50/80 px-2.5 py-1.5 rounded-lg border border-amber-200 flex items-center justify-between flex-wrap gap-2 font-medium">
+                            <div className="flex items-center gap-1.5">
+                              <Lightbulb className="w-3.5 h-3.5 text-amber-600 fill-amber-400 shrink-0" />
+                              <span><strong className="font-bold text-amber-950">Tip:</strong> {q.tip || 'Segment timestamps attached'}</span>
+                            </div>
+                            {q.tipTimestamps && q.tipTimestamps.length > 0 && (
+                              <div className="flex items-center gap-1 flex-wrap">
+                                {q.tipTimestamps.map((ts, tIdx) => (
+                                  <span
+                                    key={tIdx}
+                                    className="px-1.5 py-0.5 rounded bg-amber-100 border border-amber-300 font-mono text-[10px] font-bold text-amber-950"
+                                  >
+                                    {formatSec(ts)}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )}
 
@@ -2362,9 +2567,21 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                           </div>
                         )}
 
-                        {q.explanation && (
-                          <div className="text-slate-500 italic text-[11px]">
-                            {q.explanation}
+                        {(q.explanationCorrect || q.explanationIncorrect || q.explanation) && (
+                          <div className="space-y-1 text-[11px] pt-0.5">
+                            {q.explanationCorrect && (
+                              <div className="text-emerald-800 bg-emerald-50/60 px-2 py-1 rounded border border-emerald-200">
+                                <span className="font-bold">If Right:</span> {q.explanationCorrect}
+                              </div>
+                            )}
+                            {q.explanationIncorrect && (
+                              <div className="text-rose-800 bg-rose-50/60 px-2 py-1 rounded border border-rose-200">
+                                <span className="font-bold">If Wrong:</span> {q.explanationIncorrect}
+                              </div>
+                            )}
+                            {!q.explanationCorrect && !q.explanationIncorrect && q.explanation && (
+                              <div className="text-slate-500 italic">{q.explanation}</div>
+                            )}
                           </div>
                         )}
                       </div>
