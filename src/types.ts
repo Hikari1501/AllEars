@@ -86,6 +86,8 @@ export interface VocabEntry {
   example: string;
   cambridgeSlug: string;
   imageUrl?: string;
+  inflections?: string[];
+  vietnameseTranslation?: string;
 }
 
 export interface Lesson {

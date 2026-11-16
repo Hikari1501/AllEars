@@ -94,6 +94,37 @@ export const VocabPopover: React.FC<VocabPopoverProps> = ({
             </div>
           </div>
 
+          {/* Optional Inflections & Vietnamese Translation */}
+          {((vocab.inflections && vocab.inflections.length > 0) ||
+            (vocab.vietnameseTranslation && vocab.vietnameseTranslation.trim().length > 0)) && (
+            <div className="space-y-2">
+              {vocab.vietnameseTranslation && vocab.vietnameseTranslation.trim().length > 0 && (
+                <div className="bg-emerald-50/80 px-3.5 py-2.5 rounded-lg border border-emerald-200 flex items-baseline gap-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 shrink-0">
+                    Vietnamese:
+                  </span>
+                  <span className="text-sm font-semibold text-emerald-950">
+                    {vocab.vietnameseTranslation}
+                  </span>
+                </div>
+              )}
+
+              {vocab.inflections && vocab.inflections.length > 0 && (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[11px] font-semibold text-slate-500">Forms:</span>
+                  {vocab.inflections.map((form, fIdx) => (
+                    <span
+                      key={fIdx}
+                      className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 text-xs font-medium"
+                    >
+                      {form}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Definition (if provided) */}
           {vocab.definition && vocab.definition.trim().length > 0 && (
             <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-100">

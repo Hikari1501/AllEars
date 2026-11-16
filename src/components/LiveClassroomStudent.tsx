@@ -324,6 +324,19 @@ export const LiveClassroomStudent: React.FC<LiveClassroomStudentProps> = ({
                 </div>
               </div>
 
+              {/* Vietnamese Translation if provided */}
+              {session.activeVocabWord.vietnameseTranslation &&
+                session.activeVocabWord.vietnameseTranslation.trim().length > 0 && (
+                  <div className="bg-emerald-50 px-4 py-2.5 rounded-xl border border-emerald-200 flex items-baseline gap-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 shrink-0">
+                      Vietnamese:
+                    </span>
+                    <span className="text-sm font-semibold text-emerald-950">
+                      {session.activeVocabWord.vietnameseTranslation}
+                    </span>
+                  </div>
+                )}
+
               {/* Definition if provided */}
               {session.activeVocabWord.definition && session.activeVocabWord.definition.trim().length > 0 && (
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">

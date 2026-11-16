@@ -55,7 +55,6 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
   );
   const [copiedLink, setCopiedLink] = useState(false);
   const [isAddingBots, setIsAddingBots] = useState(false);
-  const [feedbackSentId, setFeedbackSentId] = useState<string | null>(null);
   const [pauseTrigger, setPauseTrigger] = useState(0);
   const [showCaptions, setShowCaptions] = useState(true);
   const [teacherViewMode, setTeacherViewMode] = useState<'console' | 'projector'>('console');
@@ -179,30 +178,6 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
       console.error(e);
     } finally {
       setIsAddingBots(false);
-    }
-  };
-
-  // Teacher sends instant feedback / reveals correct answers with touch-response feedback
-  const handleRevealFeedback = async (questionId: string) => {
-    setFeedbackSentId(questionId);
-    setTimeout(() => {
-      setFeedbackSentId((prev) => (prev === questionId ? null : prev));
-    }, 2200);
-
-    try {
-      await fetch('/api/live/reveal-feedback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin, questionId }),
-      });
-      if (session) {
-        setSession({
-          ...session,
-          revealedFeedbackForQuestionId: questionId,
-        });
-      }
-    } catch (e) {
-      console.error(e);
     }
   };
 
@@ -722,24 +697,6 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
                           )
                         )}
 
-                        <button
-                          type="button"
-                          onClick={() => handleRevealFeedback(inspectingQuestion.id)}
-                          className={`px-3.5 py-1.5 font-bold rounded-xl text-xs transition-all duration-200 cursor-pointer shadow-2xs flex items-center gap-1.5 ${
-                            feedbackSentId === inspectingQuestion.id
-                              ? 'bg-emerald-600 text-white shadow-md scale-105'
-                              : 'bg-amber-500 hover:bg-amber-400 text-slate-950'
-                          }`}
-                        >
-                          {feedbackSentId === inspectingQuestion.id ? (
-                            <>
-                              <Check className="w-3.5 h-3.5 stroke-[3] text-white" />
-                              <span>Feedback Sent!</span>
-                            </>
-                          ) : (
-                            <span>Send Instant Feedback</span>
-                          )}
-                        </button>
                       </div>
                     </div>
 

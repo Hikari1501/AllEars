@@ -19,6 +19,7 @@ import {
   Lightbulb,
   ChevronDown,
   Clock,
+  KeyRound,
 } from 'lucide-react';
 
 interface QuestionModalProps {
@@ -261,7 +262,7 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
     return false;
   };
 
-  const canShowFeedback = hasSubmitted && isFeedbackRevealed;
+  const canShowFeedback = hasSubmitted;
 
   // Floating minimized pill for students in homework mode to listen and scrub freely
   if (isMinimized && !isLiveMode) {
@@ -522,14 +523,6 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
                 placeholder="Type your answer here..."
                 className="w-full p-3 text-base border-2 border-slate-300 rounded-xl focus:outline-hidden focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
               />
-              {canShowFeedback && (
-                <div className={`p-3 rounded-lg text-sm border ${isAnswerCorrect ? 'bg-emerald-50 border-emerald-300 text-emerald-900' : 'bg-rose-50 border-rose-300 text-rose-900'}`}>
-                  <div className="font-semibold mb-0.5">
-                    {isAnswerCorrect ? 'Exact Match!' : 'Not quite right'}
-                  </div>
-                  <div>Expected answer: <span className="font-mono font-bold">{question.correctAnswer}</span></div>
-                </div>
-              )}
             </div>
           )}
 
@@ -557,24 +550,6 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
                 disabled={hasSubmitted}
                 isFeedbackVisible={canShowFeedback}
               />
-
-              {canShowFeedback && (
-                <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-lg text-xs space-y-1.5 text-emerald-950">
-                  <div className="font-bold flex items-center gap-1.5 text-emerald-900">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Correct Matching Pairs:</span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                    {question.matchingPairs.map((p) => (
-                      <div key={p.left} className="p-2 rounded bg-white border border-emerald-200">
-                        <span className="font-bold text-slate-900">{p.left}</span>
-                        <span className="text-emerald-700 mx-1.5">➔</span>
-                        <span className="text-slate-700">{p.right}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
@@ -593,32 +568,6 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
                 pointsEarned={pointsEarned}
                 totalPoints={question.points}
               />
-
-              {canShowFeedback && (
-                <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-lg text-xs space-y-2 text-emerald-950">
-                  <div className="font-bold flex items-center gap-1.5 text-emerald-900">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Expected Categories & Items:</span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {question.categories.map((cat) => (
-                      <div key={cat.id} className="p-2 bg-white rounded border border-emerald-200">
-                        <div className="font-bold text-emerald-950 text-[11px] mb-1">{cat.name}</div>
-                        <div className="flex flex-wrap gap-1">
-                          {cat.items.map((it, idx) => (
-                            <span
-                              key={idx}
-                              className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 text-[10px] font-semibold"
-                            >
-                              {it}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
@@ -656,35 +605,115 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
             </div>
           )}
 
-          {/* Directional Explanation section once feedback is active */}
-          {canShowFeedback && (() => {
-            const hasSpecificExp =
-              question.explanationCorrect !== undefined ||
-              question.explanationIncorrect !== undefined;
-            const directionalExplanation = isAnswerCorrect
-              ? (question.explanationCorrect || (!hasSpecificExp ? question.explanation : ''))
-              : (question.explanationIncorrect || (!hasSpecificExp ? question.explanation : ''));
-            if (!directionalExplanation || !directionalExplanation.trim()) return null;
-
-            return (
-              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-                <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Teacher Explanation
+          {/* Directional Explanation & Answer Status once submitted */}
+          {canShowFeedback && (
+            <div
+              className={`p-3.5 rounded-xl border text-xs space-y-2 ${
+                isAnswerCorrect
+                  ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
+                  : 'bg-amber-50/90 border-amber-300 text-amber-950'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2 font-bold">
+                <div className="flex items-center gap-1.5 text-sm">
+                  {isAnswerCorrect ? (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 stroke-[2.5]" />
+                      <span className="text-emerald-900 font-extrabold">Correct Answer!</span>
+                    </>
+                  ) : (
+                    <>
+                      <XCircle className="w-4 h-4 text-rose-600 stroke-[2.5]" />
+                      <span className="text-rose-900 font-extrabold">Needs Review</span>
+                    </>
+                  )}
                 </div>
-                <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">
-                  {directionalExplanation}
-                </p>
+                <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-white/80 border border-slate-200 text-slate-800">
+                  +{pointsEarned} pts
+                </span>
               </div>
-            );
-          })()}
 
-          {/* Live mode submitted waiting state */}
-          {hasSubmitted && !isFeedbackRevealed && isLiveMode && (
-            <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-center space-y-1">
-              <div className="text-sm font-semibold text-amber-950">Response Submitted!</div>
-              <p className="text-xs text-amber-800">
-                Your teacher will review responses and reveal class feedback shortly.
-              </p>
+              {(() => {
+                const hasSpecificExp =
+                  question.explanationCorrect !== undefined ||
+                  question.explanationIncorrect !== undefined;
+                const directionalExplanation = isAnswerCorrect
+                  ? (question.explanationCorrect || (!hasSpecificExp ? question.explanation : ''))
+                  : (question.explanationIncorrect || (!hasSpecificExp ? question.explanation : ''));
+                if (!directionalExplanation || !directionalExplanation.trim()) return null;
+
+                return (
+                  <div className="pt-2 border-t border-black/5 space-y-1">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      Teacher Explanation
+                    </div>
+                    <p className="text-xs text-slate-800 leading-relaxed whitespace-pre-line">
+                      {directionalExplanation}
+                    </p>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
+          {/* Key Box displayed below the Correct / Needs Review box */}
+          {canShowFeedback && question.type === 'close_ended' && (
+            <div className="p-3 rounded-xl bg-emerald-50 border-2 border-emerald-400 text-xs text-emerald-950 flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <KeyRound className="w-4 h-4 text-emerald-700 shrink-0" />
+                <span>
+                  Key: <strong className="font-mono text-sm underline decoration-emerald-500 font-bold">{question.correctAnswer}</strong>
+                </span>
+              </div>
+              {!isAnswerCorrect && (
+                <span className="text-[11px] text-rose-800 font-mono bg-rose-100 px-2 py-0.5 rounded border border-rose-200">
+                  You typed: "{textInput.trim()}"
+                </span>
+              )}
+            </div>
+          )}
+
+          {canShowFeedback && question.type === 'matching' && question.matchingPairs && (
+            <div className="p-3 bg-emerald-50 border-2 border-emerald-400 rounded-xl text-xs space-y-1.5 text-emerald-950">
+              <div className="font-bold flex items-center gap-1.5 text-emerald-900">
+                <KeyRound className="w-3.5 h-3.5 text-emerald-700" />
+                <span>Key (Matching Pairs):</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                {question.matchingPairs.map((p) => (
+                  <div key={p.left} className="p-2 rounded bg-white border border-emerald-200">
+                    <span className="font-bold text-slate-900">{p.left}</span>
+                    <span className="text-emerald-700 mx-1.5">➔</span>
+                    <span className="text-slate-700">{p.right}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {canShowFeedback && question.type === 'drag_and_drop' && question.categories && (
+            <div className="p-3 bg-emerald-50 border-2 border-emerald-400 rounded-xl text-xs space-y-2 text-emerald-950">
+              <div className="font-bold flex items-center gap-1.5 text-emerald-900">
+                <KeyRound className="w-3.5 h-3.5 text-emerald-700" />
+                <span>Key (Category Breakdown):</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {question.categories.map((cat) => (
+                  <div key={cat.id} className="p-2 bg-white rounded border border-emerald-200">
+                    <div className="font-bold text-emerald-950 text-[11px] mb-1">{cat.name}</div>
+                    <div className="flex flex-wrap gap-1">
+                      {cat.items.map((it, idx) => (
+                        <span
+                          key={idx}
+                          className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 text-[10px] font-semibold"
+                        >
+                          {it}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>

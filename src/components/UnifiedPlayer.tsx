@@ -359,9 +359,26 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
 
   const renderTextWithVocab = (text: string) => {
     if (!difficultWords || difficultWords.length === 0) return text;
-    const sorted = [...difficultWords].sort((a, b) => b.word.length - a.word.length);
+    const termPairs: { term: string; vocab: VocabEntry }[] = [];
+    const seenTerms = new Set<string>();
+    difficultWords.forEach((v) => {
+      const candidates = [v.word, ...(v.inflections || [])];
+      candidates.forEach((raw) => {
+        const clean = (raw || '').trim();
+        const key = clean.toLowerCase();
+        if (clean && !seenTerms.has(key)) {
+          seenTerms.add(key);
+          termPairs.push({ term: clean, vocab: v });
+        }
+      });
+    });
+    if (termPairs.length === 0) return text;
+    termPairs.sort((a, b) => b.term.length - a.term.length);
+    const termLookup = new Map<string, VocabEntry>(
+      termPairs.map((item) => [item.term.toLowerCase(), item.vocab])
+    );
     const pattern = new RegExp(
-      `\\b(${sorted.map((v) => v.word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`,
+      `\\b(${termPairs.map((t) => t.term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`,
       'gi'
     );
     const parts = [];
@@ -371,9 +388,7 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
       const matchedText = match[0];
       const matchIndex = match.index;
       if (matchIndex > lastIndex) parts.push(text.substring(lastIndex, matchIndex));
-      const matchedVocab = difficultWords.find(
-        (v) => v.word.toLowerCase() === matchedText.toLowerCase()
-      );
+      const matchedVocab = termLookup.get(matchedText.toLowerCase());
       if (matchedVocab) {
         parts.push(
           <button
@@ -581,9 +596,11 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
         {inVideoCaptions && activeCaption && (
           <div className="absolute bottom-4 left-0 right-0 px-4 sm:px-8 text-center pointer-events-auto z-20 transition-all animate-in fade-in duration-100">
             <div className="inline-block max-w-2xl px-4 py-2 rounded-xl bg-black/85 backdrop-blur-xs text-white text-xs sm:text-sm font-medium shadow-2xl border border-white/15 leading-relaxed">
-              {activeCaption.speaker && (
-                <span className="text-amber-400 font-semibold mr-1.5">{activeCaption.speaker}:</span>
-              )}
+              {activeCaption.speaker &&
+                activeCaption.speaker.trim() &&
+                activeCaption.speaker.trim().toLowerCase() !== 'speaker' && (
+                  <span className="text-amber-400 font-semibold mr-1.5">{activeCaption.speaker}:</span>
+                )}
               {renderTextWithVocab(activeCaption.text)}
             </div>
           </div>

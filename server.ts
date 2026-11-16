@@ -1008,6 +1008,8 @@ Identify 4 to 8 challenging or notable vocabulary words, phrasal verbs, or idiom
 Assign accurate CEFR levels (A1, A2, B1, B2, C1, or C2).
 For each entry provide:
 - word: the target word or phrase in base/root form
+- inflections: array of inflected or conjugated forms of this word/phrase (e.g. ["tries on", "tried on", "trying on"] or ["compels", "compelled", "compelling"]), especially any forms appearing in the transcript
+- vietnameseTranslation: concise, natural Vietnamese translation of the word/phrase in this context
 - phonetic: IPA phonetic pronunciation (e.g. "/ɪnˈtrɪn.zɪk/")
 - cefrLevel: one of "A1", "A2", "B1", "B2", "C1", "C2"
 - partOfSpeech: one of "noun", "verb", "adjective", "adverb", "idiom", "phrasal verb", "pronoun", "preposition", "conjunction", "determiner", "interjection"
@@ -1020,7 +1022,7 @@ For each entry provide:
       contents: prompt,
       config: {
         systemInstruction:
-          'You are an expert ESL/EFL lexicographer and curriculum designer. Return accurate CEFR-graded vocabulary entries strictly matching the JSON schema.',
+          'You are an expert ESL/EFL lexicographer and curriculum designer. Return accurate CEFR-graded vocabulary entries with inflections and Vietnamese translations strictly matching the JSON schema.',
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.ARRAY,
@@ -1028,6 +1030,11 @@ For each entry provide:
             type: Type.OBJECT,
             properties: {
               word: { type: Type.STRING },
+              inflections: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+              },
+              vietnameseTranslation: { type: Type.STRING },
               phonetic: { type: Type.STRING },
               cefrLevel: { type: Type.STRING },
               partOfSpeech: { type: Type.STRING },
@@ -1035,7 +1042,16 @@ For each entry provide:
               example: { type: Type.STRING },
               cambridgeSlug: { type: Type.STRING },
             },
-            required: ['word', 'phonetic', 'cefrLevel', 'partOfSpeech', 'definition', 'example'],
+            required: [
+              'word',
+              'inflections',
+              'vietnameseTranslation',
+              'phonetic',
+              'cefrLevel',
+              'partOfSpeech',
+              'definition',
+              'example',
+            ],
           },
         },
       },
@@ -1067,8 +1083,27 @@ For each entry provide:
           typeof item.cambridgeSlug === 'string' && item.cambridgeSlug.trim()
             ? item.cambridgeSlug.trim()
             : cleanWord;
+        const rawInflections = Array.isArray(item.inflections) ? item.inflections : [];
+        const seenInf = new Set<string>([cleanWord.toLowerCase()]);
+        const cleanInflections: string[] = [];
+        for (const inf of rawInflections) {
+          if (typeof inf !== 'string') continue;
+          const trimmed = inf.trim();
+          const lower = trimmed.toLowerCase();
+          if (trimmed && !seenInf.has(lower)) {
+            seenInf.add(lower);
+            cleanInflections.push(trimmed);
+          }
+        }
+        const viTrans =
+          typeof item.vietnameseTranslation === 'string'
+            ? item.vietnameseTranslation.trim()
+            : '';
+
         return {
           word: cleanWord,
+          inflections: cleanInflections.length > 0 ? cleanInflections : undefined,
+          vietnameseTranslation: viTrans || undefined,
           phonetic: typeof item.phonetic === 'string' ? item.phonetic.trim() : '',
           cefrLevel: allowedLevels.has(normalizedLevel) ? normalizedLevel : 'B2',
           partOfSpeech: allowedPos.has(normalizedPos) ? normalizedPos : 'noun',
@@ -1255,7 +1290,6 @@ app.post('/api/youtube/transcript', async (req: Request, res: Response) => {
             start: Math.round(start * 10) / 10,
             end: Math.round((start + dur) * 10) / 10,
             text: rawText.trim(),
-            speaker: 'Speaker',
           });
         }
         if (segments.length > 0) {
@@ -1270,7 +1304,7 @@ app.post('/api/youtube/transcript', async (req: Request, res: Response) => {
     const ai = getGeminiClient();
     const prompt = `Generate a realistic 6-sentence timed English listening transcript for YouTube video ID "${videoId}".
 Context: Natural spoken ESL listening material.
-Format as JSON array with properties: start (float), end (float), text (string), speaker (string).`;
+Format as JSON array with properties: start (float), end (float), text (string), speaker (optional string).`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-4-hydrogen',
@@ -1299,7 +1333,10 @@ Format as JSON array with properties: start (float), end (float), text (string),
       start: c.start !== undefined ? c.start : idx * 8,
       end: c.end !== undefined ? c.end : (idx + 1) * 8,
       text: c.text,
-      speaker: c.speaker || 'Speaker',
+      speaker:
+        typeof c.speaker === 'string' && c.speaker.trim() && c.speaker.trim().toLowerCase() !== 'speaker'
+          ? c.speaker.trim()
+          : undefined,
     }));
 
     return res.json({ success: true, source: 'gemini_enhanced', captions: formatted });
@@ -1310,9 +1347,9 @@ Format as JSON array with properties: start (float), end (float), text (string),
       success: true,
       source: 'fallback',
       captions: [
-        { id: 'fb-1', start: 0, end: 7.5, text: 'Welcome to this listening comprehension segment.', speaker: 'Speaker' },
-        { id: 'fb-2', start: 8.0, end: 15.0, text: 'Please pay close attention to the main points and vocabulary.', speaker: 'Speaker' },
-        { id: 'fb-3', start: 15.5, end: 23.0, text: 'Notice how the speaker emphasizes key details throughout the dialogue.', speaker: 'Speaker' },
+        { id: 'fb-1', start: 0, end: 7.5, text: 'Welcome to this listening comprehension segment.' },
+        { id: 'fb-2', start: 8.0, end: 15.0, text: 'Please pay close attention to the main points and vocabulary.' },
+        { id: 'fb-3', start: 15.5, end: 23.0, text: 'Notice how the speaker emphasizes key details throughout the dialogue.' },
       ],
     });
   }

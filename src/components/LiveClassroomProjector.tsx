@@ -224,6 +224,12 @@ export const LiveClassroomProjector: React.FC<LiveClassroomProjectorProps> = ({
                   {session.activeVocabWord.cefrLevel}
                 </span>
               </div>
+              {session.activeVocabWord.vietnameseTranslation &&
+                session.activeVocabWord.vietnameseTranslation.trim().length > 0 && (
+                  <div className="text-xs font-semibold text-emerald-300 mt-1">
+                    VI: {session.activeVocabWord.vietnameseTranslation}
+                  </div>
+                )}
               {session.activeVocabWord.definition && session.activeVocabWord.definition.trim().length > 0 && (
                 <p className="text-xs text-slate-200 mt-1 leading-relaxed">
                   {session.activeVocabWord.definition}

@@ -20,6 +20,7 @@ import {
   ChevronDown,
   Image as ImageIcon,
   Eye,
+  KeyRound,
 } from 'lucide-react';
 import { MatchingPairsCanvas } from './MatchingPairsCanvas';
 import { DragAndDropCanvas } from './DragAndDropCanvas';
@@ -384,10 +385,9 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
             const hasClickedShowAnswer = Boolean(revealedCorrectAnswers[q.id]);
             const isLockedAfterReveal = !isLiveMode && hasClickedShowAnswer;
             const isInputDisabled = (isAnswered && !allowEditAnswer) || isLockedAfterReveal;
-            const isFeedbackVisible =
-              isAnswered && (!isLiveMode || revealedFeedbackForQuestionId === q.id);
+            const isFeedbackVisible = isAnswered;
             const canShowCorrectAnswer = isLiveMode
-              ? isFeedbackVisible
+              ? isAnswered
               : isAnswered &&
                 (existingAnswer.isCorrect || q.type === 'open_ended' || hasClickedShowAnswer);
 
@@ -619,12 +619,12 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                       {!allowEditAnswer ? (
                         <span className="inline-flex items-center gap-1.5 text-slate-600 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg">
                           <Lock className="w-3.5 h-3.5 text-slate-500" />
-                          <span>Answer submitted (Editing locked by teacher)</span>
+                          <span>Answer submitted</span>
                         </span>
                       ) : isLiveMode ? (
                         <span className="inline-flex items-center gap-1.5 text-amber-900 bg-amber-50 border border-amber-300 px-2.5 py-1 rounded-lg">
                           <Unlock className="w-3.5 h-3.5 text-amber-600" />
-                          <span>Answer submitted (Editing allowed · Click to update your answer)</span>
+                          <span>Answer submitted</span>
                         </span>
                       ) : null}
                     </div>
@@ -822,21 +822,6 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                             </button>
                           )}
                         </div>
-
-                        {/* When correct answer is allowed to be visible, show correct expected text */}
-                        {canShowCorrectAnswer && (
-                          <div className="p-2.5 rounded-lg bg-emerald-50 border-2 border-emerald-400 text-xs text-emerald-950 flex items-center justify-between gap-2 shadow-2xs">
-                            <div className="flex items-center gap-2">
-                              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                              <span>Correct Answer: <strong className="font-mono text-sm underline decoration-emerald-500 font-bold">{q.correctAnswer}</strong></span>
-                            </div>
-                            {existingAnswer && !existingAnswer.isCorrect && (
-                              <span className="text-[11px] text-rose-800 font-mono bg-rose-100 px-2 py-0.5 rounded border border-rose-200">
-                                You typed: "{String(existingAnswer.answer)}"
-                              </span>
-                            )}
-                          </div>
-                        )}
                       </div>
                     )}
 
@@ -851,28 +836,6 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                           disabled={isInputDisabled}
                           isFeedbackVisible={canShowCorrectAnswer}
                         />
-
-                        {/* When correct answer is visible, display correct matching key */}
-                        {canShowCorrectAnswer && (
-                          <div className="mt-2.5 p-2.5 rounded-lg bg-emerald-50 border-2 border-emerald-400 text-xs text-emerald-950 space-y-1.5 shadow-2xs">
-                            <div className="font-bold flex items-center gap-1.5 text-emerald-900">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                              <span>Correct Matching Pairs:</span>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                              {q.matchingPairs.map((pair, pIdx) => (
-                                <div
-                                  key={pIdx}
-                                  className="p-1.5 bg-white rounded border border-emerald-200 text-[11px] flex items-center justify-between gap-1 shadow-2xs"
-                                >
-                                  <span className="font-semibold text-slate-800">{pair.left}</span>
-                                  <span className="text-emerald-600 font-bold">➔</span>
-                                  <span className="font-bold text-emerald-900">{pair.right}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
                       </div>
                     )}
 
@@ -904,38 +867,6 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                           pointsEarned={existingAnswer?.pointsEarned || 0}
                           totalPoints={q.points || 10}
                         />
-
-                        {/* When correct answer is visible, show expected categorization */}
-                        {canShowCorrectAnswer && (
-                          <div className="p-3 rounded-xl bg-emerald-50 border-2 border-emerald-400 text-xs text-emerald-950 space-y-2 shadow-2xs">
-                            <div className="font-bold flex items-center gap-1.5 text-emerald-900">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                              <span>Expected Category Breakdown:</span>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              {q.categories.map((cat) => (
-                                <div
-                                  key={cat.id}
-                                  className="p-2 bg-white rounded-lg border border-emerald-200 shadow-2xs space-y-1"
-                                >
-                                  <div className="text-[11px] font-bold text-emerald-950 uppercase tracking-wide">
-                                    {cat.name}
-                                  </div>
-                                  <div className="flex flex-wrap gap-1">
-                                    {cat.items.map((item, iIdx) => (
-                                      <span
-                                        key={iIdx}
-                                        className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 text-[10px] font-semibold border border-emerald-200"
-                                      >
-                                        {item}
-                                      </span>
-                                    ))}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
                       </div>
                     )}
 
@@ -1055,6 +986,78 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                             </div>
                           )}
                         </div>
+
+                        {/* Key / Answer Breakdown (Displayed BELOW the Correct / Needs Review box) */}
+                        {canShowCorrectAnswer && q.type === 'close_ended' && (
+                          <div className="mt-2.5 p-2.5 rounded-xl bg-emerald-50 border-2 border-emerald-400 text-xs text-emerald-950 flex items-center justify-between gap-2 flex-wrap shadow-2xs animate-in fade-in">
+                            <div className="flex items-center gap-2">
+                              <KeyRound className="w-4 h-4 text-emerald-700 shrink-0" />
+                              <span>
+                                Key:{' '}
+                                <strong className="font-mono text-sm underline decoration-emerald-500 font-bold">
+                                  {q.correctAnswer}
+                                </strong>
+                              </span>
+                            </div>
+                            {existingAnswer && !existingAnswer.isCorrect && (
+                              <span className="text-[11px] text-rose-800 font-mono bg-rose-100 px-2 py-0.5 rounded border border-rose-200">
+                                You typed: "{String(existingAnswer.answer)}"
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {canShowCorrectAnswer && q.type === 'matching' && q.matchingPairs && (
+                          <div className="mt-2.5 p-2.5 rounded-xl bg-emerald-50 border-2 border-emerald-400 text-xs text-emerald-950 space-y-1.5 shadow-2xs animate-in fade-in">
+                            <div className="font-bold flex items-center gap-1.5 text-emerald-900">
+                              <KeyRound className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                              <span>Key (Matching Pairs):</span>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                              {q.matchingPairs.map((pair, pIdx) => (
+                                <div
+                                  key={pIdx}
+                                  className="p-1.5 bg-white rounded border border-emerald-200 text-[11px] flex items-center justify-between gap-1 shadow-2xs"
+                                >
+                                  <span className="font-semibold text-slate-800">{pair.left}</span>
+                                  <span className="text-emerald-600 font-bold">➔</span>
+                                  <span className="font-bold text-emerald-900">{pair.right}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {canShowCorrectAnswer && q.type === 'drag_and_drop' && q.categories && (
+                          <div className="mt-2.5 p-3 rounded-xl bg-emerald-50 border-2 border-emerald-400 text-xs text-emerald-950 space-y-2 shadow-2xs animate-in fade-in">
+                            <div className="font-bold flex items-center gap-1.5 text-emerald-900">
+                              <KeyRound className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                              <span>Key (Category Breakdown):</span>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {q.categories.map((cat) => (
+                                <div
+                                  key={cat.id}
+                                  className="p-2 bg-white rounded-lg border border-emerald-200 shadow-2xs space-y-1"
+                                >
+                                  <div className="text-[11px] font-bold text-emerald-950 uppercase tracking-wide">
+                                    {cat.name}
+                                  </div>
+                                  <div className="flex flex-wrap gap-1">
+                                    {cat.items.map((item, iIdx) => (
+                                      <span
+                                        key={iIdx}
+                                        className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 text-[10px] font-semibold border border-emerald-200"
+                                      >
+                                        {item}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
 
                         {/* Practice Mode 3-Attempt "Show Answer" Control (below "Needs Review" box) */}
                         {isWrongPractice && !hasClickedShowAnswer && (

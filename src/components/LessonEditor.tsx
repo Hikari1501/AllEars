@@ -108,7 +108,6 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
         start: 0,
         end: 8,
         text: 'Welcome to this listening comprehension lesson.',
-        speaker: 'Teacher',
       },
     ]
   );
@@ -144,7 +143,7 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
   const [newCapStartStr, setNewCapStartStr] = useState<string>('00:00');
   const [newCapEnd, setNewCapEnd] = useState<number>(5);
   const [newCapEndStr, setNewCapEndStr] = useState<string>('00:05');
-  const [newCapSpeaker, setNewCapSpeaker] = useState<string>('Speaker');
+  const [newCapSpeaker, setNewCapSpeaker] = useState<string>('');
   const [newCapText, setNewCapText] = useState<string>('');
   const [rawTranscriptText, setRawTranscriptText] = useState<string>('');
   const [showBulkCaptionInput, setShowBulkCaptionInput] = useState<boolean>(false);
@@ -201,6 +200,8 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
   const [vocabExample, setVocabExample] = useState('');
   const [vocabCambridge, setVocabCambridge] = useState('');
   const [vocabImageUrl, setVocabImageUrl] = useState('');
+  const [vocabInflections, setVocabInflections] = useState('');
+  const [vocabVietnamese, setVocabVietnamese] = useState('');
 
   // Extract YouTube ID from URL
   const extractYtId = (url: string) => {
@@ -296,7 +297,7 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
       id: `cap-${Date.now()}`,
       start: startSec,
       end: effectiveEnd,
-      speaker: newCapSpeaker.trim() || 'Speaker',
+      speaker: newCapSpeaker.trim() || undefined,
       text: newCapText.trim(),
     };
     setCaptions((prev) => [...prev, newCap].sort((a, b) => a.start - b.start));
@@ -312,7 +313,9 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
     setEditingCapId(cap.id);
     setEditingCapStartStr(formatSec(cap.start));
     setEditingCapEndStr(formatSec(cap.end));
-    setEditingCapSpeaker(cap.speaker || 'Speaker');
+    setEditingCapSpeaker(
+      cap.speaker && cap.speaker.trim().toLowerCase() !== 'speaker' ? cap.speaker : ''
+    );
     setEditingCapText(cap.text);
   };
 
@@ -327,7 +330,7 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                 ...c,
                 start: startSec,
                 end: Math.max(startSec + 0.5, endSec),
-                speaker: editingCapSpeaker.trim() || 'Speaker',
+                speaker: editingCapSpeaker.trim() || undefined,
                 text: editingCapText.trim(),
               }
             : c
@@ -363,7 +366,6 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
           start: Math.round(timeToSec(match[1]) * 10) / 10,
           end: Math.round(timeToSec(match[2]) * 10) / 10,
           text: match[3].replace(/\r?\n/g, ' ').trim(),
-          speaker: 'Speaker',
         });
       }
 
@@ -389,7 +391,6 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
       start: idx * intervalSec,
       end: (idx + 1) * intervalSec,
       text: sent,
-      speaker: 'Speaker',
     }));
 
     setCaptions(generated);
@@ -438,7 +439,10 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
             start: c.start || idx * 10,
             end: c.end || (idx + 1) * 10,
             text: c.text,
-            speaker: c.speaker || 'Speaker',
+            speaker:
+              c.speaker && String(c.speaker).trim().toLowerCase() !== 'speaker'
+                ? String(c.speaker).trim()
+                : undefined,
           }))
         );
         setSuccessMessage('AI generated timestamped captions successfully!');
@@ -538,6 +542,8 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
     setVocabExample(v.example || '');
     setVocabCambridge(v.cambridgeSlug || '');
     setVocabImageUrl(v.imageUrl || '');
+    setVocabInflections((v.inflections || []).join(', '));
+    setVocabVietnamese(v.vietnameseTranslation || '');
     setIsAddingVocab(true);
   };
 
@@ -550,21 +556,37 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
     setVocabExample('');
     setVocabCambridge('');
     setVocabImageUrl('');
+    setVocabInflections('');
+    setVocabVietnamese('');
   };
 
   // Add or update individual vocabulary word manually
   const handleSaveVocabEntry = () => {
     if (!vocabWord.trim()) return;
 
+    const baseWord = vocabWord.trim();
+    const seenForms = new Set<string>([baseWord.toLowerCase()]);
+    const parsedInflections = vocabInflections
+      .split(/[,;\n]+/)
+      .map((s) => s.trim())
+      .filter((s) => {
+        const key = s.toLowerCase();
+        if (!s || seenForms.has(key)) return false;
+        seenForms.add(key);
+        return true;
+      });
+
     const newEntry: VocabEntry = {
-      word: vocabWord.trim(),
+      word: baseWord,
       phonetic: vocabPhonetic.trim(),
       cefrLevel: vocabLevel,
       partOfSpeech: vocabPos,
       definition: vocabDefinition.trim(),
       example: vocabExample.trim(),
-      cambridgeSlug: vocabCambridge.trim() || vocabWord.trim().toLowerCase().replace(/\s+/g, '-'),
+      cambridgeSlug: vocabCambridge.trim() || baseWord.toLowerCase().replace(/\s+/g, '-'),
       imageUrl: vocabImageUrl.trim() || undefined,
+      inflections: parsedInflections.length > 0 ? parsedInflections : undefined,
+      vietnameseTranslation: vocabVietnamese.trim() || undefined,
     };
 
     setDifficultWords((prev) => {
@@ -1658,13 +1680,13 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                   </div>
                   <div className="sm:col-span-3">
                     <label className="h-5 flex items-center text-slate-600 font-semibold mb-1 truncate">
-                      Speaker
+                      Speaker (optional)
                     </label>
                     <input
                       type="text"
                       value={newCapSpeaker}
                       onChange={(e) => setNewCapSpeaker(e.target.value)}
-                      placeholder="e.g. Elena"
+                      placeholder="e.g. Elena (optional)"
                       className="w-full h-9 p-2 bg-white border border-slate-200 rounded-lg text-xs"
                     />
                     <span className="text-[10px] text-transparent select-none block mt-1 truncate">.</span>
@@ -1722,11 +1744,12 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                             />
                           </div>
                           <div className="sm:col-span-6">
-                            <label className="block text-slate-600 text-[11px] font-semibold mb-0.5">Speaker</label>
+                            <label className="block text-slate-600 text-[11px] font-semibold mb-0.5">Speaker (optional)</label>
                             <input
                               type="text"
                               value={editingCapSpeaker}
                               onChange={(e) => setEditingCapSpeaker(e.target.value)}
+                              placeholder="Leave blank to hide speaker label"
                               className="w-full p-1.5 bg-white border border-amber-300 rounded-lg text-xs"
                             />
                           </div>
@@ -1770,9 +1793,11 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                       </span>
 
                       <div className="flex-1 min-w-0 flex items-start gap-2">
-                        <span className="font-bold text-slate-900 shrink-0">
-                          {cap.speaker}:
-                        </span>
+                        {cap.speaker && cap.speaker.trim() && cap.speaker.trim().toLowerCase() !== 'speaker' && (
+                          <span className="font-bold text-slate-900 shrink-0">
+                            {cap.speaker}:
+                          </span>
+                        )}
                         {/* Display full caption line with zero truncation or abbreviation */}
                         <span className="text-slate-800 break-words whitespace-normal leading-relaxed text-xs">
                           {cap.text}
@@ -2917,6 +2942,36 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                     />
                   </div>
 
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-slate-600 block mb-1">
+                        Inflections / Word Forms (optional, comma-separated)
+                      </label>
+                      <input
+                        type="text"
+                        value={vocabInflections}
+                        onChange={(e) => setVocabInflections(e.target.value)}
+                        placeholder="e.g. tries on, tried on, trying on"
+                        className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs"
+                      />
+                      <p className="text-[10px] text-slate-400 mt-1">
+                        Any form listed here is also clickable in student captions and opens this word card.
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-slate-600 block mb-1">
+                        Vietnamese Translation (optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={vocabVietnamese}
+                        onChange={(e) => setVocabVietnamese(e.target.value)}
+                        placeholder="e.g. thử đồ"
+                        className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs"
+                      />
+                    </div>
+                  </div>
+
                   {/* Online Illustration Image URL */}
                   <div>
                     <label className="text-slate-600 block mb-1 font-semibold flex items-center gap-1.5">
@@ -2987,8 +3042,26 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                       </div>
                     </div>
                     {v.phonetic && <div className="font-mono text-[11px] text-slate-500">{v.phonetic}</div>}
+                    {v.vietnameseTranslation && (
+                      <div className="text-[11px] font-semibold text-emerald-700">
+                        VI: {v.vietnameseTranslation}
+                      </div>
+                    )}
                     {v.definition && <p className="text-slate-700 line-clamp-2 leading-relaxed">{v.definition}</p>}
                     {v.example && <p className="text-[11px] text-slate-500 italic truncate">"{v.example}"</p>}
+                    {v.inflections && v.inflections.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                        <span className="text-[10px] font-semibold text-slate-500">Forms:</span>
+                        {v.inflections.map((form) => (
+                          <span
+                            key={form}
+                            className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100/70 text-amber-900 border border-amber-200/80"
+                          >
+                            {form}
+                          </span>
+                        ))}
+                      </div>
+                    )}
 
                     {/* Illustration Image thumbnail */}
                     {v.imageUrl && (

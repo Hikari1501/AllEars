@@ -53,18 +53,36 @@ export const InteractiveCaptions: React.FC<InteractiveCaptionsProps> = ({
     }
   };
 
-  // Render text and highlight matching vocabulary entries
+  // Render text and highlight matching vocabulary entries (including inflections)
   const renderTextWithVocab = (text: string) => {
     if (!difficultWords || difficultWords.length === 0) {
       return text;
     }
 
-    // Sort difficult words by length descending so multi-word phrases match before single words
-    const sortedVocab = [...difficultWords].sort((a, b) => b.word.length - a.word.length);
+    const termPairs: { term: string; vocab: VocabEntry }[] = [];
+    const seenTerms = new Set<string>();
+    difficultWords.forEach((v) => {
+      const candidates = [v.word, ...(v.inflections || [])];
+      candidates.forEach((raw) => {
+        const clean = (raw || '').trim();
+        const key = clean.toLowerCase();
+        if (clean && !seenTerms.has(key)) {
+          seenTerms.add(key);
+          termPairs.push({ term: clean, vocab: v });
+        }
+      });
+    });
 
-    // Build regex pattern for whole words or phrases
+    if (termPairs.length === 0) return text;
+
+    // Sort longest terms first so multi-word phrases and inflections match before base fragments
+    termPairs.sort((a, b) => b.term.length - a.term.length);
+    const termLookup = new Map<string, VocabEntry>(
+      termPairs.map((item) => [item.term.toLowerCase(), item.vocab])
+    );
+
     const pattern = new RegExp(
-      `\\b(${sortedVocab.map((v) => v.word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`,
+      `\\b(${termPairs.map((t) => t.term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`,
       'gi'
     );
 
@@ -80,9 +98,7 @@ export const InteractiveCaptions: React.FC<InteractiveCaptionsProps> = ({
         parts.push(text.substring(lastIndex, matchIndex));
       }
 
-      const matchedVocab = difficultWords.find(
-        (v) => v.word.toLowerCase() === matchedText.toLowerCase()
-      );
+      const matchedVocab = termLookup.get(matchedText.toLowerCase());
 
       if (matchedVocab) {
         parts.push(
@@ -149,11 +165,13 @@ export const InteractiveCaptions: React.FC<InteractiveCaptionsProps> = ({
         <div className="min-h-[48px] flex items-center justify-center text-center">
           {activeCaption ? (
             <div className="text-base sm:text-lg font-medium leading-relaxed tracking-wide text-slate-100 max-w-2xl mx-auto">
-              {activeCaption.speaker && (
-                <span className="text-amber-400 font-semibold mr-2">
-                  {activeCaption.speaker}:
-                </span>
-              )}
+              {activeCaption.speaker &&
+                activeCaption.speaker.trim() &&
+                activeCaption.speaker.trim().toLowerCase() !== 'speaker' && (
+                  <span className="text-amber-400 font-semibold mr-2">
+                    {activeCaption.speaker}:
+                  </span>
+                )}
               {renderTextWithVocab(activeCaption.text)}
             </div>
           ) : (
@@ -242,9 +260,11 @@ export const InteractiveCaptions: React.FC<InteractiveCaptionsProps> = ({
                     {formatTime(cap.start)}
                   </button>
                   <div className="text-sm text-slate-800 leading-relaxed flex-1">
-                    {cap.speaker && (
-                      <span className="font-semibold text-slate-900 mr-1.5">{cap.speaker}:</span>
-                    )}
+                    {cap.speaker &&
+                      cap.speaker.trim() &&
+                      cap.speaker.trim().toLowerCase() !== 'speaker' && (
+                        <span className="font-semibold text-slate-900 mr-1.5">{cap.speaker}:</span>
+                      )}
                     {renderTextWithVocab(cap.text)}
                   </div>
                 </div>
