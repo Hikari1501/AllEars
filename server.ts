@@ -1264,6 +1264,70 @@ Return JSON.`;
   }
 });
 
+// YouTube Metadata / Original Duration Extraction
+app.post('/api/youtube/metadata', async (req: Request, res: Response) => {
+  try {
+    const { videoUrl, videoId: providedId } = req.body || {};
+    let videoId = typeof providedId === 'string' ? providedId.trim() : '';
+    if (!videoId && typeof videoUrl === 'string') {
+      const match = videoUrl.match(/^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=|shorts\/)([^#&?]*).*/);
+      if (match && match[2] && match[2].length === 11) {
+        videoId = match[2];
+      }
+    }
+
+    if (!videoId) {
+      return res.status(400).json({ error: 'Valid YouTube URL or Video ID is required' });
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const ytRes = await fetch(`https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+    });
+    clearTimeout(timeout);
+
+    if (!ytRes.ok) {
+      return res.json({ success: false, duration: 0 });
+    }
+
+    const html = await ytRes.text();
+    let duration = 0;
+
+    const lengthSecMatch = html.match(/"lengthSeconds":"(\d+)"/);
+    if (lengthSecMatch && lengthSecMatch[1]) {
+      duration = parseInt(lengthSecMatch[1], 10);
+    }
+
+    if (!duration) {
+      const approxMsMatch = html.match(/"approxDurationMs":"(\d+)"/);
+      if (approxMsMatch && approxMsMatch[1]) {
+        duration = Math.round(parseInt(approxMsMatch[1], 10) / 1000);
+      }
+    }
+
+    if (!duration) {
+      const isoMatch = html.match(/itemprop="duration" content="PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?"/);
+      if (isoMatch) {
+        const hrs = parseInt(isoMatch[1] || '0', 10);
+        const mins = parseInt(isoMatch[2] || '0', 10);
+        const secs = parseInt(isoMatch[3] || '0', 10);
+        duration = hrs * 3600 + mins * 60 + secs;
+      }
+    }
+
+    return res.json({ success: duration > 0, duration: Number.isFinite(duration) && duration > 0 ? duration : 0 });
+  } catch (err) {
+    console.warn('Could not fetch YouTube metadata:', err);
+    return res.json({ success: false, duration: 0 });
+  }
+});
+
 // YouTube Transcript & Captions Extraction with instant fallback & timeout protection
 app.post('/api/youtube/transcript', async (req: Request, res: Response) => {
   try {

@@ -139,10 +139,13 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
 
   // Video preview player tracking
   const [previewYtId, setPreviewYtId] = useState<string | null>(null);
+  const [isDetectingDuration, setIsDetectingDuration] = useState<boolean>(false);
   const [previewTime, setPreviewTime] = useState<number>(0);
   const [previewIsPlaying, setPreviewIsPlaying] = useState<boolean>(false);
   const previewYtRef = useRef<any>(null);
   const previewYtContainerId = useRef(`yt-preview-${Math.random().toString(36).substring(2, 9)}`);
+  const initialYtIdRef = useRef<string | null>(null);
+  const lastDurationYtIdRef = useRef<string | null>(null);
 
   // Manual caption adder state
   const [newCapStart, setNewCapStart] = useState<number>(0);
@@ -209,21 +212,187 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
   const [vocabInflections, setVocabInflections] = useState('');
   const [vocabVietnamese, setVocabVietnamese] = useState('');
 
-  // Extract YouTube ID from URL
+  // Extract YouTube ID from URL (supports watch, share, embed, and shorts links)
   const extractYtId = (url: string) => {
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=|shorts\/)([^#&?]*).*/;
     const match = url.match(regExp);
     return match && match[2].length === 11 ? match[2] : null;
   };
 
   useEffect(() => {
+    if (initialYtIdRef.current === null && initialLesson?.mediaUrl) {
+      initialYtIdRef.current = extractYtId(initialLesson.mediaUrl);
+    }
+  }, [initialLesson?.mediaUrl]);
+
+  useEffect(() => {
     if (mediaType === 'youtube') {
       const id = extractYtId(mediaUrl);
-      setPreviewYtId(id || 'f99P4eWbC9w');
+      setPreviewYtId(id || null);
     } else {
       setPreviewYtId(null);
     }
   }, [mediaUrl, mediaType]);
+
+  // Helper to apply a detected original video duration (always updates when switching videos, or when duration is 0)
+  const applyDetectedDuration = (detectedSec: number, sourceYtId?: string) => {
+    const rounded = Math.floor(detectedSec);
+    if (!Number.isFinite(rounded) || rounded <= 0) return;
+
+    const switchedVideo = Boolean(sourceYtId && sourceYtId !== lastDurationYtIdRef.current && sourceYtId !== initialYtIdRef.current);
+    if (sourceYtId) {
+      lastDurationYtIdRef.current = sourceYtId;
+    }
+
+    setDuration((prev) => {
+      if (switchedVideo || !prev || prev <= 0) {
+        return rounded;
+      }
+      return prev;
+    });
+  };
+
+  // Auto-detect original YouTube duration via server metadata endpoint
+  useEffect(() => {
+    if (mediaType !== 'youtube' || !previewYtId) return;
+    let cancelled = false;
+
+    const fetchYtDuration = async () => {
+      setIsDetectingDuration(true);
+      try {
+        const res = await fetch('/api/youtube/metadata', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ videoId: previewYtId, videoUrl: mediaUrl }),
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && data?.duration > 0) {
+          applyDetectedDuration(Number(data.duration), previewYtId);
+        }
+      } catch (e) {
+        // Fallback: client-side YT.Player below will also detect duration
+      } finally {
+        if (!cancelled) setIsDetectingDuration(false);
+      }
+    };
+
+    fetchYtDuration();
+    return () => {
+      cancelled = true;
+    };
+  }, [mediaType, previewYtId]);
+
+  // Mount interactive YouTube IFrame API preview player to also detect original duration client-side
+  useEffect(() => {
+    if (mediaType !== 'youtube' || !previewYtId) return;
+    let cancelled = false;
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+    let readyWaitTimer: ReturnType<typeof setInterval> | null = null;
+
+    const initPreviewPlayer = () => {
+      if (cancelled) return;
+      const YT = (window as any).YT;
+      const containerEl = document.getElementById(previewYtContainerId.current);
+      if (!YT || !YT.Player || !containerEl) return;
+
+      if (previewYtRef.current && typeof previewYtRef.current.destroy === 'function') {
+        try {
+          previewYtRef.current.destroy();
+        } catch (e) {}
+        previewYtRef.current = null;
+      }
+
+      const playerVars: Record<string, any> = {
+        controls: 1,
+        modestbranding: 1,
+        rel: 0,
+        playsinline: 1,
+        enablejsapi: 1,
+        origin: window.location.origin,
+      };
+      if (trimStart > 0) {
+        playerVars.start = Math.floor(trimStart);
+      }
+      if (trimEnd !== undefined && trimEnd > trimStart) {
+        playerVars.end = Math.floor(trimEnd);
+      }
+
+      try {
+        previewYtRef.current = new YT.Player(previewYtContainerId.current, {
+          videoId: previewYtId,
+          playerVars,
+          events: {
+            onReady: (event: any) => {
+              if (cancelled) return;
+              if (typeof event.target?.getDuration === 'function') {
+                const d = event.target.getDuration();
+                if (d > 0) applyDetectedDuration(d, previewYtId);
+              }
+            },
+            onStateChange: (event: any) => {
+              if (cancelled) return;
+              if (typeof event.target?.getDuration === 'function') {
+                const d = event.target.getDuration();
+                if (d > 0) applyDetectedDuration(d, previewYtId);
+              }
+              setPreviewIsPlaying(event.data === 1);
+            },
+          },
+        });
+
+        // Poll briefly for duration in case YouTube reports 0 until metadata arrives
+        let checks = 0;
+        pollTimer = setInterval(() => {
+          checks++;
+          if (cancelled || checks > 20) {
+            if (pollTimer) clearInterval(pollTimer);
+            return;
+          }
+          try {
+            if (previewYtRef.current && typeof previewYtRef.current.getDuration === 'function') {
+              const d = previewYtRef.current.getDuration();
+              if (d > 0) {
+                applyDetectedDuration(d, previewYtId);
+                if (pollTimer) clearInterval(pollTimer);
+              }
+            }
+          } catch (e) {}
+        }, 500);
+      } catch (e) {
+        console.warn('Could not mount YouTube preview player:', e);
+      }
+    };
+
+    if ((window as any).YT && (window as any).YT.Player) {
+      initPreviewPlayer();
+    } else {
+      if (!document.querySelector('script[src="https://www.youtube.com/iframe_api"]')) {
+        const tag = document.createElement('script');
+        tag.src = 'https://www.youtube.com/iframe_api';
+        const firstScriptTag = document.getElementsByTagName('script')[0];
+        firstScriptTag?.parentNode?.insertBefore(tag, firstScriptTag);
+      }
+      readyWaitTimer = setInterval(() => {
+        if ((window as any).YT && (window as any).YT.Player) {
+          if (readyWaitTimer) clearInterval(readyWaitTimer);
+          initPreviewPlayer();
+        }
+      }, 200);
+    }
+
+    return () => {
+      cancelled = true;
+      if (pollTimer) clearInterval(pollTimer);
+      if (readyWaitTimer) clearInterval(readyWaitTimer);
+      if (previewYtRef.current && typeof previewYtRef.current.destroy === 'function') {
+        try {
+          previewYtRef.current.destroy();
+        } catch (e) {}
+        previewYtRef.current = null;
+      }
+    };
+  }, [mediaType, previewYtId, trimStart, trimEnd]);
 
   // Handle local video/audio file upload
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1217,6 +1386,10 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                   ? `Trim: ${formatSec(trimStart)} - ${
                       trimEnd !== undefined && trimEnd > trimStart ? formatSec(trimEnd) : 'End'
                     }`
+                  : duration > 0
+                  ? `Original Length: ${formatSec(duration)}`
+                  : isDetectingDuration
+                  ? 'Detecting length...'
                   : 'Original Full Length'}
               </span>
             </div>
@@ -1224,15 +1397,13 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
             {/* Embedded Live Preview */}
             <div className="aspect-video bg-black rounded-xl overflow-hidden border border-slate-800 relative">
               {mediaType === 'youtube' && previewYtId ? (
-                <iframe
-                  src={`https://www.youtube.com/embed/${previewYtId}?enablejsapi=1&origin=${window.location.origin}${
-                    trimStart > 0 ? `&start=${Math.floor(trimStart)}` : ''
-                  }${trimEnd !== undefined && trimEnd > trimStart ? `&end=${Math.floor(trimEnd)}` : ''}`}
-                  className="w-full h-full border-0"
-                  title="YouTube Preview"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
+                <div className="w-full h-full">
+                  <div id={previewYtContainerId.current} className="w-full h-full" />
+                </div>
+              ) : mediaType === 'youtube' ? (
+                <div className="w-full h-full flex items-center justify-center text-slate-400 text-xs p-6 text-center">
+                  Paste a valid YouTube video URL to preview and auto-detect its length.
+                </div>
               ) : mediaType === 'video' ? (
                 <video
                   src={mediaUrl}
@@ -1272,7 +1443,9 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                     {trimEnd !== undefined && trimEnd > trimStart
                       ? `${formatSec(trimEnd - trimStart)} Trimmed`
                       : trimStart > 0
-                      ? `From ${formatSec(trimStart)} to End`
+                      ? `From ${formatSec(trimStart)} to ${duration > 0 ? formatSec(duration) : 'End'}`
+                      : duration > 0
+                      ? `Full Video (${formatSec(duration)})`
                       : 'Full Video'}
                   </span>
                   {(trimStart > 0 || trimEnd !== undefined) && (
@@ -1448,7 +1621,16 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-700">Total Video Duration (seconds, optional)</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-slate-700">Total Video Duration (seconds, optional)</label>
+                    {duration > 0 ? (
+                      <span className="text-[11px] font-mono font-bold text-amber-800">
+                        {formatSec(duration)}
+                      </span>
+                    ) : isDetectingDuration ? (
+                      <span className="text-[11px] text-slate-400">Detecting...</span>
+                    ) : null}
+                  </div>
                   <input
                     type="number"
                     min={0}
@@ -1457,7 +1639,7 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                       const parsed = parseInt(e.target.value, 10);
                       setDuration(!isNaN(parsed) && parsed > 0 ? parsed : 0);
                     }}
-                    placeholder="Auto (original video length)"
+                    placeholder="Auto-detected from video"
                     className="w-full p-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl"
                   />
                 </div>

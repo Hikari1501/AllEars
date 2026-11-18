@@ -125,10 +125,13 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
 
   const effectiveStart = trimStart && trimStart > 0 ? trimStart : 0;
   const hasExplicitTrimEnd = typeof trimEnd === 'number' && trimEnd > effectiveStart;
-  const hasExplicitTrim = effectiveStart > 0 || hasExplicitTrimEnd;
   const explicitTrimEnd = hasExplicitTrimEnd ? (trimEnd as number) : undefined;
   const resolvedMediaDuration = mediaDuration > 0 ? mediaDuration : (duration > 0 ? duration : 0);
   const effectiveEnd = hasExplicitTrimEnd ? (trimEnd as number) : resolvedMediaDuration;
+  const isActuallyTrimmed =
+    effectiveStart > 0 ||
+    (hasExplicitTrimEnd &&
+      (resolvedMediaDuration <= 0 || (trimEnd as number) < resolvedMediaDuration - 1));
   const effectiveDuration =
     effectiveEnd > effectiveStart ? effectiveEnd - effectiveStart : Math.max(1, currentTime - effectiveStart + 1);
 
@@ -789,7 +792,7 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
               <span className="text-slate-400">
                 {effectiveEnd > 0 ? formatTime(effectiveEnd) : '--:--'}
               </span>
-              {hasExplicitTrim && (
+              {isActuallyTrimmed && (
                 <span className="text-[10px] text-amber-400/90 font-mono ml-1 px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700">
                   Trimmed
                 </span>

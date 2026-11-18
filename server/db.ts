@@ -129,9 +129,9 @@ export async function initDatabase(initialLessons: Lesson[]) {
           level VARCHAR(16) NOT NULL,
           media_type VARCHAR(32) NOT NULL,
           media_url TEXT NOT NULL,
-          duration NUMERIC DEFAULT 180,
-          trim_start NUMERIC DEFAULT 0,
-          trim_end NUMERIC DEFAULT 180,
+          duration NUMERIC DEFAULT 0,
+          trim_start NUMERIC DEFAULT NULL,
+          trim_end NUMERIC DEFAULT NULL,
           prevent_skipping BOOLEAN DEFAULT FALSE,
           thumbnail_url TEXT,
           teacher_id VARCHAR(128),
@@ -177,8 +177,11 @@ export async function initDatabase(initialLessons: Lesson[]) {
         ALTER TABLE lessons ADD COLUMN IF NOT EXISTS description TEXT DEFAULT '';
         ALTER TABLE lessons ADD COLUMN IF NOT EXISTS background_info_text TEXT DEFAULT '';
         ALTER TABLE lessons ADD COLUMN IF NOT EXISTS background_info_image_url TEXT;
-        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS trim_start NUMERIC DEFAULT 0;
-        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS trim_end NUMERIC DEFAULT 180;
+        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS trim_start NUMERIC DEFAULT NULL;
+        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS trim_end NUMERIC DEFAULT NULL;
+        ALTER TABLE lessons ALTER COLUMN duration SET DEFAULT 0;
+        ALTER TABLE lessons ALTER COLUMN trim_start DROP DEFAULT;
+        ALTER TABLE lessons ALTER COLUMN trim_end DROP DEFAULT;
         ALTER TABLE lessons ADD COLUMN IF NOT EXISTS prevent_skipping BOOLEAN DEFAULT FALSE;
         ALTER TABLE lessons ADD COLUMN IF NOT EXISTS thumbnail_url TEXT;
         ALTER TABLE lessons ADD COLUMN IF NOT EXISTS teacher_id VARCHAR(128);
@@ -227,9 +230,9 @@ export async function initDatabase(initialLessons: Lesson[]) {
             l.level,
             l.mediaType,
             l.mediaUrl,
-            l.duration,
-            l.trimStart || 0,
-            l.trimEnd || l.duration,
+            l.duration || 0,
+            l.trimStart && l.trimStart > 0 ? l.trimStart : null,
+            l.trimEnd && l.trimEnd > 0 ? l.trimEnd : null,
             l.preventSkipping || false,
             l.thumbnailUrl || null,
             l.teacherId || 'teacher-chuck',
@@ -515,9 +518,9 @@ function rowToLesson(row: any): Lesson {
     level: row.level,
     mediaType: row.media_type,
     mediaUrl: row.media_url,
-    duration: Number(row.duration) || 180,
-    trimStart: Number(row.trim_start) || 0,
-    trimEnd: Number(row.trim_end) || Number(row.duration) || 180,
+    duration: row.duration !== null && row.duration !== undefined && Number(row.duration) > 0 ? Number(row.duration) : 0,
+    trimStart: row.trim_start !== null && row.trim_start !== undefined && Number(row.trim_start) > 0 ? Number(row.trim_start) : undefined,
+    trimEnd: row.trim_end !== null && row.trim_end !== undefined && Number(row.trim_end) > 0 ? Number(row.trim_end) : undefined,
     preventSkipping: !!row.prevent_skipping,
     thumbnailUrl: row.thumbnail_url || undefined,
     teacherId: row.teacher_id,
@@ -566,6 +569,22 @@ export async function getLessonById(id: string): Promise<Lesson | null> {
 }
 
 export async function saveLesson(lesson: Lesson): Promise<Lesson> {
+  const normalizedDuration =
+    typeof lesson.duration === 'number' && lesson.duration > 0 ? lesson.duration : 0;
+  const normalizedTrimStart =
+    typeof lesson.trimStart === 'number' && lesson.trimStart > 0 ? lesson.trimStart : undefined;
+  const normalizedTrimEnd =
+    typeof lesson.trimEnd === 'number' && lesson.trimEnd > (normalizedTrimStart || 0)
+      ? lesson.trimEnd
+      : undefined;
+
+  const normalizedLesson: Lesson = {
+    ...lesson,
+    duration: normalizedDuration,
+    trimStart: normalizedTrimStart,
+    trimEnd: normalizedTrimEnd,
+  };
+
   if (isPostgresActive && pool) {
     try {
       await pool.query(`
@@ -596,41 +615,41 @@ export async function saveLesson(lesson: Lesson): Promise<Lesson> {
           difficult_words = EXCLUDED.difficult_words,
           updated_at = CURRENT_TIMESTAMP;
       `, [
-        lesson.id,
-        lesson.title,
-        lesson.description || '',
-        lesson.backgroundInfoText || '',
-        lesson.backgroundInfoImageUrl || null,
-        lesson.level,
-        lesson.mediaType,
-        lesson.mediaUrl,
-        lesson.duration,
-        lesson.trimStart || 0,
-        lesson.trimEnd || lesson.duration,
-        lesson.preventSkipping || false,
-        lesson.thumbnailUrl || null,
-        lesson.teacherId || 'teacher-chuck',
-        lesson.teacherName || 'Chuck',
-        lesson.isPublished !== false,
-        JSON.stringify(lesson.captions || []),
-        JSON.stringify(lesson.questions || []),
-        JSON.stringify(lesson.difficultWords || []),
+        normalizedLesson.id,
+        normalizedLesson.title,
+        normalizedLesson.description || '',
+        normalizedLesson.backgroundInfoText || '',
+        normalizedLesson.backgroundInfoImageUrl || null,
+        normalizedLesson.level,
+        normalizedLesson.mediaType,
+        normalizedLesson.mediaUrl,
+        normalizedLesson.duration,
+        normalizedTrimStart ?? null,
+        normalizedTrimEnd ?? null,
+        normalizedLesson.preventSkipping || false,
+        normalizedLesson.thumbnailUrl || null,
+        normalizedLesson.teacherId || 'teacher-chuck',
+        normalizedLesson.teacherName || 'Chuck',
+        normalizedLesson.isPublished !== false,
+        JSON.stringify(normalizedLesson.captions || []),
+        JSON.stringify(normalizedLesson.questions || []),
+        JSON.stringify(normalizedLesson.difficultWords || []),
       ]);
-      return lesson;
+      return normalizedLesson;
     } catch (e) {
       console.error('[DB] Error saving lesson to PostgreSQL:', e);
     }
   }
 
   // Fallback
-  const idx = memoryLessons.findIndex((l) => l.id === lesson.id);
+  const idx = memoryLessons.findIndex((l) => l.id === normalizedLesson.id);
   if (idx >= 0) {
-    memoryLessons[idx] = lesson;
+    memoryLessons[idx] = normalizedLesson;
   } else {
-    memoryLessons.unshift(lesson);
+    memoryLessons.unshift(normalizedLesson);
   }
   writeJsonSafe(LESSONS_FILE, memoryLessons);
-  return lesson;
+  return normalizedLesson;
 }
 
 export async function deleteLesson(id: string): Promise<boolean> {
