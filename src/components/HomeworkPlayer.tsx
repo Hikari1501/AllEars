@@ -30,13 +30,14 @@ export const HomeworkPlayer: React.FC<HomeworkPlayerProps> = ({
   >(undefined);
   const [showCaptions, setShowCaptions] = useState(true);
   const [autoPauseAtQuestions, setAutoPauseAtQuestions] = useState(true);
+  const [detectedDuration, setDetectedDuration] = useState<number>(0);
 
   const answeredQuestionIds = new Set(Object.keys(answers));
 
   const effectiveEnd =
     lesson.trimEnd && lesson.trimEnd > (lesson.trimStart || 0)
       ? lesson.trimEnd
-      : lesson.duration || 180;
+      : detectedDuration || lesson.duration || 0;
 
   const handleRewind = (seconds: number) => {
     const target = Math.max(lesson.trimStart || 0, currentTime - seconds);
@@ -53,8 +54,9 @@ export const HomeworkPlayer: React.FC<HomeworkPlayerProps> = ({
 
   const handleTimeUpdate = (time: number) => {
     setCurrentTime(time);
-    // Check if finished (within 1.5 seconds of trimmed duration)
+    // Check if finished (within 1.5 seconds of effective duration)
     if (
+      effectiveEnd > 0 &&
       time >= effectiveEnd - 1.5 &&
       lesson.questions.length > 0 &&
       answeredQuestionIds.size === lesson.questions.length &&
@@ -207,6 +209,7 @@ export const HomeworkPlayer: React.FC<HomeworkPlayerProps> = ({
             autoPauseAtCheckpoints={autoPauseAtQuestions}
             onTimeUpdate={handleTimeUpdate}
             onQuestionTrigger={handleQuestionTrigger}
+            onDurationDetected={setDetectedDuration}
           />
 
           <InteractiveCaptions

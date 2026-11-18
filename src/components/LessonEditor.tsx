@@ -78,17 +78,23 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
   const [mediaUrl, setMediaUrl] = useState(
     initialLesson?.mediaUrl || 'https://www.youtube.com/watch?v=f99P4eWbC9w'
   );
-  const [duration, setDuration] = useState<number>(initialLesson?.duration || 180);
-  const [trimStart, setTrimStart] = useState<number>(initialLesson?.trimStart || 0);
-  const [trimEnd, setTrimEnd] = useState<number>(initialLesson?.trimEnd || initialLesson?.duration || 180);
+  const [duration, setDuration] = useState<number>(initialLesson?.duration || 0);
+  const [trimStart, setTrimStart] = useState<number>(
+    initialLesson?.trimStart && initialLesson.trimStart > 0 ? initialLesson.trimStart : 0
+  );
+  const [trimEnd, setTrimEnd] = useState<number | undefined>(
+    initialLesson?.trimEnd && initialLesson.trimEnd > 0 ? initialLesson.trimEnd : undefined
+  );
   const [trimStartStr, setTrimStartStr] = useState<string>(() => {
-    const s = initialLesson?.trimStart || 0;
+    const s = initialLesson?.trimStart;
+    if (!s || s <= 0) return '';
     const m = Math.floor(s / 60);
     const sec = Math.floor(s % 60);
     return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
   });
   const [trimEndStr, setTrimEndStr] = useState<string>(() => {
-    const s = initialLesson?.trimEnd || initialLesson?.duration || 180;
+    const s = initialLesson?.trimEnd;
+    if (!s || s <= 0) return '';
     const m = Math.floor(s / 60);
     const sec = Math.floor(s % 60);
     return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
@@ -993,9 +999,9 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
       level,
       mediaType,
       mediaUrl,
-      duration: Number(duration) || 180,
-      trimStart: Number(trimStart) || 0,
-      trimEnd: Number(trimEnd) || Number(duration) || 180,
+      duration: Number(duration) || 0,
+      trimStart: trimStart > 0 ? Number(trimStart) : undefined,
+      trimEnd: trimEnd !== undefined && trimEnd > (trimStart || 0) ? Number(trimEnd) : undefined,
       preventSkipping,
       thumbnailUrl:
         initialLesson?.thumbnailUrl && !initialLesson.thumbnailUrl.startsWith('/src/assets/images/')
@@ -1028,9 +1034,9 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
       level,
       mediaType,
       mediaUrl,
-      duration: Number(duration) || 180,
-      trimStart: Number(trimStart) || 0,
-      trimEnd: Number(trimEnd) || Number(duration) || 180,
+      duration: Number(duration) || 0,
+      trimStart: trimStart > 0 ? Number(trimStart) : undefined,
+      trimEnd: trimEnd !== undefined && trimEnd > (trimStart || 0) ? Number(trimEnd) : undefined,
       preventSkipping,
       thumbnailUrl:
         initialLesson?.thumbnailUrl && !initialLesson.thumbnailUrl.startsWith('/src/assets/images/')
@@ -1207,7 +1213,11 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                 <span>Video Preview Player</span>
               </div>
               <span className="text-[11px] font-mono text-slate-500">
-                Trim: {formatSec(trimStart)} - {formatSec(trimEnd)}
+                {trimStart > 0 || (trimEnd !== undefined && trimEnd > trimStart)
+                  ? `Trim: ${formatSec(trimStart)} - ${
+                      trimEnd !== undefined && trimEnd > trimStart ? formatSec(trimEnd) : 'End'
+                    }`
+                  : 'Original Full Length'}
               </span>
             </div>
 
@@ -1215,67 +1225,118 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
             <div className="aspect-video bg-black rounded-xl overflow-hidden border border-slate-800 relative">
               {mediaType === 'youtube' && previewYtId ? (
                 <iframe
-                  src={`https://www.youtube.com/embed/${previewYtId}?enablejsapi=1&origin=${window.location.origin}&start=${trimStart}&end=${trimEnd}`}
+                  src={`https://www.youtube.com/embed/${previewYtId}?enablejsapi=1&origin=${window.location.origin}${
+                    trimStart > 0 ? `&start=${Math.floor(trimStart)}` : ''
+                  }${trimEnd !== undefined && trimEnd > trimStart ? `&end=${Math.floor(trimEnd)}` : ''}`}
                   className="w-full h-full border-0"
                   title="YouTube Preview"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen
                 />
               ) : mediaType === 'video' ? (
-                <video src={mediaUrl} controls className="w-full h-full object-contain" />
+                <video
+                  src={mediaUrl}
+                  controls
+                  onLoadedMetadata={(e) => {
+                    const d = Math.floor(e.currentTarget.duration);
+                    if (isFinite(d) && d > 0 && duration === 0) setDuration(d);
+                  }}
+                  className="w-full h-full object-contain"
+                />
               ) : (
                 <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 p-6 bg-slate-950">
                   <Music className="w-10 h-10 mb-2 text-amber-500" />
                   <span className="text-xs">Audio track loaded</span>
-                  <audio src={mediaUrl} controls className="mt-3 w-full" />
+                  <audio
+                    src={mediaUrl}
+                    controls
+                    onLoadedMetadata={(e) => {
+                      const d = Math.floor(e.currentTarget.duration);
+                      if (isFinite(d) && d > 0 && duration === 0) setDuration(d);
+                    }}
+                    className="mt-3 w-full"
+                  />
                 </div>
               )}
             </div>
 
             {/* Interactive Trimming Control Bar */}
             <div className="p-3.5 bg-amber-50/60 border border-amber-200 rounded-xl space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
                 <span className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
                   <Scissors className="w-3.5 h-3.5 text-amber-700" />
-                  <span>Playback Trimming Range</span>
+                  <span>Playback Trimming Range (Optional)</span>
                 </span>
-                <span className="text-xs font-mono font-bold text-amber-800">
-                  {formatSec(trimEnd - trimStart)} Total Listening
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono font-bold text-amber-800">
+                    {trimEnd !== undefined && trimEnd > trimStart
+                      ? `${formatSec(trimEnd - trimStart)} Trimmed`
+                      : trimStart > 0
+                      ? `From ${formatSec(trimStart)} to End`
+                      : 'Full Video'}
+                  </span>
+                  {(trimStart > 0 || trimEnd !== undefined) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTrimStart(0);
+                        setTrimStartStr('');
+                        setTrimEnd(undefined);
+                        setTrimEndStr('');
+                      }}
+                      className="text-[10px] font-bold text-amber-900 hover:text-rose-700 underline cursor-pointer"
+                    >
+                      Clear Trim
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="text-slate-600 font-medium">Start Trim (mm:ss or sec)</label>
-                    <span className="text-[10px] font-mono text-amber-900 font-bold">{formatSec(trimStart)}</span>
+                    <label className="text-slate-600 font-medium">Start Trim (optional)</label>
+                    <span className="text-[10px] font-mono text-amber-900 font-bold">
+                      {trimStart > 0 ? formatSec(trimStart) : '00:00'}
+                    </span>
                   </div>
                   <input
                     type="text"
                     value={trimStartStr}
                     onChange={(e) => {
-                      setTrimStartStr(e.target.value);
-                      const parsed = parseTimeToSeconds(e.target.value);
-                      setTrimStart(parsed);
+                      const val = e.target.value;
+                      setTrimStartStr(val);
+                      if (!val.trim()) {
+                        setTrimStart(0);
+                      } else {
+                        setTrimStart(parseTimeToSeconds(val));
+                      }
                     }}
-                    placeholder="00:00"
+                    placeholder="00:00 (optional)"
                     className="w-full p-2 bg-white border border-amber-300 rounded-lg font-mono text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"
                   />
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="text-slate-600 font-medium">End Trim (mm:ss or sec)</label>
-                    <span className="text-[10px] font-mono text-amber-900 font-bold">{formatSec(trimEnd)}</span>
+                    <label className="text-slate-600 font-medium">End Trim (optional)</label>
+                    <span className="text-[10px] font-mono text-amber-900 font-bold">
+                      {trimEnd !== undefined && trimEnd > 0 ? formatSec(trimEnd) : 'Original End'}
+                    </span>
                   </div>
                   <input
                     type="text"
                     value={trimEndStr}
                     onChange={(e) => {
-                      setTrimEndStr(e.target.value);
-                      const parsed = parseTimeToSeconds(e.target.value);
-                      setTrimEnd(parsed || duration);
+                      const val = e.target.value;
+                      setTrimEndStr(val);
+                      if (!val.trim()) {
+                        setTrimEnd(undefined);
+                      } else {
+                        const parsed = parseTimeToSeconds(val);
+                        setTrimEnd(parsed > 0 ? parsed : undefined);
+                      }
                     }}
-                    placeholder="03:00"
+                    placeholder="Full length"
                     className="w-full p-2 bg-white border border-amber-300 rounded-lg font-mono text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"
                   />
                 </div>
@@ -1387,11 +1448,16 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-700">Total Video Duration (seconds)</label>
+                  <label className="text-xs font-semibold text-slate-700">Total Video Duration (seconds, optional)</label>
                   <input
                     type="number"
-                    value={duration}
-                    onChange={(e) => setDuration(parseInt(e.target.value) || 180)}
+                    min={0}
+                    value={duration > 0 ? duration : ''}
+                    onChange={(e) => {
+                      const parsed = parseInt(e.target.value, 10);
+                      setDuration(!isNaN(parsed) && parsed > 0 ? parsed : 0);
+                    }}
+                    placeholder="Auto (original video length)"
                     className="w-full p-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl"
                   />
                 </div>

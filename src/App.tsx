@@ -1001,9 +1001,18 @@ export default function App() {
                           </div>
                         )}
 
-                        <div className="absolute bottom-2.5 right-2.5 px-2 py-0.5 rounded-md bg-slate-950/80 text-[11px] font-mono text-white">
-                          {Math.floor((lesson.trimEnd || lesson.duration) / 60)}:{((lesson.trimEnd || lesson.duration) % 60).toString().padStart(2, '0')}
-                        </div>
+                        {(() => {
+                          const displayDur =
+                            lesson.trimEnd && lesson.trimEnd > (lesson.trimStart || 0)
+                              ? lesson.trimEnd - (lesson.trimStart || 0)
+                              : lesson.duration || 0;
+                          if (displayDur <= 0) return null;
+                          return (
+                            <div className="absolute bottom-2.5 right-2.5 px-2 py-0.5 rounded-md bg-slate-950/80 text-[11px] font-mono text-white">
+                              {Math.floor(displayDur / 60)}:{Math.floor(displayDur % 60).toString().padStart(2, '0')}
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       {/* Content Area */}

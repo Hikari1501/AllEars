@@ -91,12 +91,12 @@ export const ImportLessonModal: React.FC<ImportLessonModalProps> = ({
           : 'B1') as CEFRLevel,
         mediaType: data.mediaType || (ytId ? 'youtube' : 'audio'),
         mediaUrl: data.mediaUrl.trim(),
-        duration: Number(data.duration) || 180,
-        trimStart: typeof data.trimStart === 'number' ? data.trimStart : 0,
+        duration: Number(data.duration) || 0,
+        trimStart: typeof data.trimStart === 'number' && data.trimStart > 0 ? data.trimStart : undefined,
         trimEnd:
-          typeof data.trimEnd === 'number'
+          typeof data.trimEnd === 'number' && data.trimEnd > 0
             ? data.trimEnd
-            : Number(data.duration) || 180,
+            : undefined,
         preventSkipping: !!data.preventSkipping,
         thumbnailUrl: thumb,
         teacherId: data.teacherId || 'teacher-import',

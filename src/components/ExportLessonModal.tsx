@@ -119,7 +119,15 @@ export const ExportLessonModal: React.FC<ExportLessonModalProps> = ({
               <span aria-hidden="true">·</span>
               <span className="flex items-center gap-1">
                 <Clock className="w-3.5 h-3.5 text-amber-600" />
-                {Math.floor((lesson.trimEnd || lesson.duration) / 60)}:{((lesson.trimEnd || lesson.duration) % 60).toString().padStart(2, '0')}
+                {(() => {
+                  const dur =
+                    lesson.trimEnd && lesson.trimEnd > (lesson.trimStart || 0)
+                      ? lesson.trimEnd - (lesson.trimStart || 0)
+                      : lesson.duration || 0;
+                  return dur > 0
+                    ? `${Math.floor(dur / 60)}:${Math.floor(dur % 60).toString().padStart(2, '0')}`
+                    : 'Original length';
+                })()}
               </span>
             </div>
           </div>

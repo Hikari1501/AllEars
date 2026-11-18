@@ -40,6 +40,7 @@ interface UnifiedPlayerProps {
   autoPauseAtCheckpoints?: boolean;
   onToggleCaptions?: () => void;
   onWordClick?: (vocab: VocabEntry) => void;
+  onDurationDetected?: (duration: number) => void;
 }
 
 export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
@@ -66,9 +67,11 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
   showCaptions = true,
   onToggleCaptions,
   onWordClick,
+  onDurationDetected,
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(trimStart);
+  const [currentTime, setCurrentTime] = useState(trimStart || 0);
+  const [mediaDuration, setMediaDuration] = useState<number>(0);
   const [inVideoCaptions, setInVideoCaptions] = useState(showCaptions);
   const [ytCaptionsEnabled, setYtCaptionsEnabled] = useState(false);
   const [showCaptionMenu, setShowCaptionMenu] = useState(false);
@@ -120,9 +123,30 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
   const ytContainerId = useRef(`yt-player-${Math.random().toString(36).substring(2, 9)}`);
   const triggeredQuestionIds = useRef<Set<string>>(new Set());
 
-  const effectiveEnd = trimEnd && trimEnd > trimStart ? trimEnd : duration || 180;
-  const effectiveStart = trimStart || 0;
-  const effectiveDuration = Math.max(1, effectiveEnd - effectiveStart);
+  const effectiveStart = trimStart && trimStart > 0 ? trimStart : 0;
+  const hasExplicitTrimEnd = typeof trimEnd === 'number' && trimEnd > effectiveStart;
+  const hasExplicitTrim = effectiveStart > 0 || hasExplicitTrimEnd;
+  const explicitTrimEnd = hasExplicitTrimEnd ? (trimEnd as number) : undefined;
+  const resolvedMediaDuration = mediaDuration > 0 ? mediaDuration : (duration > 0 ? duration : 0);
+  const effectiveEnd = hasExplicitTrimEnd ? (trimEnd as number) : resolvedMediaDuration;
+  const effectiveDuration =
+    effectiveEnd > effectiveStart ? effectiveEnd - effectiveStart : Math.max(1, currentTime - effectiveStart + 1);
+
+  // Reset detected duration when source changes
+  useEffect(() => {
+    setMediaDuration(0);
+  }, [mediaUrl, mediaType]);
+
+  const reportDetectedDuration = useCallback(
+    (d: number) => {
+      if (isFinite(d) && d > 0) {
+        const rounded = Math.floor(d);
+        setMediaDuration((prev) => (prev !== rounded ? rounded : prev));
+        if (onDurationDetected) onDurationDetected(rounded);
+      }
+    },
+    [onDurationDetected]
+  );
 
   // Speed steps requested: 0.5x, 0.75x, 1.0x, 1.25x, 1.5x
   const speedOptions = [0.5, 0.75, 1.0, 1.25, 1.5];
@@ -145,27 +169,39 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
     const initYouTube = () => {
       if ((window as any).YT && (window as any).YT.Player) {
         try {
+          const playerVars: Record<string, any> = {
+            controls: 0,
+            disablekb: 1,
+            modestbranding: 1,
+            rel: 0,
+            playsinline: 1,
+            enablejsapi: 1,
+          };
+          if (effectiveStart > 0) {
+            playerVars.start = Math.floor(effectiveStart);
+          }
+          if (explicitTrimEnd !== undefined) {
+            playerVars.end = Math.floor(explicitTrimEnd);
+          }
+
           ytPlayerRef.current = new (window as any).YT.Player(ytContainerId.current, {
             videoId: youtubeId,
-            playerVars: {
-              controls: 0,
-              disablekb: 1,
-              modestbranding: 1,
-              rel: 0,
-              playsinline: 1,
-              enablejsapi: 1,
-              start: effectiveStart,
-              end: effectiveEnd,
-            },
+            playerVars,
             events: {
               onReady: (event: any) => {
                 event.target.setPlaybackRate(playbackSpeed);
                 event.target.setVolume(volume * 100);
+                if (typeof event.target.getDuration === 'function') {
+                  reportDetectedDuration(event.target.getDuration());
+                }
                 if (effectiveStart > 0) {
                   event.target.seekTo(effectiveStart, true);
                 }
               },
               onStateChange: (event: any) => {
+                if (typeof event.target?.getDuration === 'function') {
+                  reportDetectedDuration(event.target.getDuration());
+                }
                 if (event.data === 1) {
                   setIsPlaying(true);
                 } else if (event.data === 2 || event.data === 0) {
@@ -209,7 +245,7 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
         } catch (e) {}
       }
     };
-  }, [mediaType, youtubeId, useFallbackPlayer, effectiveStart, effectiveEnd]);
+  }, [mediaType, youtubeId, useFallbackPlayer, effectiveStart, explicitTrimEnd]);
 
   // Main time-tracking & trimming loop
   useEffect(() => {
@@ -219,6 +255,9 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
       if (!useFallbackPlayer && mediaType === 'youtube' && ytPlayerRef.current && ytPlayerRef.current.getCurrentTime) {
         try {
           t = ytPlayerRef.current.getCurrentTime() || 0;
+          if (mediaDuration === 0 && typeof ytPlayerRef.current.getDuration === 'function') {
+            reportDetectedDuration(ytPlayerRef.current.getDuration());
+          }
         } catch (e) {}
       } else if (mediaType === 'video' || useFallbackPlayer) {
         if (videoRef.current) t = videoRef.current.currentTime;
@@ -226,12 +265,12 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
         if (audioRef.current) t = audioRef.current.currentTime;
       }
 
-      // Enforce trimming boundaries
+      // Enforce trimming boundaries only when explicitly set by teacher
       if (effectiveStart > 0 && t < effectiveStart - 0.75) {
         seekTo(effectiveStart);
         return;
       }
-      if (effectiveEnd > 0 && t >= effectiveEnd) {
+      if (hasExplicitTrimEnd && effectiveEnd > 0 && t >= effectiveEnd) {
         handlePause();
         seekTo(effectiveEnd);
         return;
@@ -263,7 +302,7 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
     }, 250);
 
     return () => clearInterval(timer);
-  }, [currentTime, maxWatchedTime, questions, answeredQuestionIds, mediaType, useFallbackPlayer, effectiveStart, effectiveEnd, autoPauseAtCheckpoints]);
+  }, [currentTime, maxWatchedTime, questions, answeredQuestionIds, mediaType, useFallbackPlayer, effectiveStart, effectiveEnd, hasExplicitTrimEnd, mediaDuration, autoPauseAtCheckpoints]);
 
   // External sync controls for live classroom
   useEffect(() => {
@@ -287,7 +326,10 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
   }, [isControlledExternally, externalCurrentTime, externalIsPlaying, externalPlaybackSpeed]);
 
   const handlePlay = useCallback(() => {
-    if (currentTime < effectiveStart || (effectiveEnd > 0 && currentTime >= effectiveEnd)) {
+    if (
+      currentTime < effectiveStart ||
+      (hasExplicitTrimEnd && effectiveEnd > 0 && currentTime >= effectiveEnd)
+    ) {
       seekTo(effectiveStart);
     }
 
@@ -425,7 +467,10 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
   };
 
   const seekTo = (seconds: number, allowJump = false) => {
-    let target = Math.max(effectiveStart, Math.min(seconds, effectiveEnd));
+    let target =
+      effectiveEnd > effectiveStart
+        ? Math.max(effectiveStart, Math.min(seconds, effectiveEnd))
+        : Math.max(effectiveStart, seconds);
 
     // Enforce skip prevention if in student mode (unless explicitly jumping via teacher-provided tip timestamp)
     if (!allowJump && preventSkipping && isStudent && target > maxWatchedTime + 1) {
@@ -552,13 +597,21 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
             }
             className="w-full h-full object-contain"
             playsInline
+            onLoadedMetadata={(e) => reportDetectedDuration(e.currentTarget.duration)}
+            onEnded={() => setIsPlaying(false)}
             onClick={togglePlay}
           />
         )}
 
         {mediaType === 'audio' && (
           <div className="w-full h-full flex flex-col items-center justify-center p-8 bg-radial from-slate-900 to-slate-950">
-            <audio ref={audioRef} src={mediaUrl} preload="metadata" />
+            <audio
+              ref={audioRef}
+              src={mediaUrl}
+              preload="metadata"
+              onLoadedMetadata={(e) => reportDetectedDuration(e.currentTarget.duration)}
+              onEnded={() => setIsPlaying(false)}
+            />
             <div className="relative flex items-center justify-center w-24 h-24 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 mb-4 shadow-inner">
               <Music className={`w-10 h-10 ${isPlaying ? 'animate-bounce' : ''}`} />
               {isPlaying && (
@@ -733,8 +786,10 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
             <div className="font-mono text-slate-300 tabular-nums flex items-center gap-1">
               <span>{formatTime(currentTime)}</span>
               <span className="text-slate-500 mx-0.5">/</span>
-              <span className="text-slate-400">{formatTime(effectiveEnd)}</span>
-              {(effectiveStart > 0 || trimEnd) && (
+              <span className="text-slate-400">
+                {effectiveEnd > 0 ? formatTime(effectiveEnd) : '--:--'}
+              </span>
+              {hasExplicitTrim && (
                 <span className="text-[10px] text-amber-400/90 font-mono ml-1 px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700">
                   Trimmed
                 </span>
