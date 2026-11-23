@@ -3,6 +3,7 @@ import { Question, StudentAnswer } from '../types';
 import { MatchingPairsCanvas } from './MatchingPairsCanvas';
 import { DragAndDropCanvas } from './DragAndDropCanvas';
 import { playSuccessChime, playWrongAnswerSound } from '../utils/soundEffects';
+import { getQuestionFeedbackStatus } from '../utils/feedbackHelpers';
 import {
   CheckCircle2,
   XCircle,
@@ -179,33 +180,8 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
       earned = totalItems > 0 ? Math.round((correctCount / totalItems) * question.points) : 0;
     } else if (question.type === 'open_ended') {
       finalAnswer = textInput.trim();
-      setIsGradingAi(true);
-      try {
-        const response = await fetch('/api/ai/grade-open-ended', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            questionPrompt: question.prompt,
-            studentAnswer: finalAnswer,
-          }),
-        });
-        const data = await response.json();
-        if (data.success && data.result) {
-          earned = 0; // Open-ended questions do not award points
-          correct = data.result.isPassing;
-          setAiFeedback(data.result.feedback);
-        } else {
-          earned = 0;
-          correct = true;
-          setAiFeedback('Thoughtful response! You captured the essential listening cues.');
-        }
-      } catch (err) {
-        earned = 0;
-        correct = true;
-        setAiFeedback('Good job expressing your thoughts clearly based on the audio.');
-      } finally {
-        setIsGradingAi(false);
-      }
+      earned = 0; // Open-ended questions do not award points
+      correct = true;
     }
 
     // Play sound on students' device: chime for all correct, gentle cue for wrong answer
@@ -232,7 +208,6 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
       answer: finalAnswer,
       isCorrect: correct,
       pointsEarned: earned,
-      aiFeedback: aiFeedback || undefined,
       submittedAt: Date.now(),
     };
 
@@ -480,6 +455,10 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
                   } else {
                     stateClass = 'opacity-50 border-slate-200 text-slate-500';
                   }
+                } else if (canShowFeedback && isMultiSelect && isSelected) {
+                  stateClass = isCorrect
+                    ? 'border-emerald-500 bg-emerald-50 text-emerald-950 font-medium'
+                    : 'border-rose-400 bg-rose-50 text-rose-950';
                 } else if (canShowFeedback && isSelected && !isAnswerCorrect) {
                   stateClass = 'border-rose-400 bg-rose-50 text-rose-950';
                 }
@@ -500,7 +479,7 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
                       )}
                     </span>
                     <span className="text-sm leading-relaxed flex-1">{option.text}</span>
-                    {canShowKey && isCorrect && (
+                    {(canShowKey || (canShowFeedback && isMultiSelect && isSelected)) && isCorrect && (
                       <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
                     )}
                     {(canShowKey || (canShowFeedback && !isAnswerCorrect)) && isSelected && !isCorrect && (
@@ -551,7 +530,7 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
                   })
                 }
                 disabled={hasSubmitted}
-                isFeedbackVisible={canShowKey}
+                isFeedbackVisible={canShowFeedback}
               />
             </div>
           )}
@@ -567,7 +546,8 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
                 onSubmit={() => handleSubmit()}
                 disabled={hasSubmitted}
                 isAnswered={hasSubmitted}
-                isFeedbackVisible={canShowKey}
+                isFeedbackVisible={canShowFeedback}
+                canShowKey={canShowKey}
                 pointsEarned={pointsEarned}
                 totalPoints={question.points}
               />
@@ -588,64 +568,119 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
                 placeholder="Explain in your own words..."
                 className="w-full p-3 text-sm border-2 border-slate-300 rounded-xl focus:outline-hidden focus:border-amber-500 focus:ring-1 focus:ring-amber-500 leading-relaxed"
               />
-
-              {isGradingAi && (
-                <div className="flex items-center gap-2 text-xs text-amber-700 animate-pulse bg-amber-50 p-2.5 rounded-lg border border-amber-200">
-                  <Sparkles className="w-4 h-4 text-amber-600" />
-                  <span>Evaluating your listening comprehension and language with AI feedback...</span>
-                </div>
-              )}
-
-              {canShowFeedback && aiFeedback && (
-                <div className="p-4 rounded-xl bg-amber-50/80 border border-amber-200 text-sm space-y-1.5">
-                  <div className="flex items-center gap-2 font-bold text-amber-900 text-xs uppercase tracking-wider">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                    <span>Teacher / AI Formative Feedback</span>
-                  </div>
-                  <p className="text-slate-800 leading-relaxed">{aiFeedback}</p>
-                </div>
-              )}
             </div>
           )}
 
           {/* Directional Explanation & Answer Status once submitted */}
-          {canShowFeedback && (
-            <div
-              className={`p-3.5 rounded-xl border text-xs space-y-2 ${
-                isAnswerCorrect
-                  ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
-                  : 'bg-amber-50/90 border-amber-300 text-amber-950'
-              }`}
-            >
-              <div className="flex items-center justify-between gap-2 font-bold">
-                <div className="flex items-center gap-1.5 text-sm">
-                  {isAnswerCorrect ? (
-                    <>
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 stroke-[2.5]" />
-                      <span className="text-emerald-900 font-extrabold">Correct Answer!</span>
-                    </>
-                  ) : (
-                    <>
-                      <XCircle className="w-4 h-4 text-rose-600 stroke-[2.5]" />
-                      <span className="text-rose-900 font-extrabold">Needs Review</span>
-                    </>
-                  )}
+          {canShowFeedback && (() => {
+            const currentAnswerPayload =
+              question.type === 'multiple_choice'
+                ? isMultiSelect
+                  ? Array.from(selectedOptions)
+                  : selectedOption
+                : question.type === 'true_false'
+                ? selectedOption
+                : question.type === 'matching'
+                ? matchingSelections
+                : question.type === 'drag_and_drop'
+                ? dragDropPlacements
+                : textInput.trim();
+
+            const feedbackStatus = getQuestionFeedbackStatus(question, {
+              answer: currentAnswerPayload,
+              isCorrect: isAnswerCorrect,
+            });
+            const closeEndedAnalysis = feedbackStatus.closeEndedAnalysis;
+
+            const hasSpecificExp =
+              question.explanationCorrect !== undefined ||
+              question.explanationIncorrect !== undefined;
+            const directionalExplanation = isAnswerCorrect
+              ? (question.explanationCorrect || (!hasSpecificExp ? question.explanation : ''))
+              : (question.explanationIncorrect || (!hasSpecificExp ? question.explanation : ''));
+
+            const bannerStyle =
+              feedbackStatus.statusLevel === 'correct'
+                ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
+                : feedbackStatus.statusLevel === 'almost'
+                ? 'bg-sky-50/90 border-sky-300 text-sky-950'
+                : 'bg-amber-50/90 border-amber-300 text-amber-950';
+
+            return (
+              <div className={`p-3.5 rounded-xl border text-xs space-y-2 ${bannerStyle}`}>
+                <div className="flex items-center justify-between gap-2 font-bold">
+                  <div className="flex items-center gap-1.5 text-sm">
+                    {feedbackStatus.statusLevel === 'correct' ? (
+                      <>
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 stroke-[2.5]" />
+                        <span className="text-emerald-900 font-extrabold">
+                          {feedbackStatus.statusLabel}
+                        </span>
+                      </>
+                    ) : feedbackStatus.statusLevel === 'almost' ? (
+                      <>
+                        <Sparkles className="w-4 h-4 text-sky-600 stroke-[2.5]" />
+                        <span className="text-sky-900 font-extrabold">
+                          {feedbackStatus.statusLabel}
+                        </span>
+                      </>
+                    ) : feedbackStatus.statusLevel === 'keep_going' ? (
+                      <>
+                        <Sparkles className="w-4 h-4 text-amber-600 stroke-[2.5]" />
+                        <span className="text-amber-900 font-extrabold">
+                          {feedbackStatus.statusLabel}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <XCircle className="w-4 h-4 text-rose-600 stroke-[2.5]" />
+                        <span className="text-rose-900 font-extrabold">
+                          {feedbackStatus.statusLabel}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                  <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-white/80 border border-slate-200 text-slate-800">
+                    +{pointsEarned} pts
+                  </span>
                 </div>
-                <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-white/80 border border-slate-200 text-slate-800">
-                  +{pointsEarned} pts
-                </span>
-              </div>
 
-              {(() => {
-                const hasSpecificExp =
-                  question.explanationCorrect !== undefined ||
-                  question.explanationIncorrect !== undefined;
-                const directionalExplanation = isAnswerCorrect
-                  ? (question.explanationCorrect || (!hasSpecificExp ? question.explanation : ''))
-                  : (question.explanationIncorrect || (!hasSpecificExp ? question.explanation : ''));
-                if (!directionalExplanation || !directionalExplanation.trim()) return null;
+                {question.type === 'close_ended' &&
+                  closeEndedAnalysis &&
+                  !isAnswerCorrect &&
+                  closeEndedAnalysis.tokens.length > 0 && (
+                    <div className="pt-2 border-t border-black/5 space-y-1.5">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                        Word-by-Word Check
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5 p-2 rounded-lg bg-white/90 border border-slate-200/80">
+                        {closeEndedAnalysis.tokens.map((tok, tIdx) => (
+                          <span
+                            key={`modal-diff-${tIdx}`}
+                            className={`px-2 py-0.5 rounded-md font-mono text-xs font-bold border ${
+                              tok.status === 'correct'
+                                ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                                : tok.status === 'misplaced'
+                                ? 'bg-sky-100 text-sky-900 border-sky-300'
+                                : tok.status === 'missing'
+                                ? 'bg-amber-100 text-amber-900 border-amber-300'
+                                : 'bg-rose-100 text-rose-900 border-rose-300'
+                            }`}
+                          >
+                            {tok.text}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2.5 text-[10px] text-slate-600 font-medium">
+                        <span>Green: Correct</span>
+                        <span>· Red: Incorrect</span>
+                        <span>· Blue: Wrong location</span>
+                        <span>· *: Missing word</span>
+                      </div>
+                    </div>
+                  )}
 
-                return (
+                {directionalExplanation && directionalExplanation.trim() && (
                   <div className="pt-2 border-t border-black/5 space-y-1">
                     <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
                       Teacher Explanation
@@ -654,10 +689,10 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
                       {directionalExplanation}
                     </p>
                   </div>
-                );
-              })()}
-            </div>
-          )}
+                )}
+              </div>
+            );
+          })()}
 
           {/* Key Box displayed below the Correct / Needs Review box */}
           {canShowKey && question.type === 'close_ended' && (

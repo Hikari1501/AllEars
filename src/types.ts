@@ -212,3 +212,36 @@ export interface SessionReport {
   questionStats?: Record<string, SessionQuestionStat>;
 }
 
+export interface SavedVocabItem extends VocabEntry {
+  savedAt: number;
+  lessonId?: string;
+  lessonTitle?: string;
+}
+
+export interface AutoDictationQuestionResult {
+  questionId: string;
+  timestamp: number;
+  prompt: string;
+  correctAnswer: string;
+  studentAnswer: string;
+  isCorrect: boolean;
+  pointsEarned: number;
+  maxPoints: number;
+}
+
+export interface AutoDictationReport {
+  id: string;
+  lessonId: string;
+  lessonTitle: string;
+  studentId: string;
+  createdAt: number;
+  minWordsPerBlank: number;
+  maxWordsPerBlank: number;
+  totalQuestions: number;
+  answeredCount: number;
+  correctCount: number;
+  totalScore: number;
+  maxScore: number;
+  percentage: number;
+  results: AutoDictationQuestionResult[];
+}

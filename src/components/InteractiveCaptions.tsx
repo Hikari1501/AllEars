@@ -1,7 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CaptionSegment, VocabEntry } from '../types';
 import { VocabPopover } from './VocabPopover';
-import { Subtitles, AlignLeft, Search } from 'lucide-react';
+import { Subtitles, AlignLeft, Search, ChevronDown } from 'lucide-react';
+import {
+  getSavedVocabList,
+  toggleSaveVocabWord,
+  PERSONAL_VOCAB_EVENT,
+} from '../utils/personalVocab';
 
 interface InteractiveCaptionsProps {
   captions: CaptionSegment[];
@@ -12,6 +17,11 @@ interface InteractiveCaptionsProps {
   onWordClick?: (vocab: VocabEntry) => void;
   isTeacher?: boolean;
   onShowVocabToClass?: (vocab: VocabEntry) => void;
+  isCollapsed?: boolean;
+  onExpand?: () => void;
+  userId?: string;
+  lessonId?: string;
+  lessonTitle?: string;
 }
 
 export const InteractiveCaptions: React.FC<InteractiveCaptionsProps> = ({
@@ -23,10 +33,27 @@ export const InteractiveCaptions: React.FC<InteractiveCaptionsProps> = ({
   onWordClick,
   isTeacher = false,
   onShowVocabToClass,
+  isCollapsed = false,
+  onExpand,
+  userId,
+  lessonId,
+  lessonTitle,
 }) => {
   const [selectedVocab, setSelectedVocab] = useState<VocabEntry | null>(null);
   const [showFullTranscript, setShowFullTranscript] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [savedWordKeys, setSavedWordKeys] = useState<Set<string>>(() => {
+    return new Set(getSavedVocabList(userId).map((w) => w.word.trim().toLowerCase()));
+  });
+
+  useEffect(() => {
+    const syncSaved = () => {
+      setSavedWordKeys(new Set(getSavedVocabList(userId).map((w) => w.word.trim().toLowerCase())));
+    };
+    syncSaved();
+    window.addEventListener(PERSONAL_VOCAB_EVENT, syncSaved);
+    return () => window.removeEventListener(PERSONAL_VOCAB_EVENT, syncSaved);
+  }, [userId]);
 
   // Find the currently active caption line
   const activeCaption = captions.find(
@@ -101,27 +128,41 @@ export const InteractiveCaptions: React.FC<InteractiveCaptionsProps> = ({
       const matchedVocab = termLookup.get(matchedText.toLowerCase());
 
       if (matchedVocab) {
+        const viHover = matchedVocab.vietnameseTranslation?.trim();
         parts.push(
-          <button
+          <span
             key={`vocab-${matchIndex}-${matchedText}`}
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setSelectedVocab(matchedVocab);
-              if (onWordClick) {
-                onWordClick(matchedVocab);
-              }
-            }}
-            className={`inline-block px-1 py-0.5 mx-0.5 rounded cursor-pointer font-medium transition-all ${getVocabHighlightClass(
-              matchedVocab.cefrLevel
-            )}`}
-            title={`Click to view ${matchedVocab.cefrLevel} definition for "${matchedText}"`}
+            className="relative inline-block group/vocab mx-0.5"
           >
-            {matchedText}
-            <span className="ml-1 text-[9px] uppercase font-bold tracking-tight opacity-75">
-              {matchedVocab.cefrLevel}
-            </span>
-          </button>
+            {viHover && (
+              <span className="pointer-events-none opacity-0 group-hover/vocab:opacity-100 transition-opacity duration-100 absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2.5 py-1 rounded-lg bg-slate-950/95 text-emerald-300 border border-emerald-500/40 text-[11px] font-semibold whitespace-nowrap max-w-[240px] truncate shadow-xl z-30">
+                {viHover}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedVocab(matchedVocab);
+                if (onWordClick) {
+                  onWordClick(matchedVocab);
+                }
+              }}
+              className={`inline-block px-1 py-0.5 rounded cursor-pointer font-medium transition-all ${getVocabHighlightClass(
+                matchedVocab.cefrLevel
+              )}`}
+              title={
+                viHover
+                  ? undefined
+                  : `Click to view ${matchedVocab.cefrLevel} definition for "${matchedText}"`
+              }
+            >
+              {matchedText}
+              <span className="ml-1 text-[9px] uppercase font-bold tracking-tight opacity-75">
+                {matchedVocab.cefrLevel}
+              </span>
+            </button>
+          </span>
         );
       } else {
         parts.push(matchedText);
@@ -140,6 +181,30 @@ export const InteractiveCaptions: React.FC<InteractiveCaptionsProps> = ({
   const filteredCaptions = searchQuery.trim()
     ? captions.filter((c) => c.text.toLowerCase().includes(searchQuery.toLowerCase()))
     : captions;
+
+  if (isCollapsed) {
+    return (
+      <div className="w-full">
+        <div className="bg-slate-900 text-slate-300 rounded-xl px-4 py-3 shadow-xs border border-slate-800 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-xs">
+            <Subtitles className="w-4 h-4 text-slate-500" />
+            <span className="font-medium text-slate-300">Synchronized Captions</span>
+            <span className="text-[11px] text-slate-500">· Collapsed (Teacher CC is OFF)</span>
+          </div>
+          {onExpand && (
+            <button
+              type="button"
+              onClick={onExpand}
+              className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md bg-slate-800 hover:bg-slate-700 text-amber-400 font-semibold transition-colors cursor-pointer"
+            >
+              <ChevronDown className="w-3.5 h-3.5" />
+              <span>Turn Teacher CC ON</span>
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full space-y-3">
@@ -162,7 +227,7 @@ export const InteractiveCaptions: React.FC<InteractiveCaptionsProps> = ({
         </div>
 
         {/* Current Active Caption Display */}
-        <div className="min-h-[48px] flex items-center justify-center text-center">
+        <div className="min-h-[48px] flex items-center justify-center text-center pt-2">
           {activeCaption ? (
             <div className="text-base sm:text-lg font-medium leading-relaxed tracking-wide text-slate-100 max-w-2xl mx-auto">
               {activeCaption.speaker &&
@@ -231,7 +296,7 @@ export const InteractiveCaptions: React.FC<InteractiveCaptionsProps> = ({
             </div>
           </div>
 
-          <div className="max-h-60 overflow-y-auto space-y-2 pr-1 divide-y divide-slate-100">
+          <div className="max-h-60 overflow-y-auto space-y-2 pr-1 pt-5 divide-y divide-slate-100">
             {filteredCaptions.map((cap) => {
               const isActive = currentTime >= cap.start && currentTime <= cap.end;
               const formatTime = (sec: number) => {
@@ -282,6 +347,18 @@ export const InteractiveCaptions: React.FC<InteractiveCaptionsProps> = ({
           isTeacher={isTeacher}
           onShowToClass={
             onShowVocabToClass ? () => onShowVocabToClass(selectedVocab) : undefined
+          }
+          isSaved={savedWordKeys.has(selectedVocab.word.trim().toLowerCase())}
+          onToggleSave={
+            !isTeacher
+              ? () => {
+                  const res = toggleSaveVocabWord(userId, selectedVocab, {
+                    id: lessonId,
+                    title: lessonTitle,
+                  });
+                  setSavedWordKeys(new Set(res.list.map((w) => w.word.trim().toLowerCase())));
+                }
+              : undefined
           }
         />
       )}

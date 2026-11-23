@@ -21,6 +21,7 @@ interface DragAndDropCanvasProps {
   disabled?: boolean;
   isAnswered: boolean;
   isFeedbackVisible: boolean;
+  canShowKey?: boolean;
   pointsEarned?: number;
   totalPoints?: number;
 }
@@ -34,9 +35,11 @@ export const DragAndDropCanvas: React.FC<DragAndDropCanvasProps> = ({
   disabled = false,
   isAnswered,
   isFeedbackVisible,
+  canShowKey,
   pointsEarned = 0,
   totalPoints = 10,
 }) => {
+  const showAnswerKeyHints = canShowKey !== undefined ? canShowKey : isFeedbackVisible;
   // Currently dragged item text
   const [draggedItem, setDraggedItem] = useState<{ text: string; fromCatId: string | null } | null>(null);
   // Category currently hovered over during drag
@@ -176,6 +179,20 @@ export const DragAndDropCanvas: React.FC<DragAndDropCanvasProps> = ({
     });
     return map;
   }, [categories]);
+
+  const correctPlacedCount = useMemo(() => {
+    let count = 0;
+    categories.forEach((cat) => {
+      const placed = currentPlacements[cat.id] || [];
+      placed.forEach((itemText) => {
+        const expectedCat = itemToExpectedCategoryMap.get(itemText.trim().toLowerCase());
+        if (expectedCat?.id === cat.id) count++;
+      });
+    });
+    return count;
+  }, [categories, currentPlacements, itemToExpectedCategoryMap]);
+
+  const allItemsCorrect = totalItemCount > 0 && correctPlacedCount === totalItemCount;
 
   return (
     <div className="space-y-4">
@@ -342,31 +359,31 @@ export const DragAndDropCanvas: React.FC<DragAndDropCanvasProps> = ({
                           <span>{itemText}</span>
 
                           {/* Correct/Incorrect indicator on feedback */}
-                          {isFeedbackVisible ? (
+                          {isFeedbackVisible && (
                             isItemCorrect ? (
                               <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3] shrink-0" />
                             ) : (
                               <span className="inline-flex items-center gap-1 text-[10px] text-rose-700 font-bold">
                                 <X className="w-3.5 h-3.5 text-rose-600 stroke-[3] shrink-0" />
-                                {expectedCat && (
+                                {showAnswerKeyHints && expectedCat && (
                                   <span className="font-normal opacity-80">➔ {expectedCat.name}</span>
                                 )}
                               </span>
                             )
-                          ) : (
-                            !disabled && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  moveItem(itemText, null);
-                                }}
-                                className="text-slate-400 hover:text-rose-600 p-0.5 rounded transition-colors cursor-pointer"
-                                title="Remove and return to tray"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            )
+                          )}
+
+                          {!disabled && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                moveItem(itemText, null);
+                              }}
+                              className="text-slate-400 hover:text-rose-600 p-0.5 rounded transition-colors cursor-pointer"
+                              title="Remove and return to tray"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
                           )}
                         </div>
                       );
@@ -392,8 +409,8 @@ export const DragAndDropCanvas: React.FC<DragAndDropCanvasProps> = ({
         </div>
       </div>
 
-      {/* 3. SUBMIT ACTION & FEEDBACK REPORT */}
-      {!isFeedbackVisible && (!isAnswered || !disabled) && (
+      {/* 3. SUBMIT ACTION */}
+      {(!isAnswered || !disabled) && (
         <div className="flex items-center justify-between gap-3 pt-2">
           <div className="text-xs text-slate-500">
             {placedItemCount < totalItemCount ? (
@@ -421,19 +438,42 @@ export const DragAndDropCanvas: React.FC<DragAndDropCanvasProps> = ({
 
       {/* 4. FEEDBACK SUMMARY CARD */}
       {isFeedbackVisible && (
-        <div className="p-3.5 rounded-xl bg-emerald-50 border-2 border-emerald-400 text-xs text-emerald-950 space-y-2 shadow-2xs">
+        <div
+          className={`p-3.5 rounded-xl border-2 text-xs space-y-2 shadow-2xs ${
+            allItemsCorrect
+              ? 'bg-emerald-50 border-emerald-400 text-emerald-950'
+              : 'bg-amber-50 border-amber-300 text-amber-950'
+          }`}
+        >
           <div className="flex items-center justify-between">
-            <div className="font-bold flex items-center gap-1.5 text-emerald-900">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>Categorization Results</span>
+            <div
+              className={`font-bold flex items-center gap-1.5 ${
+                allItemsCorrect ? 'text-emerald-900' : 'text-amber-900'
+              }`}
+            >
+              <CheckCircle2
+                className={`w-4 h-4 shrink-0 ${
+                  allItemsCorrect ? 'text-emerald-600' : 'text-amber-600'
+                }`}
+              />
+              <span>
+                Categorization Check ({correctPlacedCount}/{totalItemCount} right)
+              </span>
             </div>
-            <div className="px-2.5 py-0.5 rounded-full font-bold font-mono text-emerald-900 bg-emerald-100 border border-emerald-300">
+            <div
+              className={`px-2.5 py-0.5 rounded-full font-bold font-mono border ${
+                allItemsCorrect
+                  ? 'text-emerald-900 bg-emerald-100 border-emerald-300'
+                  : 'text-amber-900 bg-amber-100 border-amber-300'
+              }`}
+            >
               Score: +{pointsEarned} / {totalPoints} pts
             </div>
           </div>
 
           <div className="text-[11px] text-slate-700 leading-relaxed">
-            Points are awarded for each item placed into its correct category. Review the highlighted boxes above for expected placements.
+            Green chips are in the right category; red chips need moving.
+            {showAnswerKeyHints ? ' Expected categories are shown on incorrect chips.' : ''}
           </div>
         </div>
       )}

@@ -178,6 +178,23 @@ function getRequester(req: Request) {
   };
 }
 
+// Verify caller is an existing teacher or admin in database (blocks students and unauthenticated guests)
+async function verifyTeacherOrAdminRequester(req: Request): Promise<TeacherRecord | null> {
+  const { role, userId, userEmail } = getRequester(req);
+  if (role !== 'teacher' && role !== 'admin') {
+    return null;
+  }
+
+  let teacher: TeacherRecord | null = null;
+  if (userId) {
+    teacher = await getTeacherById(userId);
+  }
+  if (!teacher && userEmail) {
+    teacher = await findTeacher(userEmail);
+  }
+  return teacher;
+}
+
 // Teacher Login API (Backed by PostgreSQL / DB)
 app.post('/api/auth/teacher-login', async (req: Request, res: Response) => {
   const username = req.body.username || req.body.email;
@@ -983,9 +1000,15 @@ app.post('/api/live/bot-answer', (req: Request, res: Response) => {
 // Gemini AI Endpoints
 // ==========================================
 
-// AI Audio / Video Transcription & Subtitle Generation
+// AI Audio / Video Transcription & Subtitle Generation (Teachers & Admins only)
 app.post('/api/ai/transcribe', async (req: Request, res: Response) => {
   try {
+    const teacher = await verifyTeacherOrAdminRequester(req);
+    if (!teacher) {
+      return res.status(403).json({
+        error: 'Permission denied: AI features are restricted to teachers and admins only.',
+      });
+    }
     const ai = getGeminiClient();
     const { mediaTitle, mediaDescription, sampleTranscript } = req.body;
 
@@ -1033,9 +1056,15 @@ Return strictly JSON matching this structure.`;
   }
 });
 
-// AI Vocabulary Enrichment (CEFR identification, definitions, examples, Cambridge dictionary links)
+// AI Vocabulary Enrichment (Teachers & Admins only)
 app.post('/api/ai/vocab-enrich', async (req: Request, res: Response) => {
   try {
+    const teacher = await verifyTeacherOrAdminRequester(req);
+    if (!teacher) {
+      return res.status(403).json({
+        error: 'Permission denied: AI features are restricted to teachers and admins only.',
+      });
+    }
     const transcriptText = typeof req.body?.transcriptText === 'string' ? req.body.transcriptText.trim() : '';
     if (!transcriptText) {
       return res.status(400).json({
@@ -1169,9 +1198,15 @@ For each entry provide:
   }
 });
 
-// AI Formative Assessment Question Generator
+// AI Formative Assessment Question Generator (Teachers & Admins only)
 app.post('/api/ai/generate-questions', async (req: Request, res: Response) => {
   try {
+    const teacher = await verifyTeacherOrAdminRequester(req);
+    if (!teacher) {
+      return res.status(403).json({
+        error: 'Permission denied: AI features are restricted to teachers and admins only.',
+      });
+    }
     const ai = getGeminiClient();
     const { transcript, videoDuration = 180 } = req.body;
 
@@ -1219,9 +1254,15 @@ Return strictly a JSON array.`;
   }
 });
 
-// AI Feedback for Student Open-Ended Responses
+// AI Feedback for Open-Ended Responses (Teachers & Admins only)
 app.post('/api/ai/grade-open-ended', async (req: Request, res: Response) => {
   try {
+    const teacher = await verifyTeacherOrAdminRequester(req);
+    if (!teacher) {
+      return res.status(403).json({
+        error: 'Permission denied: AI features are restricted to teachers and admins only.',
+      });
+    }
     const ai = getGeminiClient();
     const { questionPrompt, studentAnswer, listeningContext } = req.body;
 
@@ -1409,7 +1450,13 @@ app.post('/api/youtube/transcript', async (req: Request, res: Response) => {
       console.warn('Timedtext fetch timed out or failed, falling back to Gemini extraction');
     }
 
-    // Attempt 2: Fast Gemini Subtitle Generation
+    // Attempt 2: Fast Gemini Subtitle Generation (Teachers & Admins only)
+    const teacher = await verifyTeacherOrAdminRequester(req);
+    if (!teacher) {
+      return res.status(403).json({
+        error: 'Could not find YouTube captions. AI caption generation is restricted to teachers and admins only.',
+      });
+    }
     const ai = getGeminiClient();
     const prompt = `Generate a realistic 6-sentence timed English listening transcript for YouTube video ID "${videoId}".
 Context: Natural spoken ESL listening material.

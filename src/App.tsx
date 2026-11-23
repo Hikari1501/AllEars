@@ -20,6 +20,16 @@ import { StudentManagementModal } from './components/StudentManagementModal';
 import { LiveClassroomProjector } from './components/LiveClassroomProjector';
 import { ImportLessonModal } from './components/ImportLessonModal';
 import { ExportLessonModal } from './components/ExportLessonModal';
+import { PersonalVocabModal } from './components/PersonalVocabModal';
+import { AutoDictationModal } from './components/AutoDictationModal';
+import { getSavedVocabList, PERSONAL_VOCAB_EVENT } from './utils/personalVocab';
+import {
+  generateAutoDictationLesson,
+  buildAutoDictationReport,
+  saveAutoDictationReport,
+  getAutoDictationReports,
+  AUTO_DICTATION_REPORTS_EVENT,
+} from './utils/autoDictation';
 import heroImage from './assets/images/allears_hero_listening_1793672977345.jpg';
 import {
   Play,
@@ -43,6 +53,9 @@ import {
   FileUp,
   CheckCircle2,
   Shield,
+  Bookmark,
+  MoreVertical,
+  FileText,
 } from 'lucide-react';
 
 const extractYouTubeId = (url?: string): string | null => {
@@ -160,6 +173,43 @@ export default function App() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [exportingLesson, setExportingLesson] = useState<Lesson | null>(null);
   const [importNotification, setImportNotification] = useState<string | null>(null);
+
+  // Personal Vocabulary & Auto-Dictation (Strictly device-local)
+  const [isPersonalVocabOpen, setIsPersonalVocabOpen] = useState(false);
+  const [savedVocabCount, setSavedVocabCount] = useState<number>(0);
+  const [dictationReportCount, setDictationReportCount] = useState<number>(0);
+  const [openMenuLessonId, setOpenMenuLessonId] = useState<string | null>(null);
+  const [autoDictationModalLesson, setAutoDictationModalLesson] = useState<Lesson | null>(null);
+  const [isAutoDictationModalOpen, setIsAutoDictationModalOpen] = useState(false);
+  const [autoDictationModalTab, setAutoDictationModalTab] = useState<'setup' | 'reports'>('setup');
+  const [highlightedDictationReportId, setHighlightedDictationReportId] = useState<string | null>(null);
+  const [autoDictationState, setAutoDictationState] = useState<{
+    sourceLessonId: string;
+    sourceLessonTitle: string;
+    minWords: number;
+    maxWords: number;
+  } | null>(null);
+
+  useEffect(() => {
+    const syncCounts = () => {
+      setSavedVocabCount(getSavedVocabList(currentUser.id).length);
+      setDictationReportCount(getAutoDictationReports(currentUser.id).length);
+    };
+    syncCounts();
+    window.addEventListener(PERSONAL_VOCAB_EVENT, syncCounts);
+    window.addEventListener(AUTO_DICTATION_REPORTS_EVENT, syncCounts);
+    return () => {
+      window.removeEventListener(PERSONAL_VOCAB_EVENT, syncCounts);
+      window.removeEventListener(AUTO_DICTATION_REPORTS_EVENT, syncCounts);
+    };
+  }, [currentUser.id]);
+
+  useEffect(() => {
+    if (!openMenuLessonId) return;
+    const handleOutsideClick = () => setOpenMenuLessonId(null);
+    window.addEventListener('click', handleOutsideClick);
+    return () => window.removeEventListener('click', handleOutsideClick);
+  }, [openMenuLessonId]);
 
   const handlePracticeRandomLesson = () => {
     const pool = lessons.filter((l) => currentUser.role === 'teacher' || l.isPublished !== false);
@@ -434,8 +484,53 @@ export default function App() {
     }
   };
 
-  // Student finishes homework
+  // Start Auto-Dictation Practice (strictly client-side on student's device)
+  const handleStartAutoDictation = (
+    sourceLesson: Lesson,
+    minWordsPerBlank: number,
+    maxWordsPerBlank: number,
+    questionCount: number
+  ) => {
+    const { lesson: dictationLesson, actualMin, actualMax } = generateAutoDictationLesson(
+      sourceLesson,
+      minWordsPerBlank,
+      maxWordsPerBlank,
+      questionCount
+    );
+    setAutoDictationState({
+      sourceLessonId: sourceLesson.id,
+      sourceLessonTitle: sourceLesson.title,
+      minWords: actualMin,
+      maxWords: actualMax,
+    });
+    setActiveHomeworkLesson(dictationLesson);
+  };
+
+  // Student finishes homework (or device-local Auto-Dictation)
   const handleFinishHomework = async (submission: LessonSubmission) => {
+    if (autoDictationState || submission.lessonId.startsWith('autodict-')) {
+      if (activeHomeworkLesson && autoDictationState) {
+        const report = buildAutoDictationReport(
+          autoDictationState.sourceLessonId,
+          autoDictationState.sourceLessonTitle,
+          activeHomeworkLesson,
+          submission,
+          autoDictationState.minWords,
+          autoDictationState.maxWords
+        );
+        saveAutoDictationReport(currentUser.id, report);
+        setHighlightedDictationReportId(report.id);
+      }
+      const sourceLesson =
+        lessons.find((l) => l.id === autoDictationState?.sourceLessonId) || null;
+      setActiveHomeworkLesson(null);
+      setAutoDictationState(null);
+      setAutoDictationModalLesson(sourceLesson);
+      setAutoDictationModalTab('reports');
+      setIsAutoDictationModalOpen(true);
+      return;
+    }
+
     setSubmissions((prev) => [submission, ...prev]);
     try {
       await fetch('/api/reports/homework', {
@@ -687,14 +782,19 @@ export default function App() {
           />
         )}
 
-        {/* 3. Self-Paced Homework Player */}
+        {/* 3. Self-Paced Homework Player (or Auto-Dictation) */}
         {activeHomeworkLesson && (
           <HomeworkPlayer
             lesson={activeHomeworkLesson}
             studentId={currentUser.id}
             studentName={currentUser.name}
+            userId={currentUser.id}
+            isAutoDictation={Boolean(autoDictationState)}
             onFinish={handleFinishHomework}
-            onBack={() => setActiveHomeworkLesson(null)}
+            onBack={() => {
+              setActiveHomeworkLesson(null);
+              setAutoDictationState(null);
+            }}
           />
         )}
 
@@ -709,6 +809,8 @@ export default function App() {
                 setCurrentTab('lessons');
               }}
               onDelete={handleDeleteLesson}
+              currentUser={currentUser}
+              isTeacherOrAdmin={isTeacher}
             />
           ) : (
             <div className="max-w-md mx-auto my-12 p-8 bg-white border border-slate-200 rounded-2xl text-center space-y-4 shadow-xs">
@@ -914,7 +1016,34 @@ export default function App() {
                 ))}
               </div>
 
-              <div className="flex items-center gap-2.5 w-full sm:w-auto">
+              <div className="flex items-center gap-2.5 w-full sm:w-auto flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setIsPersonalVocabOpen(true)}
+                  className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-xl shadow-2xs transition-colors cursor-pointer shrink-0"
+                  title="Review your saved glossed words"
+                >
+                  <Bookmark className="w-3.5 h-3.5 fill-amber-500 text-amber-600" />
+                  <span>My Vocabulary ({savedVocabCount})</span>
+                </button>
+
+                {dictationReportCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAutoDictationModalLesson(null);
+                      setAutoDictationModalTab('reports');
+                      setHighlightedDictationReportId(null);
+                      setIsAutoDictationModalOpen(true);
+                    }}
+                    className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-700 hover:text-slate-950 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl shadow-2xs transition-colors cursor-pointer shrink-0"
+                    title="View your device-local Auto-Dictation results"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Dictation Reports ({dictationReportCount})</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={() => setIsImportModalOpen(true)}
@@ -1039,7 +1168,7 @@ export default function App() {
                     <div className="p-5 pt-0 border-t border-slate-100 space-y-2 mt-2">
                       {isTeacher ? (
                         <div className="space-y-2">
-                          <div className="flex items-center gap-2 w-full">
+                          <div className="flex items-center gap-1.5 w-full">
                             <button
                               onClick={() => handleStartLiveAsTeacher(lesson)}
                               className="flex-1 py-2 px-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
@@ -1050,7 +1179,7 @@ export default function App() {
 
                             <button
                               onClick={() => setActiveHomeworkLesson(lesson)}
-                              className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-colors"
+                              className="py-2 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-colors"
                               title="Preview as Student"
                             >
                               Preview
@@ -1061,7 +1190,7 @@ export default function App() {
                                 setEditingLesson(lesson);
                                 setCurrentTab('create');
                               }}
-                              className="py-2 px-2.5 text-slate-600 hover:text-slate-900 text-xs font-semibold"
+                              className="py-2 px-2 text-slate-600 hover:text-slate-900 text-xs font-semibold"
                               title="Edit Lesson"
                             >
                               Edit
@@ -1075,6 +1204,57 @@ export default function App() {
                               <Download className="w-3.5 h-3.5 text-slate-600" />
                               <span>Export</span>
                             </button>
+
+                            {/* Three-dot menu on every lesson card */}
+                            <div className="relative">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOpenMenuLessonId((prev) => (prev === lesson.id ? null : lesson.id));
+                                }}
+                                className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 rounded-xl transition-colors cursor-pointer"
+                                title="More practice options"
+                                aria-label="More lesson options"
+                              >
+                                <MoreVertical className="w-4 h-4" />
+                              </button>
+
+                              {openMenuLessonId === lesson.id && (
+                                <div
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="absolute right-0 bottom-full mb-1.5 w-52 bg-white border border-slate-200 rounded-xl shadow-xl py-1.5 z-30 animate-in fade-in duration-100"
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenMenuLessonId(null);
+                                      setAutoDictationModalLesson(lesson);
+                                      setAutoDictationModalTab('setup');
+                                      setIsAutoDictationModalOpen(true);
+                                    }}
+                                    className="w-full text-left px-3.5 py-2 text-xs font-semibold text-slate-800 hover:bg-amber-50 hover:text-amber-950 flex items-center gap-2 cursor-pointer"
+                                  >
+                                    <FileText className="w-3.5 h-3.5 text-amber-600" />
+                                    <span>Auto-Dictation Practice</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenMenuLessonId(null);
+                                      setAutoDictationModalLesson(lesson);
+                                      setAutoDictationModalTab('reports');
+                                      setHighlightedDictationReportId(null);
+                                      setIsAutoDictationModalOpen(true);
+                                    }}
+                                    className="w-full text-left px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                                  >
+                                    <BarChart3 className="w-3.5 h-3.5 text-slate-500" />
+                                    <span>My Dictation Reports</span>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           </div>
 
                           {/* Teacher controls: Publish / Unpublish and Delete */}
@@ -1162,6 +1342,68 @@ export default function App() {
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             )}
+
+                            {/* Three-dot menu on every lesson card */}
+                            <div className="relative">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOpenMenuLessonId((prev) => (prev === lesson.id ? null : lesson.id));
+                                }}
+                                className="py-2.5 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 rounded-xl transition-colors cursor-pointer"
+                                title="More practice options"
+                                aria-label="More lesson options"
+                              >
+                                <MoreVertical className="w-4 h-4" />
+                              </button>
+
+                              {openMenuLessonId === lesson.id && (
+                                <div
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="absolute right-0 bottom-full mb-1.5 w-52 bg-white border border-slate-200 rounded-xl shadow-xl py-1.5 z-30 animate-in fade-in duration-100"
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenMenuLessonId(null);
+                                      setAutoDictationModalLesson(lesson);
+                                      setAutoDictationModalTab('setup');
+                                      setIsAutoDictationModalOpen(true);
+                                    }}
+                                    className="w-full text-left px-3.5 py-2 text-xs font-semibold text-slate-800 hover:bg-amber-50 hover:text-amber-950 flex items-center gap-2 cursor-pointer"
+                                  >
+                                    <FileText className="w-3.5 h-3.5 text-amber-600" />
+                                    <span>Auto-Dictation Practice</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenMenuLessonId(null);
+                                      setAutoDictationModalLesson(lesson);
+                                      setAutoDictationModalTab('reports');
+                                      setHighlightedDictationReportId(null);
+                                      setIsAutoDictationModalOpen(true);
+                                    }}
+                                    className="w-full text-left px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                                  >
+                                    <BarChart3 className="w-3.5 h-3.5 text-slate-500" />
+                                    <span>My Dictation Reports</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenMenuLessonId(null);
+                                      setIsPersonalVocabOpen(true);
+                                    }}
+                                    className="w-full text-left px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer border-t border-slate-100 mt-1 pt-2"
+                                  >
+                                    <Bookmark className="w-3.5 h-3.5 text-amber-600" />
+                                    <span>My Saved Vocabulary ({savedVocabCount})</span>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           </div>
 
                           {lesson.isLocalStudentOnly && (
@@ -1237,6 +1479,24 @@ export default function App() {
           onClose={() => setExportingLesson(null)}
         />
       )}
+
+      {/* Personal Saved Vocabulary Review Modal */}
+      <PersonalVocabModal
+        isOpen={isPersonalVocabOpen}
+        onClose={() => setIsPersonalVocabOpen(false)}
+        userId={currentUser.id}
+      />
+
+      {/* Auto-Dictation Mode & Local Reports Modal */}
+      <AutoDictationModal
+        isOpen={isAutoDictationModalOpen}
+        onClose={() => setIsAutoDictationModalOpen(false)}
+        lesson={autoDictationModalLesson}
+        userId={currentUser.id}
+        initialTab={autoDictationModalTab}
+        highlightedReportId={highlightedDictationReportId}
+        onStartDictation={handleStartAutoDictation}
+      />
     </div>
   );
 }

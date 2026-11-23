@@ -1,5 +1,5 @@
 import React from 'react';
-import { Volume2, ExternalLink, X, BookOpen, Radio } from 'lucide-react';
+import { Volume2, ExternalLink, X, BookOpen, Radio, Bookmark } from 'lucide-react';
 import { VocabEntry } from '../types';
 
 interface VocabPopoverProps {
@@ -9,6 +9,8 @@ interface VocabPopoverProps {
   onShowToClass?: () => void;
   isShown?: boolean;
   onUnshowFromClass?: () => void;
+  isSaved?: boolean;
+  onToggleSave?: () => void;
 }
 
 export const VocabPopover: React.FC<VocabPopoverProps> = ({
@@ -18,6 +20,8 @@ export const VocabPopover: React.FC<VocabPopoverProps> = ({
   onShowToClass,
   isShown = false,
   onUnshowFromClass,
+  isSaved = false,
+  onToggleSave,
 }) => {
   const speakWord = () => {
     if ('speechSynthesis' in window) {
@@ -85,13 +89,31 @@ export const VocabPopover: React.FC<VocabPopoverProps> = ({
                 {vocab.phonetic && <span className="text-sm font-mono text-slate-500">{vocab.phonetic}</span>}
                 <button
                   onClick={speakWord}
-                  className="p-1 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-md transition-colors"
+                  className="p-1 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-md transition-colors cursor-pointer"
                   title="Listen to pronunciation"
                 >
                   <Volume2 className="w-4 h-4" />
                 </button>
               </div>
             </div>
+
+            {onToggleSave && (
+              <button
+                type="button"
+                onClick={onToggleSave}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors shrink-0 cursor-pointer ${
+                  isSaved
+                    ? 'bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                }`}
+                title={isSaved ? 'Remove from My Vocabulary' : 'Save to My Vocabulary'}
+              >
+                <Bookmark
+                  className={`w-3.5 h-3.5 ${isSaved ? 'fill-amber-500 text-amber-600' : 'text-slate-500'}`}
+                />
+                <span>{isSaved ? 'Saved' : 'Save Word'}</span>
+              </button>
+            )}
           </div>
 
           {/* Optional Inflections & Vietnamese Translation */}

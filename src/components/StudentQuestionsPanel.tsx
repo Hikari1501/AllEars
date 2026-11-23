@@ -25,6 +25,7 @@ import {
 import { MatchingPairsCanvas } from './MatchingPairsCanvas';
 import { DragAndDropCanvas } from './DragAndDropCanvas';
 import { playSuccessChime, playWrongAnswerSound } from '../utils/soundEffects';
+import { getQuestionFeedbackStatus } from '../utils/feedbackHelpers';
 
 interface StudentQuestionsPanelProps {
   questions: Question[];
@@ -672,6 +673,10 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                             } else {
                               buttonStyle = 'bg-slate-50 border-slate-200 text-slate-400 opacity-60';
                             }
+                          } else if (isFeedbackVisible && q.allowMultipleAnswers && isSelected) {
+                            buttonStyle = isOptCorrect
+                              ? 'bg-emerald-50 border-2 border-emerald-500 text-emerald-950 font-semibold ring-1 ring-emerald-400/40 shadow-2xs'
+                              : 'bg-rose-50 border-2 border-rose-400 text-rose-950 font-medium';
                           } else if (isFeedbackVisible && !q.allowMultipleAnswers && isSelected && !existingAnswer?.isCorrect) {
                             buttonStyle = 'bg-rose-50 border-2 border-rose-400 text-rose-950 font-medium';
                           }
@@ -693,6 +698,10 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                                       ? 'bg-emerald-600 text-white'
                                       : canShowCorrectAnswer && isSelected && !isOptCorrect
                                       ? 'bg-rose-600 text-white'
+                                      : isFeedbackVisible && q.allowMultipleAnswers && isSelected
+                                      ? isOptCorrect
+                                        ? 'bg-emerald-600 text-white'
+                                        : 'bg-rose-600 text-white'
                                       : isFeedbackVisible && !canShowCorrectAnswer && !q.allowMultipleAnswers && isSelected
                                       ? 'bg-rose-600 text-white'
                                       : isSelected
@@ -718,6 +727,18 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                                     <span>Your Answer (Incorrect)</span>
                                   </span>
                                 ) : null
+                              ) : isFeedbackVisible && q.allowMultipleAnswers && isSelected ? (
+                                isOptCorrect ? (
+                                  <span className="px-2 py-0.5 rounded bg-emerald-200 text-emerald-950 text-[10px] font-bold flex items-center gap-1 shrink-0">
+                                    <Check className="w-3.5 h-3.5 text-emerald-800 stroke-[3]" />
+                                    <span>Correct</span>
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded bg-rose-200 text-rose-950 text-[10px] font-bold flex items-center gap-1 shrink-0">
+                                    <X className="w-3.5 h-3.5 text-rose-800 stroke-[3]" />
+                                    <span>Incorrect</span>
+                                  </span>
+                                )
                               ) : isFeedbackVisible && !q.allowMultipleAnswers && isSelected && !existingAnswer?.isCorrect ? (
                                 <span className="px-2 py-0.5 rounded bg-rose-200 text-rose-950 text-[10px] font-bold flex items-center gap-1 shrink-0">
                                   <X className="w-3.5 h-3.5 text-rose-800 stroke-[3]" />
@@ -844,7 +865,7 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                           currentSelections={matchingSelections[q.id] || {}}
                           onPairMatch={(left, right) => handleMatchingPair(q, left, right)}
                           disabled={isInputDisabled}
-                          isFeedbackVisible={canShowCorrectAnswer}
+                          isFeedbackVisible={isFeedbackVisible}
                         />
                       </div>
                     )}
@@ -873,7 +894,8 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                           }}
                           disabled={isInputDisabled}
                           isAnswered={isAnswered}
-                          isFeedbackVisible={canShowCorrectAnswer}
+                          isFeedbackVisible={isFeedbackVisible}
+                          canShowKey={canShowCorrectAnswer}
                           pointsEarned={existingAnswer?.pointsEarned || 0}
                           totalPoints={q.points || 10}
                         />
@@ -910,6 +932,9 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
 
                   {/* Feedback Explanation Banner (shown immediately on submit) */}
                   {isFeedbackVisible && (() => {
+                    const feedbackStatus = getQuestionFeedbackStatus(q, existingAnswer);
+                    const closeEndedAnalysis = feedbackStatus.closeEndedAnalysis;
+
                     const hasSpecificExp =
                       q.explanationCorrect !== undefined || q.explanationIncorrect !== undefined;
                     const showBothExplanations =
@@ -927,20 +952,31 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                         ? q.explanationCorrect
                         : '';
 
+                    const showCloseEndedWordDiff = Boolean(
+                      q.type === 'close_ended' &&
+                        closeEndedAnalysis &&
+                        !existingAnswer.isCorrect &&
+                        closeEndedAnalysis.tokens.length > 0
+                    );
+
                     const hasDetails = Boolean(
-                      primaryExplanation?.trim() ||
+                      showCloseEndedWordDiff ||
+                        primaryExplanation?.trim() ||
                         secondaryCorrectExplanation?.trim() ||
                         existingAnswer.aiFeedback
                     );
 
+                    const bannerStyle =
+                      feedbackStatus.statusLevel === 'correct'
+                        ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
+                        : feedbackStatus.statusLevel === 'almost'
+                        ? 'bg-sky-50/90 border-sky-300 text-sky-950'
+                        : 'bg-amber-50/90 border-amber-300 text-amber-950';
+
                     return (
                       <>
                         <div
-                          className={`mt-3 p-3.5 rounded-xl border text-xs space-y-2.5 animate-in fade-in shadow-2xs ${
-                            existingAnswer.isCorrect
-                              ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
-                              : 'bg-amber-50/90 border-amber-300 text-amber-950'
-                          }`}
+                          className={`mt-3 p-3.5 rounded-xl border text-xs space-y-2.5 animate-in fade-in shadow-2xs ${bannerStyle}`}
                         >
                           <div
                             className={`font-bold flex items-center justify-between gap-2 ${
@@ -948,15 +984,33 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                             }`}
                           >
                             <div className="flex items-center gap-1.5 text-sm">
-                              {existingAnswer.isCorrect ? (
+                              {feedbackStatus.statusLevel === 'correct' ? (
                                 <>
                                   <CheckCircle2 className="w-4 h-4 text-emerald-600 stroke-[2.5]" />
-                                  <span className="text-emerald-900 font-extrabold">Correct Answer!</span>
+                                  <span className="text-emerald-900 font-extrabold">
+                                    {feedbackStatus.statusLabel}
+                                  </span>
+                                </>
+                              ) : feedbackStatus.statusLevel === 'almost' ? (
+                                <>
+                                  <Sparkles className="w-4 h-4 text-sky-600 stroke-[2.5]" />
+                                  <span className="text-sky-900 font-extrabold">
+                                    {feedbackStatus.statusLabel}
+                                  </span>
+                                </>
+                              ) : feedbackStatus.statusLevel === 'keep_going' ? (
+                                <>
+                                  <Sparkles className="w-4 h-4 text-amber-600 stroke-[2.5]" />
+                                  <span className="text-amber-900 font-extrabold">
+                                    {feedbackStatus.statusLabel}
+                                  </span>
                                 </>
                               ) : (
                                 <>
                                   <XCircle className="w-4 h-4 text-rose-600 stroke-[2.5]" />
-                                  <span className="text-rose-900 font-extrabold">Needs Review</span>
+                                  <span className="text-rose-900 font-extrabold">
+                                    {feedbackStatus.statusLabel}
+                                  </span>
                                 </>
                               )}
                             </div>
@@ -964,6 +1018,60 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                               +{existingAnswer.pointsEarned} pts
                             </span>
                           </div>
+
+                          {/* Granular Word-by-Word Check for Fill-in-the-Blank */}
+                          {showCloseEndedWordDiff && closeEndedAnalysis && (
+                            <div className="space-y-1.5 pt-0.5">
+                              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                Word-by-Word Check
+                              </div>
+                              <div className="flex flex-wrap items-center gap-1.5 p-2 rounded-lg bg-white/90 border border-slate-200/80">
+                                {closeEndedAnalysis.tokens.map((tok, tIdx) => (
+                                  <span
+                                    key={`${q.id}-diff-${tIdx}`}
+                                    className={`px-2 py-0.5 rounded-md font-mono text-xs font-bold border ${
+                                      tok.status === 'correct'
+                                        ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                                        : tok.status === 'misplaced'
+                                        ? 'bg-sky-100 text-sky-900 border-sky-300'
+                                        : tok.status === 'missing'
+                                        ? 'bg-amber-100 text-amber-900 border-amber-300'
+                                        : 'bg-rose-100 text-rose-900 border-rose-300'
+                                    }`}
+                                    title={
+                                      tok.status === 'correct'
+                                        ? 'Correct word & position'
+                                        : tok.status === 'misplaced'
+                                        ? 'Correct word, wrong location'
+                                        : tok.status === 'missing'
+                                        ? 'Missing word'
+                                        : 'Incorrect word'
+                                    }
+                                  >
+                                    {tok.text}
+                                  </span>
+                                ))}
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2.5 text-[10px] text-slate-600 font-medium">
+                                <span className="inline-flex items-center gap-1">
+                                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                                  <span>Correct</span>
+                                </span>
+                                <span className="inline-flex items-center gap-1">
+                                  <span className="w-2 h-2 rounded-full bg-rose-500" />
+                                  <span>Incorrect</span>
+                                </span>
+                                <span className="inline-flex items-center gap-1">
+                                  <span className="w-2 h-2 rounded-full bg-sky-500" />
+                                  <span>Wrong location</span>
+                                </span>
+                                <span className="inline-flex items-center gap-1">
+                                  <span className="font-mono font-extrabold text-amber-800">*</span>
+                                  <span>Missing word</span>
+                                </span>
+                              </div>
+                            </div>
+                          )}
 
                           {/* Explanation (why wrong during retries, or answer explanation once revealed/correct) */}
                           {primaryExplanation && primaryExplanation.trim().length > 0 && (

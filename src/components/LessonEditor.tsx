@@ -8,6 +8,7 @@ import {
   CEFRLevel,
   PartOfSpeech,
   DragDropCategory,
+  UserAccount,
 } from '../types';
 import {
   Plus,
@@ -47,6 +48,8 @@ interface LessonEditorProps {
   onCancel: () => void;
   onDelete?: (lessonId: string) => void;
   initialLesson?: Lesson | null;
+  currentUser?: UserAccount;
+  isTeacherOrAdmin?: boolean;
 }
 
 // Helper to sort questions: general / no-pause questions come first, followed by timestamped questions
@@ -63,7 +66,17 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
   onCancel,
   onDelete,
   initialLesson,
+  currentUser,
+  isTeacherOrAdmin = false,
 }) => {
+  const getAuthHeaders = (): Record<string, string> => ({
+    'Content-Type': 'application/json',
+    'x-user-role': currentUser?.role || (isTeacherOrAdmin ? 'teacher' : 'student'),
+    'x-user-id': currentUser?.id || '',
+    'x-teacher-id': currentUser?.id || '',
+    'x-user-email': currentUser?.email || '',
+    'x-is-admin': currentUser?.isAdmin ? 'true' : 'false',
+  });
   // Navigation tabs in the edit column
   const [activeEditTab, setActiveEditTab] = useState<'details' | 'captions' | 'questions' | 'vocabulary'>('details');
 
@@ -193,6 +206,11 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
   const [newQTip, setNewQTip] = useState<string>('');
   const [newQTipTimestamps, setNewQTipTimestamps] = useState<number[]>([]);
   const [newQTipTimestampInput, setNewQTipTimestampInput] = useState<string>('');
+  const [newQTipTranscriptInput, setNewQTipTranscriptInput] = useState<string>('');
+  const [tipTranscriptFeedback, setTipTranscriptFeedback] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
   const [newQCategories, setNewQCategories] = useState<DragDropCategory[]>([
     { id: 'cat-1', name: 'Category A', items: ['Item 1', 'Item 2'] },
     { id: 'cat-2', name: 'Category B', items: ['Item 3'] },
@@ -428,7 +446,7 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
     try {
       const res = await fetch('/api/youtube/transcript', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ videoUrl: mediaUrl, videoId: ytid }),
         signal: abortCtrl.signal,
       });
@@ -591,15 +609,19 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
     }
   };
 
-  // AI Automatic Transcription
+  // AI Automatic Transcription (Teachers & Admins only)
   const handleAiTranscribe = async () => {
+    if (!isTeacherOrAdmin) {
+      setErrorMessage('AI features are restricted to teachers and admins only.');
+      return;
+    }
     setIsTranscribing(true);
     setErrorMessage(null);
     setSuccessMessage(null);
     try {
       const res = await fetch('/api/ai/transcribe', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           mediaTitle: title || 'English Conversation',
           mediaDescription: description,
@@ -635,8 +657,12 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
     }
   };
 
-  // AI Auto-detect Difficult Words
+  // AI Auto-detect Difficult Words (Teachers & Admins only)
   const handleAiVocabEnrich = async () => {
+    if (!isTeacherOrAdmin) {
+      setErrorMessage('AI features are restricted to teachers and admins only.');
+      return;
+    }
     setErrorMessage(null);
     setSuccessMessage(null);
     setVocabFeedback(null);
@@ -656,7 +682,7 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
     try {
       const res = await fetch('/api/ai/vocab-enrich', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ transcriptText: textToAnalyze }),
       });
       const data = await res.json().catch(() => ({}));
@@ -903,6 +929,141 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
     setNewQTipTimestamps((prev) => prev.filter((item) => item !== ts));
   };
 
+  // Find where a typed transcript section begins and add its timestamp
+  const handleFindTimestampFromTranscript = () => {
+    const rawQuery = newQTipTranscriptInput.trim();
+    if (!rawQuery) return;
+    if (captions.length === 0) {
+      setTipTranscriptFeedback({
+        type: 'error',
+        message: 'No transcript/captions available yet. Add captions in the Captions tab first.',
+      });
+      return;
+    }
+
+    const normalizeForSearch = (str: string) =>
+      str
+        .replace(/[’‘]/g, "'")
+        .replace(/[^a-zA-Z0-9'\s]/g, ' ')
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const normQuery = normalizeForSearch(rawQuery);
+    const queryWords = normQuery.split(' ').filter(Boolean);
+    if (queryWords.length === 0) {
+      setTipTranscriptFeedback({
+        type: 'error',
+        message: 'Please enter a few words from the transcript.',
+      });
+      return;
+    }
+
+    const sortedCaps = [...captions].sort((a, b) => a.start - b.start);
+
+    // Flatten words across all caption segments so phrases spanning adjacent segments still match
+    const wordMap: Array<{
+      word: string;
+      cap: CaptionSegment;
+      wordIdxInCap: number;
+      capWordCount: number;
+    }> = [];
+
+    sortedCaps.forEach((cap) => {
+      const capWords = normalizeForSearch(cap.text).split(' ').filter(Boolean);
+      capWords.forEach((w, idx) => {
+        wordMap.push({
+          word: w,
+          cap,
+          wordIdxInCap: idx,
+          capWordCount: capWords.length,
+        });
+      });
+    });
+
+    let matchedSlot: (typeof wordMap)[number] | null = null;
+
+    // 1. Exact contiguous word-sequence match across transcript
+    if (wordMap.length >= queryWords.length) {
+      for (let i = 0; i <= wordMap.length - queryWords.length; i++) {
+        let allMatch = true;
+        for (let j = 0; j < queryWords.length; j++) {
+          if (wordMap[i + j].word !== queryWords[j]) {
+            allMatch = false;
+            break;
+          }
+        }
+        if (allMatch) {
+          matchedSlot = wordMap[i];
+          break;
+        }
+      }
+    }
+
+    // 2. Fallback: Normalized substring match on joined caption string (handles partial leading/trailing words)
+    if (!matchedSlot) {
+      let cursor = 0;
+      const capRanges: Array<{ startOffset: number; endOffset: number; cap: CaptionSegment; normText: string }> = [];
+      const joinedParts: string[] = [];
+      sortedCaps.forEach((cap) => {
+        const normText = normalizeForSearch(cap.text);
+        if (!normText) return;
+        const startOffset = cursor;
+        const endOffset = startOffset + normText.length;
+        capRanges.push({ startOffset, endOffset, cap, normText });
+        joinedParts.push(normText);
+        cursor = endOffset + 1; // +1 for joining space
+      });
+      const joinedText = joinedParts.join(' ');
+      const foundPos = joinedText.indexOf(normQuery);
+      if (foundPos >= 0) {
+        const range =
+          capRanges.find((r) => foundPos >= r.startOffset && foundPos < r.endOffset) ||
+          capRanges.find((r) => r.endOffset >= foundPos);
+        if (range) {
+          const prefixWords = range.normText
+            .slice(0, Math.max(0, foundPos - range.startOffset))
+            .trim()
+            .split(/\s+/)
+            .filter(Boolean).length;
+          const totalWords = Math.max(1, range.normText.split(/\s+/).filter(Boolean).length);
+          matchedSlot = {
+            word: '',
+            cap: range.cap,
+            wordIdxInCap: prefixWords,
+            capWordCount: totalWords,
+          };
+        }
+      }
+    }
+
+    if (!matchedSlot) {
+      setTipTranscriptFeedback({
+        type: 'error',
+        message: `Could not find "${rawQuery}" in the lesson captions.`,
+      });
+      return;
+    }
+
+    const { cap, wordIdxInCap, capWordCount } = matchedSlot;
+    const segDur = Math.max(0, (cap.end || cap.start) - cap.start);
+    let computedSec = cap.start;
+    if (segDur > 10 && wordIdxInCap > 1 && capWordCount > 0) {
+      computedSec = cap.start + (wordIdxInCap / capWordCount) * segDur;
+    }
+    const cleanTs = Math.max(0, Math.floor(computedSec));
+
+    setNewQTipTimestamps((prev) => {
+      if (prev.includes(cleanTs)) return prev;
+      return [...prev, cleanTs].sort((a, b) => a - b);
+    });
+    setNewQTipTranscriptInput('');
+    setTipTranscriptFeedback({
+      type: 'success',
+      message: `Added ${formatSec(cleanTs)} matching "${cap.text.slice(0, 65)}${cap.text.length > 65 ? '...' : ''}"`,
+    });
+  };
+
   // Open form to add a new question
   const handleOpenAddQuestion = () => {
     setEditingQuestionId(null);
@@ -911,6 +1072,8 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
     setNewQTip('');
     setNewQTipTimestamps([]);
     setNewQTipTimestampInput('');
+    setNewQTipTranscriptInput('');
+    setTipTranscriptFeedback(null);
     setNewQExplanationCorrect('');
     setNewQExplanationIncorrect('');
     setNewQCloseEndedAns('');
@@ -936,6 +1099,8 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
     setNewQTip(q.tip || '');
     setNewQTipTimestamps(q.tipTimestamps ? [...q.tipTimestamps].sort((a, b) => a - b) : []);
     setNewQTipTimestampInput('');
+    setNewQTipTranscriptInput('');
+    setTipTranscriptFeedback(null);
     const hasSpecificExplanations =
       q.explanationCorrect !== undefined || q.explanationIncorrect !== undefined;
     setNewQExplanationCorrect(
@@ -1033,6 +1198,8 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
     setNewQTip('');
     setNewQTipTimestamps([]);
     setNewQTipTimestampInput('');
+    setNewQTipTranscriptInput('');
+    setTipTranscriptFeedback(null);
     setNewQExplanationCorrect('');
     setNewQExplanationIncorrect('');
     setNewQCloseEndedAns('');
@@ -1827,15 +1994,17 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                     <span>Upload / Paste SRT or Text</span>
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={handleAiTranscribe}
-                    disabled={isTranscribing}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 disabled:opacity-60 disabled:cursor-not-allowed text-amber-800 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
-                  >
-                    <Sparkles className={`w-3.5 h-3.5 text-amber-600 ${isTranscribing ? 'animate-spin' : ''}`} />
-                    <span>{isTranscribing ? 'Transcribing...' : 'Auto-Transcribe with AI'}</span>
-                  </button>
+                  {isTeacherOrAdmin && (
+                    <button
+                      type="button"
+                      onClick={handleAiTranscribe}
+                      disabled={isTranscribing}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 disabled:opacity-60 disabled:cursor-not-allowed text-amber-800 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                    >
+                      <Sparkles className={`w-3.5 h-3.5 text-amber-600 ${isTranscribing ? 'animate-spin' : ''}`} />
+                      <span>{isTranscribing ? 'Transcribing...' : 'Auto-Transcribe with AI'}</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -2319,6 +2488,51 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                           <Plus className="w-3 h-3" />
                           <span>Add Timestamp</span>
                         </button>
+                      </div>
+
+                      {/* Or locate timestamp by typing a section of the transcript */}
+                      <div className="pt-1.5 space-y-1.5">
+                        <label className="text-[11px] font-semibold text-slate-600 flex items-center gap-1.5">
+                          <FileText className="w-3 h-3 text-indigo-600" />
+                          <span>Or type a section of the transcript to auto-find its starting timestamp:</span>
+                        </label>
+                        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                          <input
+                            type="text"
+                            value={newQTipTranscriptInput}
+                            onChange={(e) => {
+                              setNewQTipTranscriptInput(e.target.value);
+                              if (tipTranscriptFeedback) setTipTranscriptFeedback(null);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleFindTimestampFromTranscript();
+                              }
+                            }}
+                            placeholder="Paste or type words from the transcript..."
+                            className="flex-1 min-w-[200px] p-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleFindTimestampFromTranscript}
+                            className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors shrink-0"
+                          >
+                            <Clock className="w-3 h-3 text-indigo-600" />
+                            <span>Find & Add Timestamp</span>
+                          </button>
+                        </div>
+                        {tipTranscriptFeedback && (
+                          <div
+                            className={`text-[11px] px-2.5 py-1.5 rounded-lg border font-medium ${
+                              tipTranscriptFeedback.type === 'success'
+                                ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                                : 'bg-rose-50 border-rose-200 text-rose-900'
+                            }`}
+                          >
+                            {tipTranscriptFeedback.message}
+                          </div>
+                        )}
                       </div>
 
                       {newQTipTimestamps.length > 0 && (
@@ -3037,15 +3251,17 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                     <span>+ Add Vocabulary Word</span>
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={handleAiVocabEnrich}
-                    disabled={isEnrichingVocab}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-60 disabled:cursor-not-allowed text-emerald-800 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
-                  >
-                    <Sparkles className={`w-3.5 h-3.5 text-emerald-600 ${isEnrichingVocab ? 'animate-spin' : ''}`} />
-                    <span>{isEnrichingVocab ? 'Detecting with AI...' : 'Auto-Detect with AI'}</span>
-                  </button>
+                  {isTeacherOrAdmin && (
+                    <button
+                      type="button"
+                      onClick={handleAiVocabEnrich}
+                      disabled={isEnrichingVocab}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-60 disabled:cursor-not-allowed text-emerald-800 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
+                    >
+                      <Sparkles className={`w-3.5 h-3.5 text-emerald-600 ${isEnrichingVocab ? 'animate-spin' : ''}`} />
+                      <span>{isEnrichingVocab ? 'Detecting with AI...' : 'Auto-Detect with AI'}</span>
+                    </button>
+                  )}
                 </div>
               </div>
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Lesson, LiveSessionState, VocabEntry, Question } from '../types';
 import { UnifiedPlayer } from './UnifiedPlayer';
 import { InteractiveCaptions } from './InteractiveCaptions';
+import { VocabPopover } from './VocabPopover';
 import { Radio, Users, Cast, ArrowLeft, HelpCircle, Sparkles, BookOpen, Clock, AlertCircle } from 'lucide-react';
 
 interface LiveClassroomProjectorProps {
@@ -23,6 +24,7 @@ export const LiveClassroomProjector: React.FC<LiveClassroomProjectorProps> = ({
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [pauseTrigger, setPauseTrigger] = useState<number>(0);
   const [seekTriggerTime, setSeekTriggerTime] = useState<number | undefined>(undefined);
+  const [activeVideoVocab, setActiveVideoVocab] = useState<VocabEntry | null>(null);
   const lastServerSyncTimeRef = useRef<number>(0);
 
   // Poll session state to keep in sync with teacher control console
@@ -203,7 +205,11 @@ export const LiveClassroomProjector: React.FC<LiveClassroomProjectorProps> = ({
             showCaptions={showCaptions}
             autoPauseAtCheckpoints={session?.autoPauseAtCheckpoints !== false}
             onToggleCaptions={() => setShowCaptions(!showCaptions)}
-            onWordClick={() => {}}
+            onWordClick={(vocab) => {
+              setPauseTrigger(Date.now());
+              updateServerState({ isPlaying: false });
+              setActiveVideoVocab(vocab);
+            }}
             onTimeUpdate={handleTimeUpdate}
             onQuestionTrigger={handleQuestionTrigger}
           />
@@ -315,9 +321,18 @@ export const LiveClassroomProjector: React.FC<LiveClassroomProjectorProps> = ({
               updateServerState({ currentTime: t });
             }}
             isTeacher={false}
+            lessonId={activeLesson.id}
+            lessonTitle={activeLesson.title}
           />
         </div>
       </div>
+
+      {activeVideoVocab && (
+        <VocabPopover
+          vocab={activeVideoVocab}
+          onClose={() => setActiveVideoVocab(null)}
+        />
+      )}
     </div>
   );
 };

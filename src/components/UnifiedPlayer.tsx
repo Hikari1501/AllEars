@@ -435,21 +435,31 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
       if (matchIndex > lastIndex) parts.push(text.substring(lastIndex, matchIndex));
       const matchedVocab = termLookup.get(matchedText.toLowerCase());
       if (matchedVocab) {
+        const viHover = matchedVocab.vietnameseTranslation?.trim();
         parts.push(
-          <button
+          <span
             key={`vocab-iv-${matchIndex}-${matchedText}`}
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (onWordClick) onWordClick(matchedVocab);
-            }}
-            className={`inline-block px-1 py-0.2 mx-0.5 rounded cursor-pointer font-semibold transition-all ${getVocabHighlightClass(
-              matchedVocab.cefrLevel
-            )}`}
-            title={`Click to view ${matchedVocab.cefrLevel} definition`}
+            className="relative inline-block group/vocab mx-0.5"
           >
-            {matchedText}
-          </button>
+            {viHover && (
+              <span className="pointer-events-none opacity-0 group-hover/vocab:opacity-100 transition-opacity duration-100 absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2.5 py-1 rounded-lg bg-slate-950/95 text-emerald-300 border border-emerald-500/40 text-[11px] font-semibold whitespace-nowrap max-w-[240px] truncate shadow-xl z-30">
+                {viHover}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onWordClick) onWordClick(matchedVocab);
+              }}
+              className={`inline-block px-1 py-0.2 rounded cursor-pointer font-semibold transition-all ${getVocabHighlightClass(
+                matchedVocab.cefrLevel
+              )}`}
+              title={viHover ? undefined : `Click to view ${matchedVocab.cefrLevel} definition`}
+            >
+              {matchedText}
+            </button>
+          </span>
         );
       } else {
         parts.push(matchedText);

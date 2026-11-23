@@ -1,14 +1,32 @@
-import React, { useState } from 'react';
-import { Lesson, Question, StudentAnswer, LessonSubmission } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Lesson, Question, StudentAnswer, LessonSubmission, VocabEntry } from '../types';
 import { UnifiedPlayer } from './UnifiedPlayer';
 import { InteractiveCaptions } from './InteractiveCaptions';
 import { StudentQuestionsPanel } from './StudentQuestionsPanel';
-import { CheckCircle2, Award, ArrowLeft, RotateCcw, FileText, Check, PauseCircle } from 'lucide-react';
+import { VocabPopover } from './VocabPopover';
+import { PersonalVocabModal } from './PersonalVocabModal';
+import {
+  getSavedVocabList,
+  toggleSaveVocabWord,
+  PERSONAL_VOCAB_EVENT,
+} from '../utils/personalVocab';
+import {
+  CheckCircle2,
+  Award,
+  ArrowLeft,
+  Check,
+  PauseCircle,
+  BookOpen,
+  Bookmark,
+  Volume2,
+} from 'lucide-react';
 
 interface HomeworkPlayerProps {
   lesson: Lesson;
   studentId: string;
   studentName: string;
+  userId?: string;
+  isAutoDictation?: boolean;
   onFinish: (submission: LessonSubmission) => void;
   onBack: () => void;
 }
@@ -17,9 +35,12 @@ export const HomeworkPlayer: React.FC<HomeworkPlayerProps> = ({
   lesson,
   studentId,
   studentName,
+  userId,
+  isAutoDictation = false,
   onFinish,
   onBack,
 }) => {
+  const effectiveUserId = userId || studentId;
   const [currentTime, setCurrentTime] = useState(lesson.trimStart || 0);
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, StudentAnswer>>({});
@@ -31,6 +52,24 @@ export const HomeworkPlayer: React.FC<HomeworkPlayerProps> = ({
   const [showCaptions, setShowCaptions] = useState(true);
   const [autoPauseAtQuestions, setAutoPauseAtQuestions] = useState(true);
   const [detectedDuration, setDetectedDuration] = useState<number>(0);
+
+  // Video caption vocab popup & personal saved vocabulary list
+  const [activeVideoVocab, setActiveVideoVocab] = useState<VocabEntry | null>(null);
+  const [isPersonalVocabOpen, setIsPersonalVocabOpen] = useState(false);
+  const [savedWordKeys, setSavedWordKeys] = useState<Set<string>>(() => {
+    return new Set(getSavedVocabList(effectiveUserId).map((w) => w.word.trim().toLowerCase()));
+  });
+
+  useEffect(() => {
+    const syncSaved = () => {
+      setSavedWordKeys(
+        new Set(getSavedVocabList(effectiveUserId).map((w) => w.word.trim().toLowerCase()))
+      );
+    };
+    syncSaved();
+    window.addEventListener(PERSONAL_VOCAB_EVENT, syncSaved);
+    return () => window.removeEventListener(PERSONAL_VOCAB_EVENT, syncSaved);
+  }, [effectiveUserId]);
 
   const answeredQuestionIds = new Set(Object.keys(answers));
 
@@ -103,6 +142,24 @@ export const HomeworkPlayer: React.FC<HomeworkPlayerProps> = ({
     onFinish(submission);
   };
 
+  const handleToggleSaveVocab = (vocab: VocabEntry) => {
+    const res = toggleSaveVocabWord(effectiveUserId, vocab, {
+      id: lesson.id,
+      title: lesson.title,
+    });
+    setSavedWordKeys(new Set(res.list.map((w) => w.word.trim().toLowerCase())));
+  };
+
+  const speakWord = (word: string) => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(word);
+      utterance.lang = 'en-US';
+      utterance.rate = 0.9;
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
   const totalPointsEarned = Object.values(answers).reduce(
     (sum, a) => sum + (a.pointsEarned || 0),
     0
@@ -123,7 +180,9 @@ export const HomeworkPlayer: React.FC<HomeworkPlayerProps> = ({
           </button>
           <div>
             <div className="text-xs font-semibold text-amber-600 uppercase tracking-wider">
-              Self-Paced Listening Homework
+              {isAutoDictation
+                ? 'Auto-Dictation Practice · Device Only'
+                : 'Self-Paced Listening Homework'}
             </div>
             <h2 className="text-lg font-bold text-slate-900">{lesson.title}</h2>
           </div>
@@ -179,15 +238,15 @@ export const HomeworkPlayer: React.FC<HomeworkPlayerProps> = ({
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs tracking-wide transition-colors shadow-xs cursor-pointer flex items-center gap-1.5"
             >
               <Check className="w-4 h-4" />
-              <span>Submit & Finish</span>
+              <span>{isAutoDictation ? 'Finish & View Report' : 'Submit & Finish'}</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* TWO COLUMN SIDE-BY-SIDE LAYOUT: Left = Video & Captions, Right = Questions Panel */}
+      {/* TWO COLUMN SIDE-BY-SIDE LAYOUT: Left = Video, Captions & Glossed Words, Right = Questions Panel */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Column (7 cols): Player & Interactive Captions */}
+        {/* Left Column (7 cols): Player, Interactive Captions & Glossed Words */}
         <div className="lg:col-span-7 space-y-4">
           <UnifiedPlayer
             mediaType={lesson.mediaType}
@@ -204,7 +263,10 @@ export const HomeworkPlayer: React.FC<HomeworkPlayerProps> = ({
             difficultWords={lesson.difficultWords}
             showCaptions={showCaptions}
             onToggleCaptions={() => setShowCaptions(!showCaptions)}
-            onWordClick={() => setPauseTrigger(Date.now())}
+            onWordClick={(vocab) => {
+              setPauseTrigger(Date.now());
+              setActiveVideoVocab(vocab);
+            }}
             answeredQuestionIds={answeredQuestionIds}
             autoPauseAtCheckpoints={autoPauseAtQuestions}
             onTimeUpdate={handleTimeUpdate}
@@ -221,7 +283,113 @@ export const HomeworkPlayer: React.FC<HomeworkPlayerProps> = ({
             }}
             canSeek={!lesson.preventSkipping}
             onWordClick={() => setPauseTrigger(Date.now())}
+            isCollapsed={!showCaptions}
+            onExpand={() => setShowCaptions(true)}
+            userId={effectiveUserId}
+            lessonId={lesson.id}
+            lessonTitle={lesson.title}
           />
+
+          {/* Glossed Words & Personal Saved Vocabulary Panel */}
+          {(lesson.difficultWords.length > 0 || savedWordKeys.size > 0) && (
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3">
+              <div className="flex items-center justify-between gap-3 flex-wrap pb-2.5 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-amber-600" />
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Glossed Words ({lesson.difficultWords.length})
+                  </h3>
+                  <span className="text-[11px] text-slate-400 hidden sm:inline">
+                    · Save words to review later
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsPersonalVocabOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  <Bookmark className="w-3.5 h-3.5 fill-amber-500 text-amber-600" />
+                  <span>My Vocabulary ({savedWordKeys.size})</span>
+                </button>
+              </div>
+
+              {lesson.difficultWords.length === 0 ? (
+                <p className="text-xs text-slate-500 italic py-2">
+                  No glossed words added to this lesson. Open &quot;My Vocabulary&quot; to review saved words from other lessons.
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-72 overflow-y-auto pr-1">
+                  {lesson.difficultWords.map((vocab) => {
+                    const isSaved = savedWordKeys.has(vocab.word.trim().toLowerCase());
+                    return (
+                      <div
+                        key={vocab.word}
+                        className="p-3 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-amber-50/40 hover:border-amber-200 transition-colors flex items-start justify-between gap-2.5"
+                      >
+                        <div
+                          className="min-w-0 flex-1 cursor-pointer"
+                          onClick={() => {
+                            setPauseTrigger(Date.now());
+                            setActiveVideoVocab(vocab);
+                          }}
+                        >
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-bold text-xs text-slate-900">
+                              {vocab.word}
+                            </span>
+                            <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-200">
+                              {vocab.cefrLevel}
+                            </span>
+                            {vocab.phonetic && (
+                              <span className="text-[11px] font-mono text-slate-400">
+                                {vocab.phonetic}
+                              </span>
+                            )}
+                          </div>
+                          {vocab.vietnameseTranslation && vocab.vietnameseTranslation.trim() && (
+                            <div className="text-[11px] font-semibold text-emerald-800 mt-0.5 truncate">
+                              {vocab.vietnameseTranslation}
+                            </div>
+                          )}
+                          {vocab.definition && vocab.definition.trim() && (
+                            <div className="text-[11px] text-slate-600 line-clamp-1 mt-0.5">
+                              {vocab.definition}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => speakWord(vocab.word)}
+                            className="p-1.5 text-slate-400 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
+                            title="Pronounce word"
+                          >
+                            <Volume2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleSaveVocab(vocab)}
+                            className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                              isSaved
+                                ? 'bg-amber-100 border-amber-300 text-amber-700 hover:bg-amber-200'
+                                : 'bg-white border-slate-200 text-slate-400 hover:text-amber-600 hover:border-amber-200'
+                            }`}
+                            title={isSaved ? 'Saved to My Vocabulary (click to remove)' : 'Save to My Vocabulary'}
+                          >
+                            <Bookmark
+                              className={`w-3.5 h-3.5 ${isSaved ? 'fill-amber-500 text-amber-600' : ''}`}
+                            />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Right Column (5 cols): Persistent Questions Panel */}
@@ -255,7 +423,9 @@ export const HomeworkPlayer: React.FC<HomeworkPlayerProps> = ({
                 All listening checkpoints completed!
               </div>
               <div className="text-xs text-emerald-800">
-                You scored {totalPointsEarned} out of {maxPossiblePoints} points. Submit now to generate your homework score report.
+                {isAutoDictation
+                  ? `You scored ${totalPointsEarned} out of ${maxPossiblePoints} points. Finish now to view your private dictation report.`
+                  : `You scored ${totalPointsEarned} out of ${maxPossiblePoints} points. Submit now to generate your homework score report.`}
               </div>
             </div>
           </div>
@@ -263,10 +433,29 @@ export const HomeworkPlayer: React.FC<HomeworkPlayerProps> = ({
             onClick={handleCompleteLesson}
             className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs tracking-wide transition-colors shadow-xs cursor-pointer"
           >
-            Submit Homework & View Report
+            {isAutoDictation
+              ? 'Finish & View Dictation Report'
+              : 'Submit Homework & View Report'}
           </button>
         </div>
       )}
+
+      {/* Vocabulary Popup when clicking glossed word inside Video Captions or Glossed Words list */}
+      {activeVideoVocab && (
+        <VocabPopover
+          vocab={activeVideoVocab}
+          onClose={() => setActiveVideoVocab(null)}
+          isSaved={savedWordKeys.has(activeVideoVocab.word.trim().toLowerCase())}
+          onToggleSave={() => handleToggleSaveVocab(activeVideoVocab)}
+        />
+      )}
+
+      {/* Personal Saved Vocabulary Review Modal */}
+      <PersonalVocabModal
+        isOpen={isPersonalVocabOpen}
+        onClose={() => setIsPersonalVocabOpen(false)}
+        userId={effectiveUserId}
+      />
     </div>
   );
 };

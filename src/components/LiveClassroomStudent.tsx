@@ -259,6 +259,9 @@ export const LiveClassroomStudent: React.FC<LiveClassroomStudentProps> = ({
                 currentTime={session?.currentTime || 0}
                 canSeek={false}
                 onWordClick={() => setIsLocalWordOpen(true)}
+                userId={studentId}
+                lessonId={lesson.id}
+                lessonTitle={lesson.title}
               />
             ) : (
               <p className="text-xs text-slate-500 italic py-4 text-center">

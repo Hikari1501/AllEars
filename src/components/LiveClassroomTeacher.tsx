@@ -8,6 +8,7 @@ import {
 } from '../types';
 import { UnifiedPlayer } from './UnifiedPlayer';
 import { InteractiveCaptions } from './InteractiveCaptions';
+import { VocabPopover } from './VocabPopover';
 import {
   Users,
   Copy,
@@ -59,6 +60,7 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
   const [pauseTrigger, setPauseTrigger] = useState(0);
   const [showCaptions, setShowCaptions] = useState(true);
   const [teacherViewMode, setTeacherViewMode] = useState<'console' | 'projector'>('console');
+  const [activeVideoVocab, setActiveVideoVocab] = useState<VocabEntry | null>(null);
 
   const handleEndSession = async () => {
     try {
@@ -488,7 +490,11 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
               showCaptions={showCaptions}
               autoPauseAtCheckpoints={session?.autoPauseAtCheckpoints !== false}
               onToggleCaptions={() => setShowCaptions(!showCaptions)}
-              onWordClick={handleBroadcastVocab}
+              onWordClick={(vocab) => {
+                setPauseTrigger(Date.now());
+                updateServerState({ isPlaying: false });
+                setActiveVideoVocab(vocab);
+              }}
               onTimeUpdate={handleTimeUpdate}
               onQuestionTrigger={handleQuestionTrigger}
             />
@@ -506,8 +512,19 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
                 updateServerState({ isPlaying: false });
               }}
               onShowVocabToClass={handleBroadcastVocab}
+              lessonId={lesson.id}
+              lessonTitle={lesson.title}
             />
           </div>
+
+          {activeVideoVocab && (
+            <VocabPopover
+              vocab={activeVideoVocab}
+              onClose={() => setActiveVideoVocab(null)}
+              isTeacher={true}
+              onShowToClass={() => handleBroadcastVocab(activeVideoVocab)}
+            />
+          )}
         </div>
       )}
 
