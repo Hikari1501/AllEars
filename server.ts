@@ -8,6 +8,8 @@ import { GoogleGenAI, Type } from '@google/genai';
 import { INITIAL_LESSONS } from './src/data/mockLessons.ts';
 import {
   initDatabase,
+  getDatabaseStatus,
+  getActivePool,
   findTeacher,
   getTeacherById,
   addTeacher,
@@ -34,6 +36,11 @@ import {
   saveStudentLesson,
   deleteStudentLesson,
 } from './server/db.ts';
+import {
+  exportDatabaseSnapshot,
+  migratePostgresToTarget,
+  validateTargetUrl,
+} from './server/migrate-core.ts';
 
 dotenv.config();
 
@@ -191,6 +198,22 @@ async function verifyTeacherOrAdminRequester(req: Request): Promise<TeacherRecor
   }
   if (!teacher && userEmail) {
     teacher = await findTeacher(userEmail);
+  }
+  return teacher;
+}
+
+// Strict Admin verification requiring an existing Admin in DB AND valid current admin password
+async function verifyAdminWithPassword(req: Request): Promise<TeacherRecord | null> {
+  const teacher = await verifyTeacherOrAdminRequester(req);
+  if (!teacher) return null;
+  const isAdminAccount = Boolean(
+    teacher.isAdmin || teacher.email.toLowerCase() === 'chuckacr1501@gmail.com' || teacher.id === 'teacher-chuck'
+  );
+  if (!isAdminAccount) return null;
+
+  const suppliedPassword = typeof req.body?.adminPassword === 'string' ? req.body.adminPassword : '';
+  if (!suppliedPassword || suppliedPassword !== teacher.password) {
+    return null;
   }
   return teacher;
 }
@@ -1729,9 +1752,78 @@ app.delete('/api/reports/sessions/:sessionId', async (req: Request, res: Respons
   }
 });
 
+// Health & Database Connection Check (redacted: no credentials exposed)
+app.get('/api/health', (_req: Request, res: Response) => {
+  res.json({
+    ok: true,
+    database: getDatabaseStatus(),
+  });
+});
+
+// Admin-only (password-verified): Export full database backup snapshot as JSON
+app.post('/api/admin/db-backup', async (req: Request, res: Response) => {
+  const admin = await verifyAdminWithPassword(req);
+  if (!admin) {
+    return res.status(403).json({
+      error: 'Administrator authentication failed. Please enter your current Admin password.',
+    });
+  }
+
+  try {
+    const snapshot = await exportDatabaseSnapshot();
+    res.json({ success: true, snapshot });
+  } catch (err: any) {
+    console.error('[API] Error exporting database backup:', err?.message || err);
+    res.status(500).json({ error: 'Failed to export database backup.' });
+  }
+});
+
+// Admin-only (password-verified): Migrate active PostgreSQL data directly to Supabase Session Pooler URI
+app.post('/api/admin/migrate-to-supabase', async (req: Request, res: Response) => {
+  const admin = await verifyAdminWithPassword(req);
+  if (!admin) {
+    return res.status(403).json({
+      error: 'Administrator authentication failed. Please enter your current Admin password.',
+    });
+  }
+
+  const sourcePool = getActivePool();
+  if (!sourcePool) {
+    return res.status(400).json({
+      error:
+        'Source PostgreSQL database is not connected on this server. Run this from your live Render service while it is still connected to your Render database.',
+    });
+  }
+
+  const rawTargetUrl = typeof req.body?.targetDatabaseUrl === 'string' ? req.body.targetDatabaseUrl : '';
+  const check = validateTargetUrl(
+    rawTargetUrl,
+    process.env.DATABASE_URL || process.env.SUPABASE_DATABASE_URL || ''
+  );
+  if (check.valid === false) {
+    return res.status(400).json({ error: check.error });
+  }
+
+  try {
+    const result = await migratePostgresToTarget(sourcePool, check.normalizedUrl);
+    const allOk = result.counts.every((c) => c.ok);
+    res.json({
+      success: allOk,
+      ...result,
+    });
+  } catch (err: any) {
+    console.error('[API] Database migration to Supabase failed:', err?.message || err);
+    res.status(500).json({
+      error:
+        err?.message ||
+        'Could not connect or copy data to Supabase. Double-check your Session Pooler URI, password, and region.',
+    });
+  }
+});
+
 // Setup Vite middleware in dev or static serving in production
 async function startServer() {
-  // Initialize Database tables and seeds (Render PostgreSQL or fallback)
+  // Initialize Database tables and seeds (Supabase / Render PostgreSQL or fallback)
   await initDatabase(INITIAL_LESSONS);
 
   const isDev = process.env.NODE_ENV !== 'production';

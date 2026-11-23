@@ -10,7 +10,8 @@
     "start": "tsx server.ts",
     "preview": "vite preview",
     "clean": "rm -rf dist docs server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "db:migrate:supabase": "tsx server/migrate-to-supabase.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

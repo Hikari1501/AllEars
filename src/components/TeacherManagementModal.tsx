@@ -12,6 +12,11 @@ import {
   User,
   KeyRound,
   ShieldAlert,
+  Database,
+  Download,
+  ArrowRight,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { UserAccount } from '../types';
 
@@ -56,6 +61,17 @@ export const TeacherManagementModal: React.FC<TeacherManagementModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Admin Database Backup & Supabase Migration state
+  const [isMigrationOpen, setIsMigrationOpen] = useState(false);
+  const [dbHealth, setDbHealth] = useState<{ backend?: string; provider?: string; host?: string; port?: string; connected?: boolean } | null>(null);
+  const [adminPasswordInput, setAdminPasswordInput] = useState('');
+  const [targetSupabaseUrl, setTargetSupabaseUrl] = useState('');
+  const [isBackingUp, setIsBackingUp] = useState(false);
+  const [isMigratingDb, setIsMigratingDb] = useState(false);
+  const [migrationError, setMigrationError] = useState<string | null>(null);
+  const [migrationCounts, setMigrationCounts] = useState<Array<{ table: string; source: number; target: number; ok: boolean }> | null>(null);
+  const [migrationTargetHost, setMigrationTargetHost] = useState<string | null>(null);
 
   const authHeaders = {
     'Content-Type': 'application/json',
@@ -122,7 +138,89 @@ export const TeacherManagementModal: React.FC<TeacherManagementModalProps> = ({
 
   useEffect(() => {
     fetchTeachers();
+    fetch('/api/health')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.database) setDbHealth(data.database);
+      })
+      .catch(() => {});
   }, []);
+
+  const handleDownloadDbBackup = async () => {
+    setMigrationError(null);
+    if (!adminPasswordInput.trim()) {
+      setMigrationError('Please enter your current Admin password first.');
+      return;
+    }
+    setIsBackingUp(true);
+    try {
+      const res = await fetch('/api/admin/db-backup', {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify({ adminPassword: adminPasswordInput }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMigrationError(data.error || 'Backup export failed.');
+        return;
+      }
+      const blob = new Blob([JSON.stringify(data.snapshot, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `allears-db-backup-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setStatusMessage('Full database backup (.json) downloaded!');
+      setTimeout(() => setStatusMessage(null), 5000);
+    } catch {
+      setMigrationError('Could not connect to server to download backup.');
+    } finally {
+      setIsBackingUp(false);
+    }
+  };
+
+  const handleMigrateToSupabase = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMigrationError(null);
+    setMigrationCounts(null);
+    setMigrationTargetHost(null);
+
+    if (!adminPasswordInput.trim()) {
+      setMigrationError('Please enter your current Admin password.');
+      return;
+    }
+    if (!targetSupabaseUrl.trim()) {
+      setMigrationError('Please paste your Supabase Session Pooler connection URI.');
+      return;
+    }
+
+    setIsMigratingDb(true);
+    try {
+      const res = await fetch('/api/admin/migrate-to-supabase', {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify({
+          adminPassword: adminPasswordInput,
+          targetDatabaseUrl: targetSupabaseUrl.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMigrationError(data.error || 'Migration failed.');
+        return;
+      }
+      setMigrationCounts(Array.isArray(data.counts) ? data.counts : null);
+      setMigrationTargetHost(data.targetHost || null);
+      setStatusMessage('All data copied and verified in Supabase!');
+    } catch {
+      setMigrationError('Network error while migrating database.');
+    } finally {
+      setIsMigratingDb(false);
+    }
+  };
 
   const handleAddTeacher = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -598,6 +696,137 @@ export const TeacherManagementModal: React.FC<TeacherManagementModalProps> = ({
                 );
               })}
             </div>
+          </div>
+
+          {/* Admin Database Backup & Migration (Render -> Supabase) */}
+          <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50/70">
+            <button
+              type="button"
+              onClick={() => setIsMigrationOpen((prev) => !prev)}
+              className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-slate-100/70 transition-colors cursor-pointer"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                  <Database className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                    <span>Database Backup &amp; Migration (Supabase)</span>
+                    {dbHealth?.provider && (
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                          dbHealth.provider === 'supabase'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : dbHealth.connected
+                            ? 'bg-sky-50 text-sky-700 border-sky-200'
+                            : 'bg-amber-50 text-amber-800 border-amber-200'
+                        }`}
+                      >
+                        Active: {dbHealth.provider}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    Download a backup or copy all Render data directly to Supabase with no terminal needed
+                  </p>
+                </div>
+              </div>
+              {isMigrationOpen ? (
+                <ChevronUp className="w-4 h-4 text-slate-400 shrink-0" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+              )}
+            </button>
+
+            {isMigrationOpen && (
+              <div className="px-4 pb-4 pt-2 border-t border-slate-200 bg-white space-y-3 text-xs">
+                {dbHealth?.host && (
+                  <div className="text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                    Current DB host: <span className="font-mono font-semibold text-slate-800">{dbHealth.host}:{dbHealth.port}</span>
+                  </div>
+                )}
+
+                {migrationError && (
+                  <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg text-xs flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    <span>{migrationError}</span>
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-slate-700 block mb-1 font-semibold">
+                    Confirm Your Admin Password
+                  </label>
+                  <input
+                    type="password"
+                    value={adminPasswordInput}
+                    onChange={(e) => setAdminPasswordInput(e.target.value)}
+                    placeholder="Enter your current Admin password"
+                    className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:bg-white focus:ring-1 focus:ring-emerald-500 focus:outline-hidden"
+                  />
+                </div>
+
+                <div className="pt-1 flex flex-col sm:flex-row sm:items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={isBackingUp}
+                    onClick={handleDownloadDbBackup}
+                    className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-bold cursor-pointer disabled:opacity-50"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>{isBackingUp ? 'Exporting Backup...' : '1. Download Full Backup (.json)'}</span>
+                  </button>
+                </div>
+
+                <form onSubmit={handleMigrateToSupabase} className="pt-2 border-t border-slate-100 space-y-2.5">
+                  <div>
+                    <label className="text-slate-700 block mb-1 font-semibold">
+                      2. Supabase Session Pooler URI (Port 5432)
+                    </label>
+                    <input
+                      type="password"
+                      value={targetSupabaseUrl}
+                      onChange={(e) => setTargetSupabaseUrl(e.target.value)}
+                      placeholder="postgresql://postgres.[REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:5432/postgres"
+                      className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-mono text-[11px] focus:bg-white focus:ring-1 focus:ring-emerald-500 focus:outline-hidden"
+                    />
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      In Supabase: Connect → Connection String → Method: <strong>Session pooler</strong>. Used once in memory and never stored.
+                    </p>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isMigratingDb}
+                    className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold inline-flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <span>{isMigratingDb ? 'Copying All Tables to Supabase...' : 'Copy All Data to Supabase'}</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </form>
+
+                {migrationCounts && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg space-y-1.5">
+                    <div className="text-xs font-bold text-emerald-900 flex items-center gap-1.5">
+                      <Check className="w-4 h-4 text-emerald-600" />
+                      <span>
+                        Migration Verified{migrationTargetHost ? ` (${migrationTargetHost})` : ''}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-[11px] font-mono text-emerald-900">
+                      {migrationCounts.map((c) => (
+                        <div key={c.table} className="flex items-center justify-between bg-white/80 px-2 py-1 rounded border border-emerald-100">
+                          <span>{c.table}</span>
+                          <span>
+                            {c.source} → {c.target} {c.ok ? 'OK' : 'WARN'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

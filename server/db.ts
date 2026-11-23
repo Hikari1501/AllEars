@@ -42,6 +42,206 @@ const STUDENT_LESSONS_FILE = path.join(DATA_DIR, 'db-student-lessons.json');
 let pool: pg.Pool | null = null;
 let isPostgresActive = false;
 
+export interface DatabaseStatus {
+  backend: 'postgres' | 'json-fallback';
+  connected: boolean;
+  provider: 'supabase' | 'postgres' | 'local-json';
+  host?: string;
+  port?: string;
+  lastError?: string;
+}
+
+let dbStatus: DatabaseStatus = {
+  backend: 'json-fallback',
+  connected: false,
+  provider: 'local-json',
+};
+
+export function getDatabaseStatus(): DatabaseStatus {
+  return { ...dbStatus };
+}
+
+export function getActivePool(): pg.Pool | null {
+  return isPostgresActive && pool ? pool : null;
+}
+
+export interface NormalizedPgConfig {
+  connectionString: string;
+  ssl: false | { rejectUnauthorized: false };
+  host: string;
+  port: string;
+  isSupabase: boolean;
+  isTransactionPooler: boolean;
+  isDirectSupabaseHost: boolean;
+}
+
+/**
+ * Normalizes a PostgreSQL connection string for Supabase (Free Plan / Session Pooler) & Render:
+ * - Strips `sslmode` query params (unless `disable`) so `pg` v8+ does not override
+ *   `ssl: { rejectUnauthorized: false }` and fail with SELF_SIGNED_CERT_IN_CHAIN.
+ * - Detects localhost vs remote TLS, Supabase pooler vs direct IPv6 host, and transaction pooler port.
+ */
+export function createPgPoolConfig(rawUrl: string): NormalizedPgConfig {
+  const trimmed = rawUrl.trim();
+  let connectionString = trimmed;
+  let host = 'unknown';
+  let port = '5432';
+  let isLocal = false;
+  let sslMode = '';
+
+  try {
+    const parsed = new URL(trimmed);
+    host = parsed.hostname || 'unknown';
+    port = parsed.port || '5432';
+    isLocal =
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host === '::1' ||
+      host === '[::1]';
+    sslMode = (parsed.searchParams.get('sslmode') || '').toLowerCase();
+
+    if (sslMode && sslMode !== 'disable') {
+      parsed.searchParams.delete('sslmode');
+      connectionString = parsed.toString();
+    }
+  } catch {
+    isLocal = /localhost|127\.0\.0\.1/i.test(trimmed);
+    const sslMatch = trimmed.match(/[?&]sslmode=([^&]+)/i);
+    sslMode = sslMatch ? sslMatch[1].toLowerCase() : '';
+    if (sslMode && sslMode !== 'disable') {
+      connectionString = trimmed
+        .replace(/([?&])sslmode=[^&]+&?/i, '$1')
+        .replace(/[?&]$/, '');
+    }
+  }
+
+  const isSupabase = /\.supabase\.(co|com|net)$/i.test(host) || /supabase/i.test(host);
+  const isDirectSupabaseHost = /^db\.[^.]+\.supabase\.co$/i.test(host);
+  const isTransactionPooler = port === '6543';
+
+  return {
+    connectionString,
+    ssl: isLocal || sslMode === 'disable' ? false : { rejectUnauthorized: false },
+    host,
+    port,
+    isSupabase,
+    isTransactionPooler,
+    isDirectSupabaseHost,
+  };
+}
+
+export const SCHEMA_AND_MIGRATIONS_SQL = `
+  CREATE TABLE IF NOT EXISTS teachers (
+    id VARCHAR(128) PRIMARY KEY,
+    name TEXT NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password TEXT NOT NULL,
+    is_admin BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS students (
+    id VARCHAR(128) PRIMARY KEY,
+    name TEXT NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password TEXT NOT NULL,
+    teacher_id VARCHAR(128),
+    teacher_name TEXT,
+    class_name TEXT,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS lessons (
+    id VARCHAR(128) PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    background_info_text TEXT DEFAULT '',
+    background_info_image_url TEXT,
+    level VARCHAR(16) NOT NULL,
+    media_type VARCHAR(32) NOT NULL,
+    media_url TEXT NOT NULL,
+    duration NUMERIC DEFAULT 0,
+    trim_start NUMERIC DEFAULT NULL,
+    trim_end NUMERIC DEFAULT NULL,
+    prevent_skipping BOOLEAN DEFAULT FALSE,
+    thumbnail_url TEXT,
+    teacher_id VARCHAR(128),
+    teacher_name TEXT,
+    is_published BOOLEAN DEFAULT TRUE,
+    captions JSONB DEFAULT '[]'::jsonb,
+    questions JSONB DEFAULT '[]'::jsonb,
+    difficult_words JSONB DEFAULT '[]'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS student_lessons (
+    id VARCHAR(128) PRIMARY KEY,
+    student_id VARCHAR(128) NOT NULL,
+    lesson_data JSONB NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_student_lessons_student_id ON student_lessons(student_id);
+
+  CREATE TABLE IF NOT EXISTS session_reports (
+    session_id VARCHAR(128) PRIMARY KEY,
+    lesson_id VARCHAR(128),
+    lesson_title TEXT,
+    teacher_id VARCHAR(128),
+    teacher_name TEXT,
+    mode VARCHAR(32) NOT NULL,
+    pin VARCHAR(32),
+    data JSONB NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+  );
+
+  -- Self-healing schema migrations for Render & Supabase tables
+  ALTER TABLE students ADD COLUMN IF NOT EXISTS teacher_id VARCHAR(128);
+  ALTER TABLE students ADD COLUMN IF NOT EXISTS teacher_name TEXT;
+  ALTER TABLE students ADD COLUMN IF NOT EXISTS class_name TEXT;
+  UPDATE students SET teacher_id = 'teacher-chuck', teacher_name = 'Chuck', class_name = 'Chuck''s Class' WHERE teacher_id IS NULL;
+
+  ALTER TABLE teachers ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE;
+  UPDATE teachers SET is_admin = TRUE WHERE LOWER(email) = 'chuckacr1501@gmail.com';
+
+  ALTER TABLE lessons ADD COLUMN IF NOT EXISTS description TEXT DEFAULT '';
+  ALTER TABLE lessons ADD COLUMN IF NOT EXISTS background_info_text TEXT DEFAULT '';
+  ALTER TABLE lessons ADD COLUMN IF NOT EXISTS background_info_image_url TEXT;
+  ALTER TABLE lessons ADD COLUMN IF NOT EXISTS trim_start NUMERIC DEFAULT NULL;
+  ALTER TABLE lessons ADD COLUMN IF NOT EXISTS trim_end NUMERIC DEFAULT NULL;
+  ALTER TABLE lessons ALTER COLUMN duration SET DEFAULT 0;
+  ALTER TABLE lessons ALTER COLUMN trim_start DROP DEFAULT;
+  ALTER TABLE lessons ALTER COLUMN trim_end DROP DEFAULT;
+  ALTER TABLE lessons ADD COLUMN IF NOT EXISTS prevent_skipping BOOLEAN DEFAULT FALSE;
+  ALTER TABLE lessons ADD COLUMN IF NOT EXISTS thumbnail_url TEXT;
+  ALTER TABLE lessons ADD COLUMN IF NOT EXISTS teacher_id VARCHAR(128);
+  ALTER TABLE lessons ADD COLUMN IF NOT EXISTS teacher_name TEXT;
+  ALTER TABLE lessons ADD COLUMN IF NOT EXISTS is_published BOOLEAN DEFAULT TRUE;
+  ALTER TABLE lessons ADD COLUMN IF NOT EXISTS captions JSONB DEFAULT '[]'::jsonb;
+  ALTER TABLE lessons ADD COLUMN IF NOT EXISTS questions JSONB DEFAULT '[]'::jsonb;
+  ALTER TABLE lessons ADD COLUMN IF NOT EXISTS difficult_words JSONB DEFAULT '[]'::jsonb;
+
+  -- On Supabase, enable RLS without public policies so anon/Data API cannot read/write tables,
+  -- while the backend postgres owner role retains full server-side access.
+  DO $$
+  BEGIN
+    IF current_user IN ('postgres', 'supabase_admin') THEN
+      ALTER TABLE teachers ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE students ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE lessons ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE student_lessons ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE session_reports ENABLE ROW LEVEL SECURITY;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    NULL;
+  END $$;
+`;
+
+export async function ensureSchema(client: pg.PoolClient | pg.Pool): Promise<void> {
+  await client.query(SCHEMA_AND_MIGRATIONS_SQL);
+}
+
 // Default admin teacher: Chuck
 export const DEFAULT_TEACHER: TeacherRecord = {
   id: 'teacher-chuck',
@@ -83,178 +283,149 @@ function writeJsonSafe(filePath: string, data: any) {
 }
 
 /**
- * Initialize Database: Connects to Render PostgreSQL or sets up local JSON fallback
+ * Initialize Database: Connects to Supabase / Render PostgreSQL or sets up local JSON fallback
  */
 export async function initDatabase(initialLessons: Lesson[]) {
-  const dbUrl = process.env.DATABASE_URL;
+  const dbUrl = (process.env.DATABASE_URL || process.env.SUPABASE_DATABASE_URL || '').trim();
 
   if (dbUrl) {
+    const pgConfig = createPgPoolConfig(dbUrl);
+    const provider: 'supabase' | 'postgres' = pgConfig.isSupabase ? 'supabase' : 'postgres';
+
     try {
-      console.log('[DB] Connecting to PostgreSQL database...');
+      console.log(
+        `[DB] Connecting to ${provider === 'supabase' ? 'Supabase ' : ''}PostgreSQL (${pgConfig.host}:${pgConfig.port})...`
+      );
+      if (pgConfig.isDirectSupabaseHost) {
+        console.warn(
+          '[DB] Notice: Using direct Supabase host (db.*.supabase.co), which is IPv6-only on Free Plan. On IPv4 hosts like Render, use the Supabase Session Pooler URL (*.pooler.supabase.com:5432).'
+        );
+      }
+      if (pgConfig.isTransactionPooler) {
+        console.warn(
+          '[DB] Notice: Port 6543 (Transaction Pooler) detected. For a persistent Express server, Session Pooler (port 5432) is recommended.'
+        );
+      }
+
+      const parsedPoolMax = Number(process.env.DB_POOL_MAX);
+      const poolMax = Number.isFinite(parsedPoolMax) && parsedPoolMax >= 2 ? parsedPoolMax : 10;
+
       pool = new Pool({
-        connectionString: dbUrl,
-        ssl: dbUrl.includes('localhost') ? false : { rejectUnauthorized: false },
+        connectionString: pgConfig.connectionString,
+        ssl: pgConfig.ssl,
+        max: poolMax,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 15000,
+        keepAlive: true,
+        keepAliveInitialDelayMillis: 10000,
+      });
+
+      // Prevent unhandled 'error' events when Supabase/Render pooler closes idle connections
+      pool.on('error', (err) => {
+        console.error('[DB] Unexpected PostgreSQL pool error:', err.message);
       });
 
       // Verify connection
       const client = await pool.connect();
-      console.log('[DB] PostgreSQL connection established successfully.');
+      try {
+        console.log('[DB] PostgreSQL connection established successfully.');
 
-      // Create Tables
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS teachers (
-          id VARCHAR(128) PRIMARY KEY,
-          name TEXT NOT NULL,
-          email VARCHAR(255) UNIQUE NOT NULL,
-          password TEXT NOT NULL,
-          is_admin BOOLEAN DEFAULT FALSE,
-          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        // Create / migrate tables
+        await ensureSchema(client);
+
+        // Seed Chuck's default teacher record ONLY if not already present (preserves custom display name, email, and password)
+        const existingAdminRes = await client.query(
+          'SELECT id FROM teachers WHERE id = $1 OR LOWER(email) = LOWER($2) LIMIT 1',
+          [DEFAULT_TEACHER.id, DEFAULT_TEACHER.email]
         );
-
-        CREATE TABLE IF NOT EXISTS students (
-          id VARCHAR(128) PRIMARY KEY,
-          name TEXT NOT NULL,
-          email VARCHAR(255) UNIQUE NOT NULL,
-          password TEXT NOT NULL,
-          teacher_id VARCHAR(128),
-          teacher_name TEXT,
-          class_name TEXT,
-          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS lessons (
-          id VARCHAR(128) PRIMARY KEY,
-          title TEXT NOT NULL,
-          description TEXT DEFAULT '',
-          level VARCHAR(16) NOT NULL,
-          media_type VARCHAR(32) NOT NULL,
-          media_url TEXT NOT NULL,
-          duration NUMERIC DEFAULT 0,
-          trim_start NUMERIC DEFAULT NULL,
-          trim_end NUMERIC DEFAULT NULL,
-          prevent_skipping BOOLEAN DEFAULT FALSE,
-          thumbnail_url TEXT,
-          teacher_id VARCHAR(128),
-          teacher_name TEXT,
-          is_published BOOLEAN DEFAULT TRUE,
-          captions JSONB DEFAULT '[]'::jsonb,
-          questions JSONB DEFAULT '[]'::jsonb,
-          difficult_words JSONB DEFAULT '[]'::jsonb,
-          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS student_lessons (
-          id VARCHAR(128) PRIMARY KEY,
-          student_id VARCHAR(128) NOT NULL,
-          lesson_data JSONB NOT NULL,
-          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE INDEX IF NOT EXISTS idx_student_lessons_student_id ON student_lessons(student_id);
-
-        CREATE TABLE IF NOT EXISTS session_reports (
-          session_id VARCHAR(128) PRIMARY KEY,
-          lesson_id VARCHAR(128),
-          lesson_title TEXT,
-          teacher_id VARCHAR(128),
-          teacher_name TEXT,
-          mode VARCHAR(32) NOT NULL,
-          pin VARCHAR(32),
-          data JSONB NOT NULL,
-          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-        );
-
-        -- Self-healing schema migrations for existing Render tables
-        ALTER TABLE students ADD COLUMN IF NOT EXISTS teacher_id VARCHAR(128);
-        ALTER TABLE students ADD COLUMN IF NOT EXISTS teacher_name TEXT;
-        ALTER TABLE students ADD COLUMN IF NOT EXISTS class_name TEXT;
-        UPDATE students SET teacher_id = 'teacher-chuck', teacher_name = 'Chuck', class_name = 'Chuck''s Class' WHERE teacher_id IS NULL;
-
-        ALTER TABLE teachers ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE;
-        UPDATE teachers SET is_admin = TRUE WHERE LOWER(email) = 'chuckacr1501@gmail.com';
-
-        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS description TEXT DEFAULT '';
-        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS background_info_text TEXT DEFAULT '';
-        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS background_info_image_url TEXT;
-        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS trim_start NUMERIC DEFAULT NULL;
-        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS trim_end NUMERIC DEFAULT NULL;
-        ALTER TABLE lessons ALTER COLUMN duration SET DEFAULT 0;
-        ALTER TABLE lessons ALTER COLUMN trim_start DROP DEFAULT;
-        ALTER TABLE lessons ALTER COLUMN trim_end DROP DEFAULT;
-        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS prevent_skipping BOOLEAN DEFAULT FALSE;
-        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS thumbnail_url TEXT;
-        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS teacher_id VARCHAR(128);
-        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS teacher_name TEXT;
-        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS is_published BOOLEAN DEFAULT TRUE;
-        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS captions JSONB DEFAULT '[]'::jsonb;
-        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS questions JSONB DEFAULT '[]'::jsonb;
-        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS difficult_words JSONB DEFAULT '[]'::jsonb;
-      `);
-
-      // Seed Chuck's default teacher record ONLY if not already present (preserves custom display name, email, and password)
-      const existingAdminRes = await client.query(
-        'SELECT id FROM teachers WHERE id = $1 OR LOWER(email) = LOWER($2) LIMIT 1',
-        [DEFAULT_TEACHER.id, DEFAULT_TEACHER.email]
-      );
-      if (existingAdminRes.rows.length > 0) {
-        await client.query(
-          'UPDATE teachers SET is_admin = TRUE WHERE id = $1',
-          [existingAdminRes.rows[0].id]
-        );
-      } else {
-        await client.query(
-          `INSERT INTO teachers (id, name, email, password, is_admin)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [DEFAULT_TEACHER.id, DEFAULT_TEACHER.name, DEFAULT_TEACHER.email, DEFAULT_TEACHER.password, DEFAULT_TEACHER.isAdmin]
-        );
-      }
-
-      // Seed initial catalog lessons if table is empty
-      const countRes = await client.query('SELECT COUNT(*) FROM lessons');
-      const count = parseInt(countRes.rows[0].count, 10);
-      if (count === 0 && initialLessons.length > 0) {
-        console.log(`[DB] Seeding ${initialLessons.length} initial lessons into PostgreSQL...`);
-        for (const l of initialLessons) {
-          await client.query(`
-            INSERT INTO lessons (
-              id, title, description, level, media_type, media_url, duration, trim_start, trim_end,
-              prevent_skipping, thumbnail_url, teacher_id, teacher_name, is_published,
-              captions, questions, difficult_words
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-            ON CONFLICT (id) DO NOTHING;
-          `, [
-            l.id,
-            l.title,
-            l.description || '',
-            l.level,
-            l.mediaType,
-            l.mediaUrl,
-            l.duration || 0,
-            l.trimStart && l.trimStart > 0 ? l.trimStart : null,
-            l.trimEnd && l.trimEnd > 0 ? l.trimEnd : null,
-            l.preventSkipping || false,
-            l.thumbnailUrl || null,
-            l.teacherId || 'teacher-chuck',
-            l.teacherName || 'Chuck',
-            l.isPublished !== false,
-            JSON.stringify(l.captions || []),
-            JSON.stringify(l.questions || []),
-            JSON.stringify(l.difficultWords || []),
-          ]);
+        if (existingAdminRes.rows.length > 0) {
+          await client.query(
+            'UPDATE teachers SET is_admin = TRUE WHERE id = $1',
+            [existingAdminRes.rows[0].id]
+          );
+        } else {
+          await client.query(
+            `INSERT INTO teachers (id, name, email, password, is_admin)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [DEFAULT_TEACHER.id, DEFAULT_TEACHER.name, DEFAULT_TEACHER.email, DEFAULT_TEACHER.password, DEFAULT_TEACHER.isAdmin]
+          );
         }
+
+        // Seed initial catalog lessons only if table is completely empty
+        const countRes = await client.query('SELECT COUNT(*) FROM lessons');
+        const count = parseInt(countRes.rows[0].count, 10);
+        if (count === 0 && initialLessons.length > 0) {
+          console.log(`[DB] Seeding ${initialLessons.length} initial lessons into PostgreSQL...`);
+          for (const l of initialLessons) {
+            await client.query(`
+              INSERT INTO lessons (
+                id, title, description, level, media_type, media_url, duration, trim_start, trim_end,
+                prevent_skipping, thumbnail_url, teacher_id, teacher_name, is_published,
+                captions, questions, difficult_words
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+              ON CONFLICT (id) DO NOTHING;
+            `, [
+              l.id,
+              l.title,
+              l.description || '',
+              l.level,
+              l.mediaType,
+              l.mediaUrl,
+              l.duration || 0,
+              l.trimStart && l.trimStart > 0 ? l.trimStart : null,
+              l.trimEnd && l.trimEnd > 0 ? l.trimEnd : null,
+              l.preventSkipping || false,
+              l.thumbnailUrl || null,
+              l.teacherId || 'teacher-chuck',
+              l.teacherName || 'Chuck',
+              l.isPublished !== false,
+              JSON.stringify(l.captions || []),
+              JSON.stringify(l.questions || []),
+              JSON.stringify(l.difficultWords || []),
+            ]);
+          }
+        }
+      } finally {
+        client.release();
       }
 
-      client.release();
       isPostgresActive = true;
-      console.log('[DB] PostgreSQL tables ready.');
+      dbStatus = {
+        backend: 'postgres',
+        connected: true,
+        provider,
+        host: pgConfig.host,
+        port: pgConfig.port,
+      };
+      console.log(`[DB] ${provider === 'supabase' ? 'Supabase' : 'PostgreSQL'} tables ready.`);
       return;
-    } catch (err) {
-      console.error('[DB] Failed to initialize PostgreSQL, switching to local JSON fallback:', err);
+    } catch (err: any) {
+      console.error('[DB] Failed to initialize PostgreSQL, switching to local JSON fallback:', err?.message || err);
       isPostgresActive = false;
+      dbStatus = {
+        backend: 'json-fallback',
+        connected: false,
+        provider: 'local-json',
+        host: pgConfig.host,
+        port: pgConfig.port,
+        lastError: err?.message || 'Connection failed',
+      };
+      if (pool) {
+        try {
+          await pool.end();
+        } catch {
+          // ignore cleanup failure
+        }
+        pool = null;
+      }
     }
   } else {
     console.log('[DB] No DATABASE_URL provided. Operating with local persistent JSON fallback.');
+    dbStatus = {
+      backend: 'json-fallback',
+      connected: false,
+      provider: 'local-json',
+    };
   }
 
   // Local JSON fallback initialization
