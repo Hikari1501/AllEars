@@ -85,6 +85,27 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
   const [playbackError, setPlaybackError] = useState<string | null>(null);
   const [useFallbackPlayer, setUseFallbackPlayer] = useState(false);
 
+  const allowCaptionsToggleRef = useRef(allowCaptionsToggle);
+  const ytCaptionsEnabledRef = useRef(ytCaptionsEnabled);
+  allowCaptionsToggleRef.current = allowCaptionsToggle;
+  ytCaptionsEnabledRef.current = ytCaptionsEnabled;
+
+  const disableYouTubeCaptions = useCallback((player: any) => {
+    if (!player) return;
+    try {
+      if (typeof player.setOption === 'function') {
+        player.setOption('captions', 'track', {});
+        player.setOption('cc', 'track', {});
+      }
+      if (typeof player.unloadModule === 'function') {
+        player.unloadModule('captions');
+        player.unloadModule('cc');
+      }
+    } catch {
+      // ignore YouTube internal caption module errors
+    }
+  }, []);
+
   useEffect(() => {
     setInVideoCaptions(allowCaptionsToggle ? showCaptions : false);
   }, [showCaptions, allowCaptionsToggle]);
@@ -93,22 +114,11 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
     if (!allowCaptionsToggle) {
       setInVideoCaptions(false);
       setYtCaptionsEnabled(false);
-      if (ytPlayerRef.current) {
-        try {
-          if (typeof ytPlayerRef.current.unloadModule === 'function') {
-            ytPlayerRef.current.unloadModule('captions');
-            ytPlayerRef.current.unloadModule('cc');
-          }
-          if (typeof ytPlayerRef.current.setOption === 'function') {
-            ytPlayerRef.current.setOption('captions', 'track', {});
-            ytPlayerRef.current.setOption('cc', 'track', {});
-          }
-        } catch {
-          // ignore YouTube module errors
-        }
-      }
+      disableYouTubeCaptions(ytPlayerRef.current);
+    } else if (!ytCaptionsEnabled) {
+      disableYouTubeCaptions(ytPlayerRef.current);
     }
-  }, [allowCaptionsToggle]);
+  }, [allowCaptionsToggle, ytCaptionsEnabled, disableYouTubeCaptions]);
 
   const toggleYouTubeCaptions = () => {
     if (!allowCaptionsToggle) return;
@@ -126,14 +136,7 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
             ytPlayerRef.current.setOption('cc', 'track', { languageCode: 'en' });
           }
         } else {
-          if (typeof ytPlayerRef.current.unloadModule === 'function') {
-            ytPlayerRef.current.unloadModule('captions');
-            ytPlayerRef.current.unloadModule('cc');
-          }
-          if (typeof ytPlayerRef.current.setOption === 'function') {
-            ytPlayerRef.current.setOption('captions', 'track', {});
-            ytPlayerRef.current.setOption('cc', 'track', {});
-          }
+          disableYouTubeCaptions(ytPlayerRef.current);
         }
       } catch (err) {
         console.warn('Could not toggle YouTube native captions:', err);
@@ -193,6 +196,13 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
     if (mediaType !== 'youtube' || !youtubeId || useFallbackPlayer) return;
 
     let checkInterval: any = null;
+    let ccCleanupTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const enforceCaptionsOffIfNeeded = (player: any) => {
+      if (!allowCaptionsToggleRef.current || !ytCaptionsEnabledRef.current) {
+        disableYouTubeCaptions(player);
+      }
+    };
 
     const initYouTube = () => {
       if ((window as any).YT && (window as any).YT.Player) {
@@ -204,7 +214,7 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
             rel: 0,
             playsinline: 1,
             enablejsapi: 1,
-            cc_load_policy: 0,
+            cc_load_policy: 3,
           };
           if (effectiveStart > 0) {
             playerVars.start = Math.floor(effectiveStart);
@@ -214,26 +224,14 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
           }
 
           ytPlayerRef.current = new (window as any).YT.Player(ytContainerId.current, {
+            host: 'https://www.youtube-nocookie.com',
             videoId: youtubeId,
             playerVars,
             events: {
               onReady: (event: any) => {
                 event.target.setPlaybackRate(playbackSpeed);
                 event.target.setVolume(volume * 100);
-                if (!allowCaptionsToggle) {
-                  try {
-                    if (typeof event.target.unloadModule === 'function') {
-                      event.target.unloadModule('captions');
-                      event.target.unloadModule('cc');
-                    }
-                    if (typeof event.target.setOption === 'function') {
-                      event.target.setOption('captions', 'track', {});
-                      event.target.setOption('cc', 'track', {});
-                    }
-                  } catch {
-                    // ignore
-                  }
-                }
+                enforceCaptionsOffIfNeeded(event.target);
                 if (typeof event.target.getDuration === 'function') {
                   reportDetectedDuration(event.target.getDuration());
                 }
@@ -241,9 +239,19 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
                   event.target.seekTo(effectiveStart, true);
                 }
               },
+              onApiChange: (event: any) => {
+                enforceCaptionsOffIfNeeded(event.target);
+              },
               onStateChange: (event: any) => {
                 if (typeof event.target?.getDuration === 'function') {
                   reportDetectedDuration(event.target.getDuration());
+                }
+                if (event.data === 1 || event.data === 3) {
+                  enforceCaptionsOffIfNeeded(event.target);
+                  if (ccCleanupTimer) clearTimeout(ccCleanupTimer);
+                  ccCleanupTimer = setTimeout(() => {
+                    enforceCaptionsOffIfNeeded(event.target);
+                  }, 350);
                 }
                 if (event.data === 1) {
                   setIsPlaying(true);
@@ -282,13 +290,14 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
 
     return () => {
       if (checkInterval) clearInterval(checkInterval);
+      if (ccCleanupTimer) clearTimeout(ccCleanupTimer);
       if (ytPlayerRef.current && ytPlayerRef.current.destroy) {
         try {
           ytPlayerRef.current.destroy();
         } catch (e) {}
       }
     };
-  }, [mediaType, youtubeId, useFallbackPlayer, effectiveStart, explicitTrimEnd]);
+  }, [mediaType, youtubeId, useFallbackPlayer, effectiveStart, explicitTrimEnd, disableYouTubeCaptions]);
 
   // Main time-tracking & trimming loop
   useEffect(() => {
