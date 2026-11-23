@@ -2,7 +2,7 @@ import pg from 'pg';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { Lesson } from '../src/types.ts';
+import { Lesson, SavedVocabItem } from '../src/types.ts';
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -38,6 +38,7 @@ const REPORTS_FILE = path.join(DATA_DIR, 'db-session-reports.json');
 const TEACHERS_FILE = path.join(DATA_DIR, 'db-teachers.json');
 const STUDENTS_FILE = path.join(DATA_DIR, 'db-students.json');
 const STUDENT_LESSONS_FILE = path.join(DATA_DIR, 'db-student-lessons.json');
+const STUDENT_VOCAB_FILE = path.join(DATA_DIR, 'db-student-vocab.json');
 
 let pool: pg.Pool | null = null;
 let isPostgresActive = false;
@@ -196,6 +197,18 @@ export const SCHEMA_AND_MIGRATIONS_SQL = `
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS student_vocab (
+    id VARCHAR(255) PRIMARY KEY,
+    student_id VARCHAR(128) NOT NULL,
+    word TEXT NOT NULL,
+    vocab_data JSONB NOT NULL,
+    saved_at BIGINT NOT NULL,
+    lesson_id VARCHAR(128),
+    lesson_title TEXT,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_student_vocab_student_id ON student_vocab(student_id);
+
   -- Self-healing schema migrations for Render & Supabase tables
   ALTER TABLE students ADD COLUMN IF NOT EXISTS teacher_id VARCHAR(128);
   ALTER TABLE students ADD COLUMN IF NOT EXISTS teacher_name TEXT;
@@ -232,6 +245,7 @@ export const SCHEMA_AND_MIGRATIONS_SQL = `
       ALTER TABLE lessons ENABLE ROW LEVEL SECURITY;
       ALTER TABLE student_lessons ENABLE ROW LEVEL SECURITY;
       ALTER TABLE session_reports ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE student_vocab ENABLE ROW LEVEL SECURITY;
     END IF;
   EXCEPTION WHEN OTHERS THEN
     NULL;
@@ -258,6 +272,7 @@ let memoryTeachers: Record<string, TeacherRecord> = {
 };
 let memoryStudents: Record<string, StudentRecord> = {};
 let memoryStudentLessons: Record<string, Lesson[]> = {};
+let memoryStudentVocab: Record<string, SavedVocabItem[]> = {};
 let memoryLessons: Lesson[] = [];
 let memoryReports: any[] = [];
 
@@ -475,6 +490,8 @@ export async function initDatabase(initialLessons: Lesson[]) {
   }
 
   memoryReports = readJsonSafe<any[]>(REPORTS_FILE, []);
+  memoryStudentLessons = readJsonSafe<Record<string, Lesson[]>>(STUDENT_LESSONS_FILE, {});
+  memoryStudentVocab = readJsonSafe<Record<string, SavedVocabItem[]>>(STUDENT_VOCAB_FILE, {});
 }
 
 // -------------------------------------------------------------
@@ -1130,6 +1147,7 @@ export async function deleteStudent(studentId: string): Promise<boolean> {
   if (isPostgresActive && pool) {
     try {
       await pool.query('DELETE FROM student_lessons WHERE student_id = $1', [studentId]);
+      await pool.query('DELETE FROM student_vocab WHERE student_id = $1', [studentId]);
       await pool.query('DELETE FROM students WHERE id = $1', [studentId]);
       return true;
     } catch (e) {
@@ -1139,6 +1157,7 @@ export async function deleteStudent(studentId: string): Promise<boolean> {
 
   // Fallback memory / JSON
   delete memoryStudentLessons[studentId];
+  delete memoryStudentVocab[studentId];
   for (const k of Object.keys(memoryStudents)) {
     if (memoryStudents[k].id === studentId) {
       delete memoryStudents[k];
@@ -1146,6 +1165,7 @@ export async function deleteStudent(studentId: string): Promise<boolean> {
   }
   writeJsonSafe(STUDENTS_FILE, memoryStudents);
   writeJsonSafe(STUDENT_LESSONS_FILE, memoryStudentLessons);
+  writeJsonSafe(STUDENT_VOCAB_FILE, memoryStudentVocab);
   return true;
 }
 
@@ -1219,4 +1239,137 @@ export async function deleteStudentLesson(studentId: string, lessonId: string): 
   }
   return true;
 }
+
+// -------------------------------------------------------------
+// Student Saved Vocabulary Operations
+// -------------------------------------------------------------
+
+function normalizeSavedVocabItem(raw: SavedVocabItem): SavedVocabItem {
+  return {
+    ...raw,
+    word: String(raw.word || '').trim(),
+    savedAt: Number(raw.savedAt) || Date.now(),
+    lessonId: raw.lessonId || undefined,
+    lessonTitle: raw.lessonTitle || undefined,
+  };
+}
+
+export async function getStudentSavedVocab(studentId: string): Promise<SavedVocabItem[]> {
+  if (!studentId) return [];
+  if (isPostgresActive && pool) {
+    try {
+      const res = await pool.query(
+        'SELECT vocab_data, saved_at, lesson_id, lesson_title FROM student_vocab WHERE student_id = $1 ORDER BY saved_at DESC',
+        [studentId]
+      );
+      return res.rows.map((r) => {
+        const data = typeof r.vocab_data === 'string' ? JSON.parse(r.vocab_data) : r.vocab_data;
+        return normalizeSavedVocabItem({
+          ...data,
+          savedAt: Number(r.saved_at) || data.savedAt || Date.now(),
+          lessonId: r.lesson_id || data.lessonId,
+          lessonTitle: r.lesson_title || data.lessonTitle,
+        });
+      });
+    } catch (e) {
+      console.error('[DB] Error getting student saved vocabulary from PostgreSQL:', e);
+    }
+  }
+
+  return [...(memoryStudentVocab[studentId] || [])].sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+}
+
+export async function saveStudentSavedVocabWord(
+  studentId: string,
+  item: SavedVocabItem
+): Promise<SavedVocabItem[]> {
+  const normalized = normalizeSavedVocabItem(item);
+  if (!studentId || !normalized.word) return getStudentSavedVocab(studentId);
+  const wordKey = normalized.word.toLowerCase();
+  const rowId = `${studentId}::${wordKey}`;
+
+  if (isPostgresActive && pool) {
+    try {
+      await pool.query(
+        `INSERT INTO student_vocab (id, student_id, word, vocab_data, saved_at, lesson_id, lesson_title)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (id) DO UPDATE SET
+           word = EXCLUDED.word,
+           vocab_data = EXCLUDED.vocab_data,
+           saved_at = EXCLUDED.saved_at,
+           lesson_id = EXCLUDED.lesson_id,
+           lesson_title = EXCLUDED.lesson_title`,
+        [
+          rowId,
+          studentId,
+          normalized.word,
+          JSON.stringify(normalized),
+          normalized.savedAt,
+          normalized.lessonId || null,
+          normalized.lessonTitle || null,
+        ]
+      );
+      return await getStudentSavedVocab(studentId);
+    } catch (e) {
+      console.error('[DB] Error saving student vocabulary word to PostgreSQL:', e);
+    }
+  }
+
+  const existing = memoryStudentVocab[studentId] || [];
+  const filtered = existing.filter((w) => w.word.trim().toLowerCase() !== wordKey);
+  memoryStudentVocab[studentId] = [normalized, ...filtered];
+  writeJsonSafe(STUDENT_VOCAB_FILE, memoryStudentVocab);
+  return memoryStudentVocab[studentId];
+}
+
+export async function deleteStudentSavedVocabWord(
+  studentId: string,
+  word: string
+): Promise<SavedVocabItem[]> {
+  const wordKey = (word || '').trim().toLowerCase();
+  if (!studentId || !wordKey) return getStudentSavedVocab(studentId);
+  const rowId = `${studentId}::${wordKey}`;
+
+  if (isPostgresActive && pool) {
+    try {
+      await pool.query(
+        'DELETE FROM student_vocab WHERE id = $1 OR (student_id = $2 AND LOWER(word) = $3)',
+        [rowId, studentId, wordKey]
+      );
+      return await getStudentSavedVocab(studentId);
+    } catch (e) {
+      console.error('[DB] Error deleting student vocabulary word from PostgreSQL:', e);
+    }
+  }
+
+  const existing = memoryStudentVocab[studentId] || [];
+  memoryStudentVocab[studentId] = existing.filter((w) => w.word.trim().toLowerCase() !== wordKey);
+  writeJsonSafe(STUDENT_VOCAB_FILE, memoryStudentVocab);
+  return memoryStudentVocab[studentId];
+}
+
+export async function syncStudentSavedVocab(
+  studentId: string,
+  localItems: SavedVocabItem[]
+): Promise<SavedVocabItem[]> {
+  if (!studentId) return [];
+  const validLocal = Array.isArray(localItems)
+    ? localItems.map(normalizeSavedVocabItem).filter((w) => w.word.length > 0)
+    : [];
+
+  if (validLocal.length > 0) {
+    const existing = await getStudentSavedVocab(studentId);
+    const existingKeys = new Set(existing.map((w) => w.word.trim().toLowerCase()));
+    for (const item of validLocal) {
+      const key = item.word.toLowerCase();
+      if (!existingKeys.has(key)) {
+        existingKeys.add(key);
+        await saveStudentSavedVocabWord(studentId, item);
+      }
+    }
+  }
+
+  return await getStudentSavedVocab(studentId);
+}
+
 

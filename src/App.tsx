@@ -22,7 +22,11 @@ import { ImportLessonModal } from './components/ImportLessonModal';
 import { ExportLessonModal } from './components/ExportLessonModal';
 import { PersonalVocabModal } from './components/PersonalVocabModal';
 import { AutoDictationModal } from './components/AutoDictationModal';
-import { getSavedVocabList, PERSONAL_VOCAB_EVENT } from './utils/personalVocab';
+import {
+  getSavedVocabList,
+  fetchSavedVocabFromServer,
+  PERSONAL_VOCAB_EVENT,
+} from './utils/personalVocab';
 import {
   generateAutoDictationLesson,
   buildAutoDictationReport,
@@ -196,6 +200,7 @@ export default function App() {
       setDictationReportCount(getAutoDictationReports(currentUser.id).length);
     };
     syncCounts();
+    fetchSavedVocabFromServer(currentUser.id);
     window.addEventListener(PERSONAL_VOCAB_EVENT, syncCounts);
     window.addEventListener(AUTO_DICTATION_REPORTS_EVENT, syncCounts);
     return () => {
@@ -774,6 +779,7 @@ export default function App() {
             pin={activeLiveStudent.pin}
             studentId={activeLiveStudent.studentId}
             studentName={activeLiveStudent.studentName}
+            userId={currentUser.id}
             onExit={() => {
               setReportsLessonId(activeLiveStudent.lesson.id);
               setActiveLiveStudent(null);

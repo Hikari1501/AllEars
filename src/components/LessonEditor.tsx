@@ -1153,11 +1153,6 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
       );
     }
     setIsAddingQuestion(true);
-    // Smooth scroll to the question editor card
-    setTimeout(() => {
-      const el = document.getElementById('question-editor-card');
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }, 50);
   };
 
   // Duplicate an existing question cleanly right below the original
@@ -1687,7 +1682,9 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
             <button
               type="button"
               onClick={() => {
+                setEditingQuestionId(null);
                 setNewQTimestamp(trimStart + 15);
+                setNewQTimestampStr(formatSec(trimStart + 15));
                 setIsAddingQuestion(true);
                 setActiveEditTab('questions');
               }}
@@ -2281,9 +2278,10 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                 </div>
               </div>
 
-              {/* Add / Edit question modal / form */}
-              {isAddingQuestion && (
-                <div id="question-editor-card" className="p-4 border-2 border-amber-300 bg-amber-50/60 rounded-2xl space-y-3.5 shadow-sm">
+              {/* Add / Edit question form (renders at top when adding, or inline at question location when editing) */}
+              {(() => {
+                const questionEditorCard = (
+                  <div id="question-editor-card" className="p-4 border-2 border-amber-300 bg-amber-50/60 rounded-2xl space-y-3.5 shadow-sm">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-bold uppercase tracking-wider text-slate-900">
@@ -2962,27 +2960,30 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                     </button>
                   </div>
                 </div>
-              )}
+                );
 
-              {/* Questions list */}
-              <div className="space-y-2.5">
-                {questions.map((q) => {
-                  const isCurrentlyEditing = editingQuestionId === q.id;
-                  const isGeneral = q.timestamp == null || q.timestamp < 0;
-                  const generalQuestions = questions.filter((item) => item.timestamp == null || item.timestamp < 0);
-                  const generalIdx = isGeneral ? generalQuestions.findIndex((item) => item.id === q.id) : -1;
-                  const canMoveUp = generalIdx > 0;
-                  const canMoveDown = generalIdx >= 0 && generalIdx < generalQuestions.length - 1;
+                return (
+                  <>
+                    {isAddingQuestion && !editingQuestionId && questionEditorCard}
 
-                  return (
-                    <div
-                      key={q.id}
-                      className={`p-4 rounded-xl border flex items-start justify-between gap-4 text-xs transition-all ${
-                        isCurrentlyEditing
-                          ? 'bg-amber-50/80 border-amber-400 ring-2 ring-amber-400/40 shadow-xs'
-                          : 'bg-slate-50 border-slate-200'
-                      }`}
-                    >
+                    {/* Questions list */}
+                    <div className="space-y-2.5">
+                      {questions.map((q) => {
+                        const isCurrentlyEditing = isAddingQuestion && editingQuestionId === q.id;
+                        if (isCurrentlyEditing) {
+                          return <React.Fragment key={q.id}>{questionEditorCard}</React.Fragment>;
+                        }
+                        const isGeneral = q.timestamp == null || q.timestamp < 0;
+                        const generalQuestions = questions.filter((item) => item.timestamp == null || item.timestamp < 0);
+                        const generalIdx = isGeneral ? generalQuestions.findIndex((item) => item.id === q.id) : -1;
+                        const canMoveUp = generalIdx > 0;
+                        const canMoveDown = generalIdx >= 0 && generalIdx < generalQuestions.length - 1;
+
+                        return (
+                          <div
+                            key={q.id}
+                            className="p-4 rounded-xl border flex items-start justify-between gap-4 text-xs transition-all bg-slate-50 border-slate-200"
+                          >
                       <div className="space-y-2 flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           {editingQTimestampId === q.id ? (
@@ -3037,12 +3038,6 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                           {q.allowMultipleAnswers && (
                             <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-800 font-bold rounded text-[9px]">
                               Multi-Select
-                            </span>
-                          )}
-
-                          {isCurrentlyEditing && (
-                            <span className="px-1.5 py-0.5 bg-amber-200 text-amber-950 font-bold rounded text-[9px] animate-pulse">
-                              Editing Above ↑
                             </span>
                           )}
                         </div>
@@ -3224,7 +3219,10 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                     </div>
                   );
                 })}
-              </div>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           )}
 

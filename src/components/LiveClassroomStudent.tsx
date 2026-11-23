@@ -1,15 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { Lesson, Question, LiveSessionState, StudentAnswer, LiveStudentData } from '../types';
+import { Lesson, LiveSessionState, StudentAnswer, LiveStudentData, VocabEntry } from '../types';
+import { UnifiedPlayer } from './UnifiedPlayer';
 import { InteractiveCaptions } from './InteractiveCaptions';
 import { StudentQuestionsPanel } from './StudentQuestionsPanel';
-import { Radio, Award, CheckCircle2, User, BookOpen, Volume2, ExternalLink, Cast, Users, HelpCircle, Lock } from 'lucide-react';
+import { Radio, Award, User, BookOpen, ExternalLink, Cast, Users, Lock, Video } from 'lucide-react';
 import { VocabPopover } from './VocabPopover';
+import {
+  getSavedVocabList,
+  toggleSaveVocabWord,
+  PERSONAL_VOCAB_EVENT,
+} from '../utils/personalVocab';
 
 interface LiveClassroomStudentProps {
   lesson: Lesson;
   pin: string;
   studentId: string;
   studentName: string;
+  userId?: string;
   onExit: () => void;
 }
 
@@ -18,14 +25,35 @@ export const LiveClassroomStudent: React.FC<LiveClassroomStudentProps> = ({
   pin,
   studentId,
   studentName,
+  userId,
   onExit,
 }) => {
+  const effectiveUserId = userId || studentId;
   const [session, setSession] = useState<LiveSessionState | null>(null);
   const [myAnswers, setMyAnswers] = useState<Record<string, StudentAnswer>>({});
   const [myScore, setMyScore] = useState<number>(0);
-  const [isLocalWordOpen, setIsLocalWordOpen] = useState(false);
   const [isSessionEnded, setIsSessionEnded] = useState(false);
   const [showCaptions, setShowCaptions] = useState(true);
+  const [localVideoTime, setLocalVideoTime] = useState(lesson.trimStart || 0);
+  const [pauseTrigger, setPauseTrigger] = useState(0);
+  const [seekTriggerTime, setSeekTriggerTime] = useState<
+    number | { time: number; nonce: number; allowJump?: boolean; autoPlay?: boolean } | undefined
+  >(undefined);
+  const [selectedVideoVocab, setSelectedVideoVocab] = useState<VocabEntry | null>(null);
+  const [savedWordKeys, setSavedWordKeys] = useState<Set<string>>(() => {
+    return new Set(getSavedVocabList(effectiveUserId).map((w) => w.word.trim().toLowerCase()));
+  });
+
+  useEffect(() => {
+    const syncSaved = () => {
+      setSavedWordKeys(
+        new Set(getSavedVocabList(effectiveUserId).map((w) => w.word.trim().toLowerCase()))
+      );
+    };
+    syncSaved();
+    window.addEventListener(PERSONAL_VOCAB_EVENT, syncSaved);
+    return () => window.removeEventListener(PERSONAL_VOCAB_EVENT, syncSaved);
+  }, [effectiveUserId]);
 
   // Poll live session state every 1.2s
   useEffect(() => {
@@ -167,23 +195,42 @@ export const LiveClassroomStudent: React.FC<LiveClassroomStudentProps> = ({
         </div>
       </div>
 
-      {/* Notice to Look at Teacher's Shared Screen */}
-      <div className="bg-amber-500/10 border-2 border-amber-500/30 rounded-2xl p-4 flex items-center gap-3.5 shadow-xs">
-        <div className="p-3 bg-amber-500 text-slate-950 rounded-xl shrink-0">
-          <Cast className="w-6 h-6 animate-pulse" />
-        </div>
-        <div className="space-y-0.5">
-          <div className="text-xs font-bold text-amber-900 uppercase tracking-wide flex items-center gap-2">
-            <span>Watch Video on Teacher's Screen</span>
-            <span className="px-2 py-0.5 bg-amber-200 text-amber-950 rounded text-[10px] font-mono font-bold">
-              Time: {formattedTime}
-            </span>
+      {/* Notice to Look at Teacher's Shared Screen (hidden when teacher allows video on student device) */}
+      {!session?.allowStudentVideo ? (
+        <div className="bg-amber-500/10 border-2 border-amber-500/30 rounded-2xl p-4 flex items-center gap-3.5 shadow-xs">
+          <div className="p-3 bg-amber-500 text-slate-950 rounded-xl shrink-0">
+            <Cast className="w-6 h-6 animate-pulse" />
           </div>
-          <p className="text-xs text-slate-700 leading-relaxed font-medium">
-            Please look at the video that your teacher is sharing through Google Meet or Zoom. Answer each listening checkpoint question on this device as you follow along!
-          </p>
+          <div className="space-y-0.5">
+            <div className="text-xs font-bold text-amber-900 uppercase tracking-wide flex items-center gap-2">
+              <span>Watch Video on Teacher's Screen</span>
+              <span className="px-2 py-0.5 bg-amber-200 text-amber-950 rounded text-[10px] font-mono font-bold">
+                Time: {formattedTime}
+              </span>
+            </div>
+            <p className="text-xs text-slate-700 leading-relaxed font-medium">
+              Please look at the video that your teacher is sharing through Google Meet or Zoom. Answer each listening checkpoint question on this device as you follow along!
+            </p>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3 flex items-center justify-between flex-wrap gap-3 shadow-xs">
+          <div className="flex items-center gap-2.5 text-xs">
+            <div className="p-2 bg-emerald-600 text-white rounded-xl shrink-0">
+              <Video className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="font-bold text-emerald-950">
+                Device Video Playback Enabled by Teacher
+              </div>
+              <p className="text-[11px] text-emerald-800">
+                You can play, pause, scrub, and adjust playback speed directly on your device.
+                {!session?.allowStudentCaptions && ' Captions remain locked by your teacher.'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Classmates in Room */}
       <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-2.5">
@@ -217,10 +264,43 @@ export const LiveClassroomStudent: React.FC<LiveClassroomStudentProps> = ({
         </div>
       </div>
 
-      {/* Main Study Grid: Left = Captions & Transcript; Right = Questions Panel */}
+      {/* Main Study Grid: Left = Video (if enabled) & Captions; Right = Questions Panel */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Column (5 cols): Captions with Difficult Words & Help */}
-        <div className="lg:col-span-5 space-y-4">
+        {/* Left Column: Student Device Video (if enabled) + Live Interactive Captions */}
+        <div className={`${session?.allowStudentVideo ? 'lg:col-span-7' : 'lg:col-span-5'} space-y-4`}>
+          {session?.allowStudentVideo && (
+            <UnifiedPlayer
+              mediaType={lesson.mediaType}
+              mediaUrl={lesson.mediaUrl}
+              duration={lesson.duration}
+              trimStart={lesson.trimStart}
+              trimEnd={lesson.trimEnd}
+              questions={lesson.questions}
+              preventSkipping={false}
+              isStudent={true}
+              isControlledExternally={false}
+              pauseTrigger={pauseTrigger}
+              seekTriggerTime={seekTriggerTime}
+              captions={lesson.captions}
+              difficultWords={lesson.difficultWords}
+              allowCaptionsToggle={Boolean(session?.allowStudentCaptions)}
+              showCaptions={Boolean(session?.allowStudentCaptions && showCaptions)}
+              autoPauseAtCheckpoints={false}
+              onToggleCaptions={() => {
+                if (!session?.allowStudentCaptions) return;
+                setShowCaptions((prev) => !prev);
+              }}
+              onWordClick={(vocab) => {
+                if (!session?.allowStudentCaptions) return;
+                setPauseTrigger(Date.now());
+                setSelectedVideoVocab(vocab);
+              }}
+              answeredQuestionIds={new Set(Object.keys(myAnswers))}
+              onTimeUpdate={(t) => setLocalVideoTime(t)}
+              onQuestionTrigger={() => {}}
+            />
+          )}
+
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-3">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
               <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
@@ -229,6 +309,7 @@ export const LiveClassroomStudent: React.FC<LiveClassroomStudentProps> = ({
               </div>
               {session?.allowStudentCaptions ? (
                 <button
+                  type="button"
                   onClick={() => setShowCaptions(!showCaptions)}
                   className="text-[11px] font-semibold text-amber-800 hover:underline cursor-pointer"
                 >
@@ -249,30 +330,39 @@ export const LiveClassroomStudent: React.FC<LiveClassroomStudentProps> = ({
                 </div>
                 <div className="text-xs font-bold text-slate-800">Captions Disabled by Teacher</div>
                 <p className="text-[11px] text-slate-500 max-w-xs mx-auto leading-relaxed">
-                  The teacher has disabled subtitles for this live listening practice. Please focus your attention on the video sound from the shared screen.
+                  The teacher has disabled subtitles for this live listening practice. Please focus your attention on listening.
                 </p>
               </div>
             ) : showCaptions ? (
               <InteractiveCaptions
                 captions={lesson.captions}
                 difficultWords={lesson.difficultWords}
-                currentTime={session?.currentTime || 0}
-                canSeek={false}
-                onWordClick={() => setIsLocalWordOpen(true)}
-                userId={studentId}
+                currentTime={session?.allowStudentVideo ? localVideoTime : (session?.currentTime || 0)}
+                canSeek={Boolean(session?.allowStudentVideo)}
+                onSeek={(t) => {
+                  if (session?.allowStudentVideo) {
+                    setSeekTriggerTime({ time: t, nonce: Date.now(), allowJump: true });
+                  }
+                }}
+                onWordClick={() => {
+                  if (session?.allowStudentVideo) {
+                    setPauseTrigger(Date.now());
+                  }
+                }}
+                userId={effectiveUserId}
                 lessonId={lesson.id}
                 lessonTitle={lesson.title}
               />
             ) : (
               <p className="text-xs text-slate-500 italic py-4 text-center">
-                Captions hidden. Click "Show Captions" to follow along in text.
+                Captions hidden. Click &quot;Show Captions&quot; to follow along in text.
               </p>
             )}
           </div>
         </div>
 
-        {/* Right Column (7 cols): Persistent Questions Panel */}
-        <div className="lg:col-span-7">
+        {/* Right Column: Persistent Questions Panel */}
+        <div className={session?.allowStudentVideo ? 'lg:col-span-5' : 'lg:col-span-7'}>
           <StudentQuestionsPanel
             questions={lesson.questions}
             currentActiveQuestionId={session?.autoPauseAtCheckpoints !== false ? (session?.currentQuestionId || null) : null}
@@ -288,6 +378,22 @@ export const LiveClassroomStudent: React.FC<LiveClassroomStudentProps> = ({
           />
         </div>
       </div>
+
+      {/* Vocabulary Popup when student clicks a glossed word inside the video captions */}
+      {selectedVideoVocab && (
+        <VocabPopover
+          vocab={selectedVideoVocab}
+          onClose={() => setSelectedVideoVocab(null)}
+          isSaved={savedWordKeys.has(selectedVideoVocab.word.trim().toLowerCase())}
+          onToggleSave={() => {
+            const res = toggleSaveVocabWord(effectiveUserId, selectedVideoVocab, {
+              id: lesson.id,
+              title: lesson.title,
+            });
+            setSavedWordKeys(new Set(res.list.map((w) => w.word.trim().toLowerCase())));
+          }}
+        />
+      )}
 
       {/* Teacher Vocabulary Spotlight Modal (Teacher paused video to explain word) */}
       {session?.activeVocabWord && (

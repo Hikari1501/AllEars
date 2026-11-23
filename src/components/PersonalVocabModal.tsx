@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { SavedVocabItem } from '../types';
 import {
   getSavedVocabList,
+  fetchSavedVocabFromServer,
   removeSavedVocabWord,
   PERSONAL_VOCAB_EVENT,
 } from '../utils/personalVocab';
@@ -37,6 +38,7 @@ export const PersonalVocabModal: React.FC<PersonalVocabModalProps> = ({
     if (!isOpen) return;
     const refresh = () => setSavedWords(getSavedVocabList(userId));
     refresh();
+    fetchSavedVocabFromServer(userId).then((items) => setSavedWords(items));
     window.addEventListener(PERSONAL_VOCAB_EVENT, refresh);
     return () => window.removeEventListener(PERSONAL_VOCAB_EVENT, refresh);
   }, [isOpen, userId]);

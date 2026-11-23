@@ -36,6 +36,7 @@ import {
   Lightbulb,
   Image as ImageIcon,
   KeyRound,
+  Video,
 } from 'lucide-react';
 
 interface LiveClassroomTeacherProps {
@@ -215,6 +216,14 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
     const nextVal = !current;
     setSession((prev) => (prev ? { ...prev, allowStudentCaptions: nextVal } : null));
     updateServerState({ allowStudentCaptions: nextVal });
+  };
+
+  // Toggle allowing students to watch the video on their own devices with playback & speed controls
+  const handleToggleAllowStudentVideo = async () => {
+    const current = Boolean(session?.allowStudentVideo); // defaults to false
+    const nextVal = !current;
+    setSession((prev) => (prev ? { ...prev, allowStudentVideo: nextVal } : null));
+    updateServerState({ allowStudentVideo: nextVal });
   };
 
   // Toggle whether to auto-pause the video when reaching a question checkpoint
@@ -414,6 +423,25 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
             <span>Student Captions: {session?.allowStudentCaptions ? 'Allowed' : 'Off'}</span>
           </button>
 
+          {/* Teacher Option: Allow or Disallow Student Video Playback (Off by default) */}
+          <button
+            type="button"
+            onClick={handleToggleAllowStudentVideo}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+              session?.allowStudentVideo
+                ? 'bg-emerald-50 border-emerald-300 text-emerald-900 shadow-2xs'
+                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+            }`}
+            title={
+              session?.allowStudentVideo
+                ? 'Students CAN watch the video on their own devices with playback & speed controls (Click to turn off)'
+                : 'Student device video is OFF — students watch your shared screen (Click to allow student video)'
+            }
+          >
+            <Video className={`w-3.5 h-3.5 ${session?.allowStudentVideo ? 'text-emerald-600' : 'text-slate-400'}`} />
+            <span>Student Video: {session?.allowStudentVideo ? 'Allowed' : 'Off'}</span>
+          </button>
+
           {/* Teacher Option: Auto-Pause Video at Questions */}
           <button
             type="button"
@@ -470,7 +498,9 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
               </span>
             </div>
             <span className="text-xs text-slate-400">
-              Students do not see video on their devices; they follow along on this screen.
+              {session?.allowStudentVideo
+                ? 'Students can also watch the video on their own devices (captions remain controlled by your Student Captions setting).'
+                : 'Students do not see video on their devices; they follow along on this screen.'}
             </span>
           </div>
 

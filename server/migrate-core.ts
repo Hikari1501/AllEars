@@ -7,6 +7,7 @@ import {
   getAllLessons,
   getAllReports,
   getStudentLessons,
+  getStudentSavedVocab,
   getDatabaseStatus,
 } from './db.ts';
 
@@ -105,7 +106,7 @@ export async function migratePostgresToTarget(
 ): Promise<MigrationResult> {
   const tgtInfo = createPgPoolConfig(targetUrl);
   const targetPool = makePoolFromUrl(targetUrl, 5);
-  const tables = ['teachers', 'students', 'lessons', 'student_lessons', 'session_reports'];
+  const tables = ['teachers', 'students', 'lessons', 'student_lessons', 'student_vocab', 'session_reports'];
 
   try {
     await sourcePool.query('SELECT 1');
@@ -118,6 +119,7 @@ export async function migratePostgresToTarget(
       const srcStudentsExist = await tableExists(sourcePool, 'students');
       const srcLessonsExist = await tableExists(sourcePool, 'lessons');
       const srcStudentLessonsExist = await tableExists(sourcePool, 'student_lessons');
+      const srcStudentVocabExist = await tableExists(sourcePool, 'student_vocab');
       const srcReportsExist = await tableExists(sourcePool, 'session_reports');
 
       const teacherRows = srcTeachersExist
@@ -175,6 +177,14 @@ export async function migratePostgresToTarget(
         ? (
             await sourcePool.query(
               'SELECT id, student_id, lesson_data, created_at, updated_at FROM student_lessons ORDER BY created_at ASC'
+            )
+          ).rows
+        : [];
+
+      const studentVocabRows = srcStudentVocabExist
+        ? (
+            await sourcePool.query(
+              'SELECT id, student_id, word, vocab_data, saved_at, lesson_id, lesson_title, created_at FROM student_vocab ORDER BY created_at ASC'
             )
           ).rows
         : [];
@@ -319,6 +329,31 @@ export async function migratePostgresToTarget(
           );
         }
 
+        for (const sv of studentVocabRows) {
+          await client.query(
+            `INSERT INTO student_vocab (id, student_id, word, vocab_data, saved_at, lesson_id, lesson_title, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, CURRENT_TIMESTAMP))
+             ON CONFLICT (id) DO UPDATE SET
+               student_id = EXCLUDED.student_id,
+               word = EXCLUDED.word,
+               vocab_data = EXCLUDED.vocab_data,
+               saved_at = EXCLUDED.saved_at,
+               lesson_id = EXCLUDED.lesson_id,
+               lesson_title = EXCLUDED.lesson_title,
+               created_at = EXCLUDED.created_at`,
+            [
+              sv.id,
+              sv.student_id,
+              sv.word,
+              typeof sv.vocab_data === 'string' ? sv.vocab_data : JSON.stringify(sv.vocab_data || {}),
+              sv.saved_at || Date.now(),
+              sv.lesson_id || null,
+              sv.lesson_title || null,
+              sv.created_at,
+            ]
+          );
+        }
+
         for (const r of reportRows) {
           await client.query(
             `INSERT INTO session_reports (
@@ -390,10 +425,17 @@ export async function exportDatabaseSnapshot() {
   ]);
 
   const studentLessons: Record<string, any[]> = {};
+  const studentVocab: Record<string, any[]> = {};
   for (const s of students) {
-    const sl = await getStudentLessons(s.id);
+    const [sl, sv] = await Promise.all([
+      getStudentLessons(s.id),
+      getStudentSavedVocab(s.id),
+    ]);
     if (sl.length > 0) {
       studentLessons[s.id] = sl;
+    }
+    if (sv.length > 0) {
+      studentVocab[s.id] = sv;
     }
   }
 
@@ -405,6 +447,7 @@ export async function exportDatabaseSnapshot() {
       students: students.length,
       lessons: lessons.length,
       studentLessons: Object.values(studentLessons).reduce((sum, arr) => sum + arr.length, 0),
+      studentVocab: Object.values(studentVocab).reduce((sum, arr) => sum + arr.length, 0),
       sessionReports: sessionReports.length,
     },
     data: {
@@ -412,6 +455,7 @@ export async function exportDatabaseSnapshot() {
       students,
       lessons,
       studentLessons,
+      studentVocab,
       sessionReports,
     },
   };

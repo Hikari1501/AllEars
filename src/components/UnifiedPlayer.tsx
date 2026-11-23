@@ -12,6 +12,7 @@ import {
   Music,
   Scissors,
   AlertTriangle,
+  Lock,
 } from 'lucide-react';
 import { Question, CaptionSegment, VocabEntry } from '../types';
 
@@ -37,6 +38,7 @@ interface UnifiedPlayerProps {
   captions?: CaptionSegment[];
   difficultWords?: VocabEntry[];
   showCaptions?: boolean;
+  allowCaptionsToggle?: boolean;
   autoPauseAtCheckpoints?: boolean;
   onToggleCaptions?: () => void;
   onWordClick?: (vocab: VocabEntry) => void;
@@ -65,6 +67,7 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
   captions = [],
   difficultWords = [],
   showCaptions = true,
+  allowCaptionsToggle = true,
   onToggleCaptions,
   onWordClick,
   onDurationDetected,
@@ -72,7 +75,7 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(trimStart || 0);
   const [mediaDuration, setMediaDuration] = useState<number>(0);
-  const [inVideoCaptions, setInVideoCaptions] = useState(showCaptions);
+  const [inVideoCaptions, setInVideoCaptions] = useState(allowCaptionsToggle ? showCaptions : false);
   const [ytCaptionsEnabled, setYtCaptionsEnabled] = useState(false);
   const [showCaptionMenu, setShowCaptionMenu] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
@@ -83,10 +86,32 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
   const [useFallbackPlayer, setUseFallbackPlayer] = useState(false);
 
   useEffect(() => {
-    setInVideoCaptions(showCaptions);
-  }, [showCaptions]);
+    setInVideoCaptions(allowCaptionsToggle ? showCaptions : false);
+  }, [showCaptions, allowCaptionsToggle]);
+
+  useEffect(() => {
+    if (!allowCaptionsToggle) {
+      setInVideoCaptions(false);
+      setYtCaptionsEnabled(false);
+      if (ytPlayerRef.current) {
+        try {
+          if (typeof ytPlayerRef.current.unloadModule === 'function') {
+            ytPlayerRef.current.unloadModule('captions');
+            ytPlayerRef.current.unloadModule('cc');
+          }
+          if (typeof ytPlayerRef.current.setOption === 'function') {
+            ytPlayerRef.current.setOption('captions', 'track', {});
+            ytPlayerRef.current.setOption('cc', 'track', {});
+          }
+        } catch {
+          // ignore YouTube module errors
+        }
+      }
+    }
+  }, [allowCaptionsToggle]);
 
   const toggleYouTubeCaptions = () => {
+    if (!allowCaptionsToggle) return;
     const next = !ytCaptionsEnabled;
     setYtCaptionsEnabled(next);
     if (ytPlayerRef.current) {
@@ -179,6 +204,7 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
             rel: 0,
             playsinline: 1,
             enablejsapi: 1,
+            cc_load_policy: 0,
           };
           if (effectiveStart > 0) {
             playerVars.start = Math.floor(effectiveStart);
@@ -194,6 +220,20 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
               onReady: (event: any) => {
                 event.target.setPlaybackRate(playbackSpeed);
                 event.target.setVolume(volume * 100);
+                if (!allowCaptionsToggle) {
+                  try {
+                    if (typeof event.target.unloadModule === 'function') {
+                      event.target.unloadModule('captions');
+                      event.target.unloadModule('cc');
+                    }
+                    if (typeof event.target.setOption === 'function') {
+                      event.target.setOption('captions', 'track', {});
+                      event.target.setOption('cc', 'track', {});
+                    }
+                  } catch {
+                    // ignore
+                  }
+                }
                 if (typeof event.target.getDuration === 'function') {
                   reportDetectedDuration(event.target.getDuration());
                 }
@@ -659,7 +699,7 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
 
 
         {/* In-Video Floating Captions Overlay */}
-        {inVideoCaptions && activeCaption && (
+        {allowCaptionsToggle && inVideoCaptions && activeCaption && (
           <div className="absolute bottom-4 left-0 right-0 px-4 sm:px-8 text-center pointer-events-auto z-20 transition-all animate-in fade-in duration-100">
             <div className="inline-block max-w-2xl px-4 py-2 rounded-xl bg-black/85 backdrop-blur-xs text-white text-xs sm:text-sm font-medium shadow-2xl border border-white/15 leading-relaxed">
               {activeCaption.speaker &&
@@ -837,41 +877,51 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
             </div>
 
             {/* Dual Captions Toggles */}
-            <div className="flex items-center gap-1 bg-slate-800/80 p-0.5 rounded-lg">
-              <button
-                type="button"
-                onClick={() => {
-                  const next = !inVideoCaptions;
-                  setInVideoCaptions(next);
-                  if (onToggleCaptions) onToggleCaptions();
-                }}
-                className={`px-1.5 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer flex items-center gap-1 ${
-                  inVideoCaptions
-                    ? 'bg-amber-500 text-slate-950 font-bold'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-                title="Teacher Captions (with CEFR vocabulary level highlights)"
-              >
-                <Subtitles className="w-3.5 h-3.5" />
-                <span>Teacher CC</span>
-              </button>
-
-              {mediaType === 'youtube' && !useFallbackPlayer && (
+            {allowCaptionsToggle ? (
+              <div className="flex items-center gap-1 bg-slate-800/80 p-0.5 rounded-lg">
                 <button
                   type="button"
-                  onClick={toggleYouTubeCaptions}
+                  onClick={() => {
+                    const next = !inVideoCaptions;
+                    setInVideoCaptions(next);
+                    if (onToggleCaptions) onToggleCaptions();
+                  }}
                   className={`px-1.5 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer flex items-center gap-1 ${
-                    ytCaptionsEnabled
-                      ? 'bg-red-600 text-white font-bold'
+                    inVideoCaptions
+                      ? 'bg-amber-500 text-slate-950 font-bold'
                       : 'text-slate-400 hover:text-white'
                   }`}
-                  title="YouTube Native Closed Captions"
+                  title="Teacher Captions (with CEFR vocabulary level highlights)"
                 >
                   <Subtitles className="w-3.5 h-3.5" />
-                  <span>YT CC</span>
+                  <span>Teacher CC</span>
                 </button>
-              )}
-            </div>
+
+                {mediaType === 'youtube' && !useFallbackPlayer && (
+                  <button
+                    type="button"
+                    onClick={toggleYouTubeCaptions}
+                    className={`px-1.5 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer flex items-center gap-1 ${
+                      ytCaptionsEnabled
+                        ? 'bg-red-600 text-white font-bold'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                    title="YouTube Native Closed Captions"
+                  >
+                    <Subtitles className="w-3.5 h-3.5" />
+                    <span>YT CC</span>
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div
+                className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-800/80 text-slate-400 border border-slate-700 text-[11px] font-medium"
+                title="Captions are disabled by your teacher"
+              >
+                <Lock className="w-3 h-3 text-rose-400" />
+                <span>CC Locked</span>
+              </div>
+            )}
 
             {/* Volume Mute */}
             <button

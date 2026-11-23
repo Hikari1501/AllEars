@@ -35,6 +35,10 @@ import {
   getStudentLessons,
   saveStudentLesson,
   deleteStudentLesson,
+  getStudentSavedVocab,
+  saveStudentSavedVocabWord,
+  deleteStudentSavedVocabWord,
+  syncStudentSavedVocab,
 } from './server/db.ts';
 import {
   exportDatabaseSnapshot,
@@ -154,6 +158,7 @@ interface LiveSession {
   activeStudentResponse: any | null;
   allowEditAnswer?: boolean;
   allowStudentCaptions?: boolean;
+  allowStudentVideo?: boolean;
   autoPauseAtCheckpoints?: boolean;
   isCompleted: boolean;
   students: Record<string, LiveStudent>;
@@ -764,6 +769,7 @@ app.post('/api/live/create', async (req: Request, res: Response) => {
     activeStudentResponse: null,
     allowEditAnswer: false,
     allowStudentCaptions: false,
+    allowStudentVideo: false,
     autoPauseAtCheckpoints: true,
     isCompleted: false,
     students: {},
@@ -830,7 +836,7 @@ app.post('/api/live/join', (req: Request, res: Response) => {
 
 // Update live session state (supported via /api/live/update-state and /api/live/update alias)
 const handleUpdateSessionState = (req: Request, res: Response) => {
-  const { pin, currentTime, isPlaying, playbackSpeed, currentQuestionId, isCompleted, activeVocabWord, activeStudentResponse, allowEditAnswer, allowStudentCaptions, autoPauseAtCheckpoints, revealedKeyQuestionIds } = req.body;
+  const { pin, currentTime, isPlaying, playbackSpeed, currentQuestionId, isCompleted, activeVocabWord, activeStudentResponse, allowEditAnswer, allowStudentCaptions, allowStudentVideo, autoPauseAtCheckpoints, revealedKeyQuestionIds } = req.body;
   const session = liveSessions[pin];
   if (!session) {
     return res.status(404).json({ error: 'Session not found' });
@@ -843,6 +849,7 @@ const handleUpdateSessionState = (req: Request, res: Response) => {
   if (isCompleted !== undefined) session.isCompleted = isCompleted;
   if (allowEditAnswer !== undefined) session.allowEditAnswer = Boolean(allowEditAnswer);
   if (allowStudentCaptions !== undefined) session.allowStudentCaptions = Boolean(allowStudentCaptions);
+  if (allowStudentVideo !== undefined) session.allowStudentVideo = Boolean(allowStudentVideo);
   if (autoPauseAtCheckpoints !== undefined) session.autoPauseAtCheckpoints = Boolean(autoPauseAtCheckpoints);
   if (Array.isArray(revealedKeyQuestionIds)) {
     session.revealedKeyQuestionIds = revealedKeyQuestionIds.filter((id) => typeof id === 'string');
@@ -1105,7 +1112,7 @@ Identify 4 to 8 challenging or notable vocabulary words, phrasal verbs, or idiom
 Assign accurate CEFR levels (A1, A2, B1, B2, C1, or C2).
 For each entry provide:
 - word: the target word or phrase in base/root form
-- inflections: array of inflected or conjugated forms of this word/phrase (e.g. ["tries on", "tried on", "trying on"] or ["compels", "compelled", "compelling"]), especially any forms appearing in the transcript
+- inflections: array containing ONLY inflected or conjugated forms of this word/phrase that literally appear in the text above (e.g. include "tried on" ONLY if "tried on" actually appears in the text). If no inflected forms appear in the text above, return an empty array [] — NEVER add forms that do not appear in the text!
 - vietnameseTranslation: concise, natural Vietnamese translation of the word/phrase in this context
 - phonetic: IPA phonetic pronunciation (e.g. "/ɪnˈtrɪn.zɪk/")
 - cefrLevel: one of "A1", "A2", "B1", "B2", "C1", "C2"
@@ -1182,12 +1189,23 @@ For each entry provide:
             : cleanWord;
         const rawInflections = Array.isArray(item.inflections) ? item.inflections : [];
         const seenInf = new Set<string>([cleanWord.toLowerCase()]);
+        const doesInflectionAppearInTranscript = (term: string): boolean => {
+          const tokens = term
+            .trim()
+            .split(/\s+/)
+            .filter(Boolean)
+            .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+          if (tokens.length === 0) return false;
+          const patternStr = tokens.join('\\s+');
+          const regex = new RegExp(`(?<![\\p{L}\\p{N}_])${patternStr}(?![\\p{L}\\p{N}_])`, 'iu');
+          return regex.test(transcriptText);
+        };
         const cleanInflections: string[] = [];
         for (const inf of rawInflections) {
           if (typeof inf !== 'string') continue;
           const trimmed = inf.trim();
           const lower = trimmed.toLowerCase();
-          if (trimmed && !seenInf.has(lower)) {
+          if (trimmed && !seenInf.has(lower) && doesInflectionAppearInTranscript(trimmed)) {
             seenInf.add(lower);
             cleanInflections.push(trimmed);
           }
@@ -1749,6 +1767,72 @@ app.delete('/api/reports/sessions/:sessionId', async (req: Request, res: Respons
   } catch (e) {
     console.error('[API] Error deleting session report:', e);
     res.status(500).json({ error: 'Failed to delete session report' });
+  }
+});
+
+// ==========================================
+// Student Saved Personal Vocabulary API (Database Persistent)
+// ==========================================
+
+app.get('/api/student-vocab/:studentId', async (req: Request, res: Response) => {
+  const studentId = decodeURIComponent(req.params.studentId || '').trim();
+  if (!studentId || studentId === 'student-guest') {
+    return res.json({ success: true, items: [] });
+  }
+  try {
+    const items = await getStudentSavedVocab(studentId);
+    res.json({ success: true, items });
+  } catch (e) {
+    console.error('[API] Error fetching student saved vocabulary:', e);
+    res.status(500).json({ error: 'Failed to fetch saved vocabulary' });
+  }
+});
+
+app.post('/api/student-vocab/:studentId/sync', async (req: Request, res: Response) => {
+  const studentId = decodeURIComponent(req.params.studentId || '').trim();
+  if (!studentId || studentId === 'student-guest') {
+    return res.json({ success: true, items: [] });
+  }
+  try {
+    const localItems = Array.isArray(req.body?.items) ? req.body.items : [];
+    const items = await syncStudentSavedVocab(studentId, localItems);
+    res.json({ success: true, items });
+  } catch (e) {
+    console.error('[API] Error syncing student saved vocabulary:', e);
+    res.status(500).json({ error: 'Failed to sync saved vocabulary' });
+  }
+});
+
+app.post('/api/student-vocab/:studentId', async (req: Request, res: Response) => {
+  const studentId = decodeURIComponent(req.params.studentId || '').trim();
+  if (!studentId || studentId === 'student-guest') {
+    return res.status(400).json({ error: 'Valid studentId required for database storage' });
+  }
+  const item = req.body?.item;
+  if (!item || typeof item.word !== 'string' || !item.word.trim()) {
+    return res.status(400).json({ error: 'Valid vocabulary item with word is required' });
+  }
+  try {
+    const items = await saveStudentSavedVocabWord(studentId, item);
+    res.json({ success: true, items });
+  } catch (e) {
+    console.error('[API] Error saving student vocabulary word:', e);
+    res.status(500).json({ error: 'Failed to save vocabulary word' });
+  }
+});
+
+app.delete('/api/student-vocab/:studentId/:word', async (req: Request, res: Response) => {
+  const studentId = decodeURIComponent(req.params.studentId || '').trim();
+  const word = decodeURIComponent(req.params.word || '').trim();
+  if (!studentId || studentId === 'student-guest' || !word) {
+    return res.status(400).json({ error: 'Valid studentId and word required' });
+  }
+  try {
+    const items = await deleteStudentSavedVocabWord(studentId, word);
+    res.json({ success: true, items });
+  } catch (e) {
+    console.error('[API] Error removing student vocabulary word:', e);
+    res.status(500).json({ error: 'Failed to remove vocabulary word' });
   }
 });
 
