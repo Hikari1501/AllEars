@@ -42,6 +42,7 @@ export const HomeworkPlayer: React.FC<HomeworkPlayerProps> = ({
 }) => {
   const effectiveUserId = userId || studentId;
   const [currentTime, setCurrentTime] = useState(lesson.trimStart || 0);
+  const [maxWatchedTime, setMaxWatchedTime] = useState(lesson.trimStart || 0);
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, StudentAnswer>>({});
   const [isCompleted, setIsCompleted] = useState(false);
@@ -52,6 +53,10 @@ export const HomeworkPlayer: React.FC<HomeworkPlayerProps> = ({
   const [showCaptions, setShowCaptions] = useState(true);
   const [autoPauseAtQuestions, setAutoPauseAtQuestions] = useState(true);
   const [detectedDuration, setDetectedDuration] = useState<number>(0);
+
+  useEffect(() => {
+    setMaxWatchedTime(lesson.trimStart || 0);
+  }, [lesson.id, lesson.trimStart]);
 
   // Video caption vocab popup & personal saved vocabulary list
   const [activeVideoVocab, setActiveVideoVocab] = useState<VocabEntry | null>(null);
@@ -84,15 +89,22 @@ export const HomeworkPlayer: React.FC<HomeworkPlayerProps> = ({
   };
 
   const handleSeek = (seconds: number) => {
+    if (lesson.preventSkipping && seconds > maxWatchedTime + 1) {
+      return;
+    }
     setSeekTriggerTime({ time: seconds, nonce: Date.now() });
   };
 
   const handleTipSeek = (seconds: number) => {
-    setSeekTriggerTime({ time: seconds, nonce: Date.now(), allowJump: true, autoPlay: true });
+    if (lesson.preventSkipping && seconds > maxWatchedTime + 1) {
+      return;
+    }
+    setSeekTriggerTime({ time: seconds, nonce: Date.now(), allowJump: false, autoPlay: true });
   };
 
   const handleTimeUpdate = (time: number) => {
     setCurrentTime(time);
+    setMaxWatchedTime((prev) => (time > prev ? time : prev));
     // Check if finished (within 1.5 seconds of effective duration)
     if (
       effectiveEnd > 0 &&
@@ -401,12 +413,14 @@ export const HomeworkPlayer: React.FC<HomeworkPlayerProps> = ({
             onAnswerSubmit={handleAnswerSubmit}
             onRewind={handleRewind}
             onSeek={(t) => {
-              if (!lesson.preventSkipping) handleSeek(t);
+              if (!lesson.preventSkipping || t <= maxWatchedTime + 1) handleSeek(t);
             }}
             onTipSeek={handleTipSeek}
             onContinueWatching={() => setActiveQuestionId(null)}
             isLiveMode={false}
             allowRewind={true}
+            preventSkipping={lesson.preventSkipping}
+            maxWatchedTime={maxWatchedTime}
             backgroundInfoText={lesson.backgroundInfoText}
             backgroundInfoImageUrl={lesson.backgroundInfoImageUrl}
           />

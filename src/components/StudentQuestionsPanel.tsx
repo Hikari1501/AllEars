@@ -41,6 +41,8 @@ interface StudentQuestionsPanelProps {
   revealedKeyQuestionIds?: string[];
   allowRewind?: boolean;
   allowEditAnswer?: boolean;
+  preventSkipping?: boolean;
+  maxWatchedTime?: number;
   backgroundInfoText?: string;
   backgroundInfoImageUrl?: string;
 }
@@ -59,6 +61,8 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
   revealedKeyQuestionIds = [],
   allowRewind = true,
   allowEditAnswer = true,
+  preventSkipping = false,
+  maxWatchedTime = 0,
   backgroundInfoText,
   backgroundInfoImageUrl,
 }) => {
@@ -71,6 +75,7 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
   const [dragDropPlacements, setDragDropPlacements] = useState<Record<string, Record<string, string[]>>>({});
   const [attemptCounts, setAttemptCounts] = useState<Record<string, number>>({});
   const [revealedCorrectAnswers, setRevealedCorrectAnswers] = useState<Record<string, boolean>>({});
+  const [lockedJumpNotice, setLockedJumpNotice] = useState<Record<string, string>>({});
 
   const questionCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const autoOpenedTipsRef = useRef<Record<string, boolean>>({});
@@ -588,31 +593,72 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                               <p className="whitespace-pre-line">{q.tip}</p>
                             )}
                             {q.tipTimestamps && q.tipTimestamps.length > 0 && (
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                {q.tipTimestamps.map((ts, tsIdx) => {
-                                  const label = formatSec(ts) || '00:00';
-                                  const jumpHandler = !isLiveMode ? (onTipSeek || onSeek) : undefined;
-                                  return jumpHandler ? (
-                                    <button
-                                      key={`${q.id}-tip-ts-${tsIdx}-${ts}`}
-                                      type="button"
-                                      onClick={() => jumpHandler(ts)}
-                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 font-mono text-[11px] font-bold transition-colors cursor-pointer shadow-2xs"
-                                      title={`Jump video to ${label}`}
-                                    >
-                                      <Play className="w-2.5 h-2.5 fill-current text-amber-700" />
-                                      <span>{label}</span>
-                                    </button>
-                                  ) : (
-                                    <span
-                                      key={`${q.id}-tip-ts-${tsIdx}-${ts}`}
-                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/80 text-amber-900 border border-amber-300 font-mono text-[11px] font-bold"
-                                    >
-                                      <Clock className="w-2.5 h-2.5 text-amber-700" />
-                                      <span>{label}</span>
-                                    </span>
-                                  );
-                                })}
+                              <div className="space-y-1.5">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  {q.tipTimestamps.map((ts, tsIdx) => {
+                                    const label = formatSec(ts) || '00:00';
+                                    const isLockedAhead = Boolean(
+                                      !isLiveMode && preventSkipping && ts > maxWatchedTime + 1
+                                    );
+                                    const jumpHandler = !isLiveMode ? (onTipSeek || onSeek) : undefined;
+                                    if (!jumpHandler) {
+                                      return (
+                                        <span
+                                          key={`${q.id}-tip-ts-${tsIdx}-${ts}`}
+                                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/80 text-amber-900 border border-amber-300 font-mono text-[11px] font-bold"
+                                        >
+                                          <Clock className="w-2.5 h-2.5 text-amber-700" />
+                                          <span>{label}</span>
+                                        </span>
+                                      );
+                                    }
+                                    if (isLockedAhead) {
+                                      return (
+                                        <button
+                                          key={`${q.id}-tip-ts-${tsIdx}-${ts}`}
+                                          type="button"
+                                          onClick={() =>
+                                            setLockedJumpNotice((prev) => ({
+                                              ...prev,
+                                              [q.id]: `Watch up to ${label} first — skipping ahead is locked.`,
+                                            }))
+                                          }
+                                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 border border-slate-300 font-mono text-[11px] font-bold cursor-not-allowed opacity-85"
+                                          title={`Skipping Locked · Watch up to ${label} first`}
+                                        >
+                                          <Lock className="w-2.5 h-2.5 text-slate-400" />
+                                          <span>{label}</span>
+                                        </button>
+                                      );
+                                    }
+                                    return (
+                                      <button
+                                        key={`${q.id}-tip-ts-${tsIdx}-${ts}`}
+                                        type="button"
+                                        onClick={() => {
+                                          setLockedJumpNotice((prev) => {
+                                            if (!prev[q.id]) return prev;
+                                            const copy = { ...prev };
+                                            delete copy[q.id];
+                                            return copy;
+                                          });
+                                          jumpHandler(ts);
+                                        }}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 font-mono text-[11px] font-bold transition-colors cursor-pointer shadow-2xs"
+                                        title={`Jump video to ${label}`}
+                                      >
+                                        <Play className="w-2.5 h-2.5 fill-current text-amber-700" />
+                                        <span>{label}</span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                                {lockedJumpNotice[q.id] && (
+                                  <div className="text-[11px] text-amber-800 font-medium flex items-center gap-1">
+                                    <Lock className="w-3 h-3 shrink-0 text-amber-700" />
+                                    <span>{lockedJumpNotice[q.id]}</span>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>

@@ -528,14 +528,14 @@ export const UnifiedPlayer: React.FC<UnifiedPlayerProps> = ({
     }
   };
 
-  const seekTo = (seconds: number, allowJump = false) => {
+  const seekTo = (seconds: number, _allowJump = false) => {
     let target =
       effectiveEnd > effectiveStart
         ? Math.max(effectiveStart, Math.min(seconds, effectiveEnd))
         : Math.max(effectiveStart, seconds);
 
-    // Enforce skip prevention if in student mode (unless explicitly jumping via teacher-provided tip timestamp)
-    if (!allowJump && preventSkipping && isStudent && target > maxWatchedTime + 1) {
+    // Strictly enforce skip prevention in student mode (never allow skipping ahead beyond maxWatchedTime)
+    if (preventSkipping && isStudent && target > maxWatchedTime + 1) {
       target = maxWatchedTime;
     }
 
