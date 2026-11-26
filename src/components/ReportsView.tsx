@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Lesson, LessonSubmission, UserRole, SessionReport } from '../types';
+import { getQuestionMaxPoints } from '../utils/scoring';
 import {
   BarChart3,
   CheckCircle2,
@@ -274,7 +275,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                   <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0" />
                 )}
                 <span>
-                  {sess.mode === 'live' ? `Live PIN #${sess.pin}` : 'Homework'} · {dateStr} ({sess.totalStudents} stu · {sess.averageScore}%)
+                  {sess.mode === 'live'
+                    ? `Live PIN #${sess.pin} · ${dateStr} (${sess.totalStudents} stu · ${sess.averageScore}%)`
+                    : `Practice · ${sess.students?.[0]?.name || 'Student'} · ${dateStr} (${sess.averageScore}%)`}
                 </span>
               </button>
             );
@@ -290,12 +293,26 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               {activeSessionReport.mode === 'live' ? <Radio className="w-5 h-5" /> : <BookOpen className="w-5 h-5" />}
             </div>
             <div>
-              <div className="font-bold text-amber-950 text-sm">
-                Session {activeSessionReport.pin ? `#${activeSessionReport.pin}` : activeSessionReport.sessionId} ({activeSessionReport.mode === 'live' ? 'Synchronized Live Classroom' : 'Assigned Homework'})
-              </div>
-              <div className="text-amber-800 text-[11px] mt-0.5">
-                Conducted by {activeSessionReport.teacherName} · {new Date(activeSessionReport.createdAt).toLocaleString()} · {activeSessionReport.totalStudents} student{activeSessionReport.totalStudents === 1 ? '' : 's'} participated
-              </div>
+              {activeSessionReport.mode === 'live' ? (
+                <>
+                  <div className="font-bold text-amber-950 text-sm">
+                    Session {activeSessionReport.pin ? `#${activeSessionReport.pin}` : activeSessionReport.sessionId} (Synchronized Live Classroom)
+                  </div>
+                  <div className="text-amber-800 text-[11px] mt-0.5">
+                    Conducted by {activeSessionReport.teacherName || 'Teacher'} · {new Date(activeSessionReport.createdAt).toLocaleString()} · {activeSessionReport.totalStudents} student{activeSessionReport.totalStudents === 1 ? '' : 's'} participated
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="font-bold text-amber-950 text-sm">
+                    Practice Mode Report
+                    {activeSessionReport.students?.[0]?.name ? ` · ${activeSessionReport.students[0].name}` : ''}
+                  </div>
+                  <div className="text-amber-800 text-[11px] mt-0.5">
+                    Completed by {activeSessionReport.students?.map((s) => s.name).join(', ') || 'Student'} · {new Date(activeSessionReport.createdAt).toLocaleString()} · Self-paced student practice
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -492,10 +509,27 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                           <span className="font-bold text-slate-800">
                             {idx + 1}. {q.prompt}
                           </span>
-                          <span className={`flex items-center gap-1 font-semibold ${ans?.isCorrect ? 'text-emerald-700' : 'text-rose-700'}`}>
-                            {ans?.isCorrect ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
-                            <span>{ans?.pointsEarned || (ans?.points !== undefined ? ans.points : 0)} / {q.points} pts</span>
-                          </span>
+                          {q.type === 'open_ended' ? (
+                            <span className="flex items-center gap-1 font-semibold text-indigo-700">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Submitted · Ungraded</span>
+                            </span>
+                          ) : (
+                            <span
+                              className={`flex items-center gap-1 font-semibold ${
+                                ans?.isCorrect
+                                  ? 'text-emerald-700'
+                                  : (ans?.pointsEarned || (ans?.points !== undefined ? ans.points : 0)) > 0
+                                  ? 'text-amber-700'
+                                  : 'text-rose-700'
+                              }`}
+                            >
+                              {ans?.isCorrect ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+                              <span>
+                                {ans?.pointsEarned || (ans?.points !== undefined ? ans.points : 0)} / {getQuestionMaxPoints(q)} pts
+                              </span>
+                            </span>
+                          )}
                         </div>
 
                         <div className="text-slate-600">
@@ -567,12 +601,27 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                           <div className="font-bold text-slate-900 text-sm">
                             {idx + 1}. {q.prompt}
                           </div>
-                          <div className={`shrink-0 flex items-center gap-1 font-bold ${
-                            isCorrect ? 'text-emerald-700' : 'text-rose-700'
-                          }`}>
-                            {isCorrect ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
-                            <span>{ans?.pointsEarned || (ans?.points !== undefined ? ans.points : 0)} / {q.points} pts</span>
-                          </div>
+                          {q.type === 'open_ended' ? (
+                            <div className="shrink-0 flex items-center gap-1 font-bold text-indigo-700">
+                              <CheckCircle2 className="w-4 h-4" />
+                              <span>Submitted · Ungraded</span>
+                            </div>
+                          ) : (
+                            <div
+                              className={`shrink-0 flex items-center gap-1 font-bold ${
+                                isCorrect
+                                  ? 'text-emerald-700'
+                                  : (ans?.pointsEarned || (ans?.points !== undefined ? ans.points : 0)) > 0
+                                  ? 'text-amber-700'
+                                  : 'text-rose-700'
+                              }`}
+                            >
+                              {isCorrect ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+                              <span>
+                                {ans?.pointsEarned || (ans?.points !== undefined ? ans.points : 0)} / {getQuestionMaxPoints(q)} pts
+                              </span>
+                            </div>
+                          )}
                         </div>
 
                         <div className="text-slate-700">

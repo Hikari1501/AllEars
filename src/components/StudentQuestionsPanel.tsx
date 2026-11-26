@@ -26,6 +26,11 @@ import { MatchingPairsCanvas } from './MatchingPairsCanvas';
 import { DragAndDropCanvas } from './DragAndDropCanvas';
 import { playSuccessChime, playWrongAnswerSound } from '../utils/soundEffects';
 import { getQuestionFeedbackStatus } from '../utils/feedbackHelpers';
+import {
+  calculateTotalMaxPoints,
+  evaluateQuestionAnswer,
+  getQuestionMaxPoints,
+} from '../utils/scoring';
 
 interface StudentQuestionsPanelProps {
   questions: Question[];
@@ -194,77 +199,7 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
   };
 
   const evaluateAndSubmit = (question: Question, rawAnswer: any) => {
-    let isCorrect = false;
-    let pointsEarned = 0;
-
-    if (question.type === 'multiple_choice') {
-      if (question.allowMultipleAnswers) {
-        const correctList = question.correctAnswers || [question.correctAnswer || 'a'];
-        const chosenList = Array.isArray(rawAnswer) ? rawAnswer : [rawAnswer];
-        // Multi-choice: award points only when students choose all correct options (0 points if wrong or missing)
-        const isMatch =
-          correctList.length === chosenList.length &&
-          correctList.every((id) => chosenList.includes(id));
-        isCorrect = isMatch;
-        pointsEarned = isCorrect ? question.points || 10 : 0;
-      } else {
-        const correct = question.correctAnswer || 'a';
-        isCorrect = String(rawAnswer).toLowerCase() === correct.toLowerCase();
-        pointsEarned = isCorrect ? question.points || 10 : 0;
-      }
-    } else if (question.type === 'true_false') {
-      const correct = question.correctAnswer || 'true';
-      isCorrect = String(rawAnswer).toLowerCase() === correct.toLowerCase();
-      pointsEarned = isCorrect ? question.points || 10 : 0;
-    } else if (question.type === 'close_ended') {
-      const expected = (question.correctAnswer || '').trim().toLowerCase();
-      const actual = String(rawAnswer).trim().toLowerCase();
-      isCorrect = actual === expected;
-      pointsEarned = isCorrect ? question.points || 10 : 0;
-    } else if (question.type === 'matching') {
-      const pairs = question.matchingPairs || [];
-      const userPairs = rawAnswer || {};
-      const correctCount = pairs.filter((p) => userPairs[p.left] === p.right).length;
-      isCorrect = pairs.length > 0 && correctCount === pairs.length;
-      // Matching: award points for each line students match right
-      if (pairs.length > 0) {
-        pointsEarned = Math.round((correctCount / pairs.length) * (question.points || 10));
-      } else {
-        pointsEarned = 0;
-      }
-    } else if (question.type === 'drag_and_drop') {
-      const categories = question.categories || [];
-      const userPlacements: Record<string, string[]> = rawAnswer || {};
-      let totalItems = 0;
-      let correctCount = 0;
-
-      categories.forEach((cat) => {
-        const expectedItems = cat.items || [];
-        totalItems += expectedItems.length;
-        const placedInCat = userPlacements[cat.id] || [];
-        expectedItems.forEach((expItem) => {
-          if (
-            placedInCat.some(
-              (it) => it.trim().toLowerCase() === expItem.trim().toLowerCase()
-            )
-          ) {
-            correctCount++;
-          }
-        });
-      });
-
-      isCorrect = totalItems > 0 && correctCount === totalItems;
-      // Award points for each item the student drags correctly
-      if (totalItems > 0) {
-        pointsEarned = Math.round((correctCount / totalItems) * (question.points || 10));
-      } else {
-        pointsEarned = 0;
-      }
-    } else if (question.type === 'open_ended') {
-      isCorrect = true;
-      // Open-ended questions: do not award students with points
-      pointsEarned = 0;
-    }
+    const { isCorrect, pointsEarned } = evaluateQuestionAnswer(question, rawAnswer);
 
     // Play sound on students' device: chime for all correct, gentle cue for wrong answer
     if (isCorrect && question.type !== 'open_ended') {
@@ -304,7 +239,7 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
 
   const answeredCount = Object.keys(answers).length;
   const totalScore = Object.values(answers).reduce((sum, a) => sum + (a.pointsEarned || 0), 0);
-  const maxScore = questions.reduce((sum, q) => sum + (q.type === 'open_ended' ? 0 : q.points), 0);
+  const maxScore = calculateTotalMaxPoints(questions);
 
   // Group questions: general / no-pause questions come first, followed by timestamped questions
   const orderedQuestions = useMemo(() => {
@@ -480,12 +415,14 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                           ) : (existingAnswer.pointsEarned || 0) > 0 ? (
                             <>
                               <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                              <span>+{existingAnswer.pointsEarned} pts</span>
+                              <span>
+                                +{existingAnswer.pointsEarned} / {getQuestionMaxPoints(q)} pts
+                              </span>
                             </>
                           ) : (
                             <>
                               <XCircle className="w-3 h-3 text-rose-600" />
-                              <span>0 pts</span>
+                              <span>0 / {getQuestionMaxPoints(q)} pts</span>
                             </>
                           )}
                         </span>
@@ -943,7 +880,7 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                           isFeedbackVisible={isFeedbackVisible}
                           canShowKey={canShowCorrectAnswer}
                           pointsEarned={existingAnswer?.pointsEarned || 0}
-                          totalPoints={q.points || 10}
+                          totalPoints={getQuestionMaxPoints(q)}
                         />
                       </div>
                     )}
@@ -1060,9 +997,11 @@ export const StudentQuestionsPanel: React.FC<StudentQuestionsPanelProps> = ({
                                 </>
                               )}
                             </div>
-                            <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-white/80 border border-slate-200 text-slate-800">
-                              +{existingAnswer.pointsEarned} pts
-                            </span>
+                            {q.type !== 'open_ended' && (
+                              <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-white/80 border border-slate-200 text-slate-800">
+                                +{existingAnswer.pointsEarned} / {getQuestionMaxPoints(q)} pts
+                              </span>
+                            )}
                           </div>
 
                           {/* Granular Word-by-Word Check for Fill-in-the-Blank */}

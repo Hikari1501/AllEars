@@ -10,6 +10,7 @@ import {
   DragDropCategory,
   UserAccount,
 } from '../types';
+import { getQuestionMaxPoints } from '../utils/scoring';
 import {
   Plus,
   Trash2,
@@ -1172,6 +1173,7 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
           }))
         : undefined,
       tipTimestamps: q.tipTimestamps ? [...q.tipTimestamps] : undefined,
+      points: getQuestionMaxPoints(q),
     };
 
     setQuestions((prev) => {
@@ -1264,6 +1266,8 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
         (c) => c.name.trim() && c.items && c.items.length > 0
       );
     }
+
+    questionData.points = getQuestionMaxPoints(questionData);
 
     if (editingQuestionId) {
       setQuestions((prev) =>
@@ -2292,6 +2296,30 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                           Editing Mode
                         </span>
                       )}
+                      {(() => {
+                        const previewPts = getQuestionMaxPoints({
+                          type: newQType,
+                          allowMultipleAnswers: newQAllowMulti,
+                          correctAnswers: Array.from(newQCorrectAnswers),
+                          matchingPairs: newQMatchingPairs,
+                          categories: newQCategories.filter(
+                            (c) => c.name.trim() && c.items && c.items.length > 0
+                          ),
+                        });
+                        return (
+                          <span
+                            className={`px-2 py-0.5 rounded-full font-mono font-bold text-[10px] border ${
+                              newQType === 'open_ended'
+                                ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                            }`}
+                          >
+                            {newQType === 'open_ended'
+                              ? 'Ungraded (0 pts)'
+                              : `Max ${previewPts} pts`}
+                          </span>
+                        );
+                      })()}
                     </div>
                     <button
                       type="button"
@@ -3040,6 +3068,18 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                               Multi-Select
                             </span>
                           )}
+
+                          <span
+                            className={`px-1.5 py-0.5 rounded font-mono font-bold text-[10px] border ${
+                              q.type === 'open_ended'
+                                ? 'bg-slate-100 text-slate-600 border-slate-200'
+                                : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                            }`}
+                          >
+                            {q.type === 'open_ended'
+                              ? 'Ungraded (0 pts)'
+                              : `${getQuestionMaxPoints(q)} pts`}
+                          </span>
                         </div>
 
                         <div className="font-bold text-slate-900 text-sm leading-snug">

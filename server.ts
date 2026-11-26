@@ -7,6 +7,11 @@ import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type } from '@google/genai';
 import { INITIAL_LESSONS } from './src/data/mockLessons.ts';
 import {
+  calculateTotalMaxPoints,
+  getQuestionMaxPoints,
+  normalizeQuestionPoints,
+} from './src/utils/scoring.ts';
+import {
   initDatabase,
   getDatabaseStatus,
   getActivePool,
@@ -547,7 +552,13 @@ app.get('/api/student-lessons', async (req: Request, res: Response) => {
 
   try {
     const lessons = await getStudentLessons(studentId);
-    res.json({ lessons });
+    const normalized = lessons.map((l: any) => ({
+      ...l,
+      questions: Array.isArray(l.questions)
+        ? l.questions.map((q: any) => normalizeQuestionPoints(q))
+        : [],
+    }));
+    res.json({ lessons: normalized });
   } catch (e) {
     console.error('[API] Error getting student lessons:', e);
     res.status(500).json({ error: 'Failed to retrieve student lessons' });
@@ -559,6 +570,10 @@ app.post('/api/student-lessons', async (req: Request, res: Response) => {
   const lesson = req.body.lesson || req.body;
   if (!studentId || !lesson || !lesson.id) {
     return res.status(400).json({ error: 'Student ID and valid lesson required' });
+  }
+
+  if (Array.isArray(lesson.questions)) {
+    lesson.questions = lesson.questions.map((q: any) => normalizeQuestionPoints(q));
   }
 
   try {
@@ -669,7 +684,7 @@ if (!sessionReports || sessionReports.length === 0) {
 async function archiveLiveSession(session: LiveSession) {
   const lesson = await getLessonById(session.lessonId);
   const questions: any[] = lesson?.questions || [];
-  const maxPossiblePoints = questions.reduce((sum: number, q: any) => sum + (q.type === 'open_ended' ? 0 : (q.points || 10)), 0) || 10;
+  const maxPossiblePoints = calculateTotalMaxPoints(questions);
 
   const studentsList = Object.values(session.students);
   const questionStats: Record<string, any> = {};
@@ -990,17 +1005,37 @@ app.post('/api/live/add-bot-students', (req: Request, res: Response) => {
 });
 
 // Bot auto-answer trigger when teacher opens a question in live session
-app.post('/api/live/bot-answer', (req: Request, res: Response) => {
+app.post('/api/live/bot-answer', async (req: Request, res: Response) => {
   const { pin, questionId, questionType, correctAnswer, options = [] } = req.body;
   const session = liveSessions[pin];
   if (!session) {
     return res.status(404).json({ error: 'Session not found' });
   }
 
+  const lesson = await getLessonById(session.lessonId);
+  const targetQuestion = lesson?.questions?.find((q: any) => q.id === questionId);
+  const effectiveType = targetQuestion?.type || questionType;
+  const questionMaxPoints =
+    effectiveType === 'open_ended'
+      ? 0
+      : targetQuestion
+      ? getQuestionMaxPoints(targetQuestion)
+      : 10;
+
   const botIds = Object.keys(session.students).filter(id => session.students[id].isBot);
   botIds.forEach(botId => {
     const student = session.students[botId];
     if (student.answers[questionId]) return;
+
+    if (effectiveType === 'open_ended') {
+      student.answers[questionId] = {
+        answer: 'I noticed key details from the speaker about the main idea.',
+        isCorrect: true,
+        points: 0,
+        submittedAt: Date.now(),
+      };
+      return;
+    }
 
     // 75% chance of correct answer to simulate a realistic classroom
     const isCorrect = Math.random() < 0.75;
@@ -1013,13 +1048,14 @@ app.post('/api/live/bot-answer', (req: Request, res: Response) => {
       }
     }
 
+    const awarded = isCorrect ? questionMaxPoints : 0;
     student.answers[questionId] = {
       answer: chosenAnswer,
       isCorrect,
-      points: isCorrect ? 10 : 0,
+      points: awarded,
       submittedAt: Date.now(),
     };
-    if (isCorrect) student.score += 10;
+    if (awarded > 0) student.score += awarded;
   });
 
   session.lastUpdated = Date.now();
@@ -1592,7 +1628,13 @@ app.get('/api/lessons', async (req: Request, res: Response) => {
   const { role = 'student' } = req.query;
   try {
     const lessons = await getAllLessons(role === 'teacher');
-    res.json({ lessons });
+    const normalized = lessons.map((l: any) => ({
+      ...l,
+      questions: Array.isArray(l.questions)
+        ? l.questions.map((q: any) => normalizeQuestionPoints(q))
+        : [],
+    }));
+    res.json({ lessons: normalized });
   } catch (e) {
     console.error('[API] Error getting lessons:', e);
     res.status(500).json({ error: 'Failed to retrieve lessons' });
@@ -1614,6 +1656,10 @@ app.post('/api/lessons', async (req: Request, res: Response) => {
   // Ensure isPublished defaults to true if not specified
   if (lesson.isPublished === undefined) {
     lesson.isPublished = true;
+  }
+
+  if (Array.isArray(lesson.questions)) {
+    lesson.questions = lesson.questions.map((q: any) => normalizeQuestionPoints(q));
   }
 
   try {
@@ -1724,25 +1770,35 @@ app.post('/api/reports/homework', async (req: Request, res: Response) => {
       };
     });
 
+    const computedMaxScore =
+      questions.length > 0
+        ? calculateTotalMaxPoints(questions)
+        : (submission.maxScore || 0);
+    const totalScore = submission.totalScore || 0;
+    const computedPercentage =
+      computedMaxScore > 0
+        ? Math.round((totalScore / computedMaxScore) * 100)
+        : (submission.percentage ?? 100);
+
     const hwReport = {
       sessionId: `hw-sess-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      pin: 'HOMEWORK',
+      pin: '',
       lessonId: submission.lessonId,
-      lessonTitle: lesson ? lesson.title : 'Homework Assignment',
-      teacherId: lesson ? lesson.teacherId : 'teacher-chuck',
-      teacherName: lesson ? lesson.teacherName : 'Chuck',
+      lessonTitle: lesson ? lesson.title : 'Practice Assignment',
+      teacherId: lesson ? lesson.teacherId : '',
+      teacherName: '',
       mode: 'homework',
       createdAt: Date.now() - 600000,
       endedAt: Date.now(),
       totalStudents: 1,
-      averageScore: submission.percentage || 0,
+      averageScore: computedPercentage,
       students: [
         {
           id: submission.studentId,
           name: submission.studentName,
-          score: submission.totalScore,
-          maxScore: submission.maxScore,
-          percentage: submission.percentage,
+          score: totalScore,
+          maxScore: computedMaxScore,
+          percentage: computedPercentage,
           answers: submission.answers || {},
           completedAt: submission.completedAt || new Date().toLocaleString(),
         },

@@ -16,6 +16,7 @@ import {
   Shield,
 } from 'lucide-react';
 import { Lesson, CEFRLevel } from '../types';
+import { normalizeQuestionPoints } from '../utils/scoring';
 
 interface ImportLessonModalProps {
   isOpen: boolean;
@@ -102,7 +103,9 @@ export const ImportLessonModal: React.FC<ImportLessonModalProps> = ({
         teacherId: data.teacherId || 'teacher-import',
         teacherName: data.teacherName || 'Instructor Share',
         captions: Array.isArray(data.captions) ? data.captions : [],
-        questions: Array.isArray(data.questions) ? data.questions : [],
+        questions: Array.isArray(data.questions)
+          ? data.questions.map((q: any) => normalizeQuestionPoints(q))
+          : [],
         difficultWords: Array.isArray(data.difficultWords) ? data.difficultWords : [],
         isPublished: true,
         isLocalStudentOnly: !isTeacher,

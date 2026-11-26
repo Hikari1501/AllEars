@@ -78,7 +78,7 @@ export const INITIAL_LESSONS: Lesson[] = [
         correctAnswers: ['a', 'b', 'd'],
         correctAnswer: 'a',
         explanation: 'Curiosity involves an intrinsic drive, an information gap causing cognitive discomfort, and neurological anticipation of dopamine release.',
-        points: 15,
+        points: 30,
       },
       {
         id: 'q2',
@@ -107,7 +107,7 @@ export const INITIAL_LESSONS: Lesson[] = [
           { left: 'Information Gap', right: 'Discomfort caused by lack of knowledge' },
         ],
         explanation: 'Perceptual relates to sensory novelty, whereas epistemic relates to intellectual knowledge and understanding.',
-        points: 15,
+        points: 30,
       },
       {
         id: 'q4',
@@ -139,7 +139,7 @@ export const INITIAL_LESSONS: Lesson[] = [
           },
         ],
         explanation: 'Perceptual curiosity is provoked by novel sensory stimuli, while epistemic curiosity is the deliberate pursuit of conceptual and factual knowledge.',
-        points: 20,
+        points: 60,
       },
       {
         id: 'q6',
@@ -147,7 +147,7 @@ export const INITIAL_LESSONS: Lesson[] = [
         type: 'open_ended',
         prompt: 'Whole Video Reflection: In your own words, summarize how understanding curiosity can help you improve your own English learning habits.',
         explanation: 'Reflective whole-lesson synthesis connecting epistemic hunger to student study retention.',
-        points: 10,
+        points: 0,
       },
     ],
     difficultWords: [
@@ -293,7 +293,7 @@ export const INITIAL_LESSONS: Lesson[] = [
         type: 'open_ended',
         prompt: 'In your own words, summarize how Elena felt about her job interview and when she expects to receive the results.',
         explanation: 'Elena felt it went smoothly with practical sustainability questions, and expects an answer by Friday.',
-        points: 15,
+        points: 0,
       },
     ],
     difficultWords: [
@@ -388,7 +388,7 @@ export const INITIAL_LESSONS: Lesson[] = [
         correctAnswers: ['a', 'b', 'd'],
         correctAnswer: 'a',
         explanation: 'Julian and Clara agreed to deprioritize peripheral requests, protect software integrity, and postpone localization.',
-        points: 15,
+        points: 30,
       },
       {
         id: 'qb2',
@@ -401,7 +401,7 @@ export const INITIAL_LESSONS: Lesson[] = [
           { left: 'Triage protocol', right: 'A system to prioritize tasks by urgency' },
         ],
         explanation: 'These are standard business idioms used in cross-functional stakeholder negotiations.',
-        points: 15,
+        points: 30,
       },
     ],
     difficultWords: [
@@ -451,13 +451,13 @@ export const INITIAL_SUBMISSIONS: LessonSubmission[] = [
     lessonId: 'lesson-curiosity-ted',
     studentId: 'student-alex',
     studentName: 'Alex Johnson',
-    totalScore: 50,
-    maxScore: 50,
+    totalScore: 80,
+    maxScore: 80,
     percentage: 100,
     answers: {
-      q1: { questionId: 'q1', answer: ['a', 'b', 'd'], isCorrect: true, pointsEarned: 15, submittedAt: Date.now() - 3600000 },
+      q1: { questionId: 'q1', answer: ['a', 'b', 'd'], isCorrect: true, pointsEarned: 30, submittedAt: Date.now() - 3600000 },
       q2: { questionId: 'q2', answer: 'true', isCorrect: true, pointsEarned: 10, submittedAt: Date.now() - 3500000 },
-      q3: { questionId: 'q3', answer: { 'Perceptual Curiosity': 'Triggered by novel sensory stimuli', 'Epistemic Curiosity': 'The deep pursuit of intellectual knowledge', 'Information Gap': 'Discomfort caused by lack of knowledge' }, isCorrect: true, pointsEarned: 15, submittedAt: Date.now() - 3400000 },
+      q3: { questionId: 'q3', answer: { 'Perceptual Curiosity': 'Triggered by novel sensory stimuli', 'Epistemic Curiosity': 'The deep pursuit of intellectual knowledge', 'Information Gap': 'Discomfort caused by lack of knowledge' }, isCorrect: true, pointsEarned: 30, submittedAt: Date.now() - 3400000 },
       q4: { questionId: 'q4', answer: 'hippocampus', isCorrect: true, pointsEarned: 10, submittedAt: Date.now() - 3300000 },
     },
     completedAt: '2026-10-26 14:20',

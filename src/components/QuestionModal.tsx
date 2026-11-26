@@ -4,6 +4,7 @@ import { MatchingPairsCanvas } from './MatchingPairsCanvas';
 import { DragAndDropCanvas } from './DragAndDropCanvas';
 import { playSuccessChime, playWrongAnswerSound } from '../utils/soundEffects';
 import { getQuestionFeedbackStatus } from '../utils/feedbackHelpers';
+import { evaluateQuestionAnswer, getQuestionMaxPoints } from '../utils/scoring';
 import {
   CheckCircle2,
   XCircle,
@@ -113,76 +114,23 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
   const handleSubmit = async () => {
     if (hasSubmitted) return;
 
-    let correct = false;
-    let earned = 0;
     let finalAnswer: any = null;
-
     if (question.type === 'multiple_choice') {
-      if (isMultiSelect) {
-        finalAnswer = Array.from(selectedOptions);
-        const expected = question.correctAnswers || [question.correctAnswer || 'a'];
-        // Check if sets match strictly (no points if wrong option selected or any missed)
-        const matchesAll =
-          expected.length === selectedOptions.size &&
-          expected.every((id) => selectedOptions.has(id));
-        correct = matchesAll;
-        earned = correct ? question.points : 0;
-      } else {
-        finalAnswer = selectedOption;
-        correct = selectedOption === question.correctAnswer;
-        earned = correct ? question.points : 0;
-      }
+      finalAnswer = isMultiSelect ? Array.from(selectedOptions) : selectedOption;
     } else if (question.type === 'true_false') {
       finalAnswer = selectedOption;
-      correct = selectedOption === question.correctAnswer;
-      earned = correct ? question.points : 0;
-    } else if (question.type === 'close_ended') {
+    } else if (question.type === 'close_ended' || question.type === 'open_ended') {
       finalAnswer = textInput.trim();
-      const expected = (question.correctAnswer || '').trim().toLowerCase();
-      correct = finalAnswer.toLowerCase() === expected;
-      earned = correct ? question.points : 0;
     } else if (question.type === 'matching') {
       finalAnswer = matchingSelections;
-      if (question.matchingPairs) {
-        let matchCount = 0;
-        question.matchingPairs.forEach((pair) => {
-          if (matchingSelections[pair.left] === pair.right) {
-            matchCount++;
-          }
-        });
-        correct = matchCount === question.matchingPairs.length;
-        // Award points for each line matched right
-        earned = Math.round((matchCount / question.matchingPairs.length) * question.points);
-      }
     } else if (question.type === 'drag_and_drop') {
       finalAnswer = dragDropPlacements;
-      const categories = question.categories || [];
-      let totalItems = 0;
-      let correctCount = 0;
-
-      categories.forEach((cat) => {
-        const expectedItems = cat.items || [];
-        totalItems += expectedItems.length;
-        const placedInCat = dragDropPlacements[cat.id] || [];
-        expectedItems.forEach((expItem) => {
-          if (
-            placedInCat.some(
-              (it) => it.trim().toLowerCase() === expItem.trim().toLowerCase()
-            )
-          ) {
-            correctCount++;
-          }
-        });
-      });
-
-      correct = totalItems > 0 && correctCount === totalItems;
-      // Award points for each item the student drags correctly
-      earned = totalItems > 0 ? Math.round((correctCount / totalItems) * question.points) : 0;
-    } else if (question.type === 'open_ended') {
-      finalAnswer = textInput.trim();
-      earned = 0; // Open-ended questions do not award points
-      correct = true;
     }
+
+    const { isCorrect: correct, pointsEarned: earned } = evaluateQuestionAnswer(
+      question,
+      finalAnswer
+    );
 
     // Play sound on students' device: chime for all correct, gentle cue for wrong answer
     if (correct && question.type !== 'open_ended') {
@@ -293,7 +241,9 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
             <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
-              Formative Checkpoint · {question.points} Points
+              {question.type === 'open_ended'
+                ? 'Formative Checkpoint · Ungraded Reflection'
+                : `Formative Checkpoint · ${getQuestionMaxPoints(question)} Points`}
             </span>
           </div>
           <div className="flex items-center gap-3">
@@ -549,7 +499,7 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
                 isFeedbackVisible={canShowFeedback}
                 canShowKey={canShowKey}
                 pointsEarned={pointsEarned}
-                totalPoints={question.points}
+                totalPoints={getQuestionMaxPoints(question)}
               />
             </div>
           )}
@@ -640,9 +590,11 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
                       </>
                     )}
                   </div>
-                  <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-white/80 border border-slate-200 text-slate-800">
-                    +{pointsEarned} pts
-                  </span>
+                  {question.type !== 'open_ended' && (
+                    <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-white/80 border border-slate-200 text-slate-800">
+                      +{pointsEarned} / {getQuestionMaxPoints(question)} pts
+                    </span>
+                  )}
                 </div>
 
                 {question.type === 'close_ended' &&
@@ -761,7 +713,9 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
           <div>
             {canShowFeedback && (
               <span className="text-sm font-bold font-mono">
-                Score: {pointsEarned} / {question.points} pts
+                {question.type === 'open_ended'
+                  ? 'Reflection submitted (Ungraded)'
+                  : `Score: ${pointsEarned} / ${getQuestionMaxPoints(question)} pts`}
               </span>
             )}
           </div>

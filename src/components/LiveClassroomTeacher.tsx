@@ -9,6 +9,7 @@ import {
 import { UnifiedPlayer } from './UnifiedPlayer';
 import { InteractiveCaptions } from './InteractiveCaptions';
 import { VocabPopover } from './VocabPopover';
+import { getQuestionMaxPoints } from '../utils/scoring';
 import {
   Users,
   Copy,
@@ -756,7 +757,9 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
                           {formatSeconds(inspectingQuestion.timestamp)}
                         </span>
                         <span className="text-xs text-slate-500">
-                          {inspectingQuestion.points} points
+                          {inspectingQuestion.type === 'open_ended'
+                            ? 'Ungraded (No points)'
+                            : `${getQuestionMaxPoints(inspectingQuestion)} points`}
                         </span>
                       </div>
 
@@ -1171,9 +1174,19 @@ export const LiveClassroomTeacher: React.FC<LiveClassroomTeacherProps> = ({
 
                                 <div className="text-right min-w-[75px]">
                                   {hasAnswered ? (
-                                    record.isCorrect ? (
+                                    inspectingQuestion.type === 'open_ended' ? (
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 text-indigo-800 rounded-lg font-bold text-[11px]">
+                                        <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600" />
+                                        <span>Submitted</span>
+                                      </span>
+                                    ) : record.isCorrect ? (
                                       <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-lg font-bold text-[11px]">
                                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                        <span>+{record.points} pts</span>
+                                      </span>
+                                    ) : (record.points || 0) > 0 ? (
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-100 text-amber-900 rounded-lg font-bold text-[11px]">
+                                        <Sparkles className="w-3.5 h-3.5 text-amber-600" />
                                         <span>+{record.points} pts</span>
                                       </span>
                                     ) : (

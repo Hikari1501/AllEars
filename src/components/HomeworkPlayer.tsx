@@ -10,6 +10,7 @@ import {
   toggleSaveVocabWord,
   PERSONAL_VOCAB_EVENT,
 } from '../utils/personalVocab';
+import { calculateTotalMaxPoints } from '../utils/scoring';
 import {
   CheckCircle2,
   Award,
@@ -130,7 +131,7 @@ export const HomeworkPlayer: React.FC<HomeworkPlayerProps> = ({
 
   const handleCompleteLesson = () => {
     let totalScore = 0;
-    const maxScore = lesson.questions.reduce((sum, q) => sum + q.points, 0);
+    const maxScore = calculateTotalMaxPoints(lesson.questions);
 
     Object.values(answers).forEach((ans) => {
       totalScore += ans.pointsEarned || 0;
@@ -176,7 +177,7 @@ export const HomeworkPlayer: React.FC<HomeworkPlayerProps> = ({
     (sum, a) => sum + (a.pointsEarned || 0),
     0
   );
-  const maxPossiblePoints = lesson.questions.reduce((sum, q) => sum + q.points, 0);
+  const maxPossiblePoints = calculateTotalMaxPoints(lesson.questions);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
